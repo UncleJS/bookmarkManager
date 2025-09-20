@@ -1,0 +1,220 @@
+<!doctype html>
+<html class="dark" lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Save Bookmark</title>
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body class="dark-bg dark-text">
+  <main class="main-container">
+    <div class="header">
+      <h1 class="title">Save Bookmark</h1>
+    </div>
+
+    <form id="form" class="form-container">
+      <!-- URL Field -->
+      <div class="field-group">
+        <label for="url" class="field-label">URL</label>
+        <input
+          id="url"
+          name="url"
+          type="text"
+          readonly
+          class="input-field input-readonly"
+        />
+      </div>
+
+      <!-- Title Field -->
+      <div class="field-group">
+        <label for="title" class="field-label">Title</label>
+        <input
+          id="title"
+          name="title"
+          type="text"
+          class="input-field"
+        />
+      </div>
+
+      <!-- Description Field -->
+      <div class="field-group">
+        <label for="description" class="field-label">Description</label>
+        <textarea
+          id="description"
+          name="description"
+          rows="3"
+          class="input-field textarea-field"
+        ></textarea>
+      </div>
+
+      <!-- Classifications -->
+      <div class="field-group">
+        <label for="classification-search" class="field-label">Classifications</label>
+        <div class="input-group">
+          <!-- Search input for classifications -->
+          <div class="relative">
+            <input
+              id="classification-search"
+              type="text"
+              placeholder="Search classifications..."
+              class="input-field"
+            />
+
+            <!-- Classification suggestions dropdown - moved inside relative container -->
+            <div id="classification-suggestions" class="dropdown hidden"></div>
+          </div>
+
+          <!-- Selected classifications -->
+          <div id="selected-classifications" class="chips-container"></div>
+
+          <!-- Add new classification -->
+          <button
+            id="add-classification"
+            type="button"
+            class="add-button"
+          >
+            + Add New Classification
+          </button>
+        </div>
+      </div>
+
+      <!-- Tags -->
+      <div class="field-group">
+        <label for="tag-input" class="field-label">Tags</label>
+        <div class="input-group">
+          <!-- Selected tags -->
+          <div id="selected-tags" class="chips-container"></div>
+
+          <!-- Tag input with suggestions -->
+          <div class="relative">
+            <input
+              id="tag-input"
+              type="text"
+              placeholder="Type to search or add tags"
+              autocomplete="off"
+              class="input-field"
+            />
+            <ul id="tag-suggestions" class="dropdown-suggestions hidden"></ul>
+          </div>
+        </div>
+      </div>
+
+      <!-- Flags -->
+      <div class="field-group">
+        <fieldset class="flags-fieldset">
+          <legend class="flags-legend">Flags</legend>
+          <div class="flags-grid">
+            <label class="flag-label">
+              <input type="checkbox" id="flag-forReview" class="flag-checkbox" />
+              <span>For review</span>
+            </label>
+            <label class="flag-label">
+              <input type="checkbox" id="flag-readLater" class="flag-checkbox" />
+              <span>Read later</span>
+            </label>
+            <label class="flag-label">
+              <input type="checkbox" id="flag-hotTopic" class="flag-checkbox" />
+              <span>Hot topic</span>
+            </label>
+            <label class="flag-label">
+              <input type="checkbox" id="flag-cheatsheets" class="flag-checkbox" />
+              <span>Cheatsheets</span>
+            </label>
+            <label class="flag-label flag-full">
+              <input type="checkbox" id="flag-archived" class="flag-checkbox" />
+              <span>Archived</span>
+            </label>
+          </div>
+        </fieldset>
+      </div>
+
+      <!-- Actions -->
+      <div class="actions-container">
+        <span id="status" class="status-text"></span>
+        <button
+          id="save"
+          type="submit"
+          class="save-button"
+        >
+          Save Bookmark
+        </button>
+      </div>
+    </form>
+  </main>
+
+  <!-- Modal for creating classifications -->
+  <div id="classification-modal" class="modal-backdrop hidden">
+    <div class="modal-content">
+      <h3 class="modal-title">Create New Classification</h3>
+
+      <div class="modal-body">
+        <div class="field-group">
+          <label for="modal-classification-name" class="field-label">Classification Name</label>
+          <input
+            id="modal-classification-name"
+            type="text"
+            placeholder="Enter classification name..."
+            class="input-field"
+          />
+        </div>
+
+        <div class="field-group">
+          <label class="field-label">Group</label>
+          <div class="radio-group">
+            <label class="radio-label">
+              <input type="radio" name="group-option" value="none" checked class="radio-input" />
+              <span>No Group</span>
+            </label>
+            <label class="radio-label">
+              <input type="radio" name="group-option" value="existing" class="radio-input" />
+              <span>Existing Group</span>
+            </label>
+            <label class="radio-label">
+              <input type="radio" name="group-option" value="new" class="radio-input" />
+              <span>New Group</span>
+            </label>
+          </div>
+        </div>
+
+        <div id="existing-groups-section" class="field-group hidden">
+          <label for="modal-existing-groups" class="field-label">Select Existing Group</label>
+          <select
+            id="modal-existing-groups"
+            class="input-field"
+          >
+          </select>
+        </div>
+
+        <div id="new-group-section" class="field-group hidden">
+          <label for="modal-new-group-name" class="field-label">New Group Name</label>
+          <input
+            id="modal-new-group-name"
+            type="text"
+            placeholder="Enter group name..."
+            class="input-field"
+          />
+        </div>
+      </div>
+
+      <div class="modal-actions">
+        <button
+          id="modal-cancel"
+          type="button"
+          class="cancel-button"
+        >
+          Cancel
+        </button>
+        <button
+          id="modal-create"
+          type="button"
+          class="create-button"
+        >
+          Create
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="popup.js"></script>
+</body>
+</html>

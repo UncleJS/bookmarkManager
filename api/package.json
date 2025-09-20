@@ -1,0 +1,21 @@
+{
+  "name": "bookmark-manager-api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Node.js API for Bookmark Manager (Express + MariaDB)",
+  "scripts": {
+    "start": "node src/server.js",
+    "migrate": "node src/db/runMigrations.js",
+    "dev": "node --watch src/server.js",
+    "smoke": "node src/smoke/health.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "mysql2": "^3.11.0",
+    "pino": "^9.3.2",
+    "pino-http": "^10.3.0",
+    "pino-pretty": "^11.0.0"
+  }
+}

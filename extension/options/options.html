@@ -1,0 +1,27 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Bookmark Manager Options</title>
+  <style>
+    body { font-family: system-ui, sans-serif; padding: 16px; }
+    label { display: block; margin: 8px 0; }
+    input[type="text"] { width: 420px; max-width: 100%; padding: 6px; }
+    button { padding: 6px 10px; }
+    #status { margin-left: 8px; font-size: 12px; color: #666; }
+  </style>
+</head>
+<body>
+  <h1>Options</h1>
+  <label>
+    API Base URL
+    <input id="apiBaseUrl" type="text" placeholder="http://localhost:3000" />
+  </label>
+  <button id="save">Save</button>
+  <span id="status"></span>
+
+  <script type="module" src="options.js"></script>
+</body>
+</html>
+
