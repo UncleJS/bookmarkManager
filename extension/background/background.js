@@ -178,12 +178,14 @@ async function apiFetch(path, { method = 'GET', body, headers = {}, timeoutMs = 
   clearTimeout(id);
   if (!res.ok) {
     let msg = `HTTP ${res.status}`;
+    let data;
     try {
-      const j = await res.json();
-      if (j && j.error) msg = j.error;
+      data = await res.json();
+      if (data && data.error) msg = data.error;
     } catch {}
     const e = new Error(msg);
     e.status = res.status;
+    if (data !== undefined) e.data = data;
     throw e;
   }
   const ct = res.headers.get('content-type') || '';
@@ -242,7 +244,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           sendResponse({ ok: false, error: 'Unknown message type' });
       }
     } catch (err) {
-      sendResponse({ ok: false, error: err?.message || String(err), status: err?.status });
+      sendResponse({
+        ok: false,
+        error: err?.message || String(err),
+        status: err?.status,
+        data: err?.data
+      });
     }
   })();
   return true; // keep the channel open for async

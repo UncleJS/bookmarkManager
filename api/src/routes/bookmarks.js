@@ -33,9 +33,10 @@ const router = Router();
  */
 router.post('/', async (req, res, next) => {
   const conn = await pool.getConnection();
+  let transactionStarted = false;
   try {
     const body = req.body || {};
-    const { url, title, description, classificationIds, tags, flags, faviconUrl } = body;
+    const { url, title, description, classificationIds, tags, flags, faviconUrl, allowDuplicate } = body;
 
     // Validate required fields
     if (!url || typeof url !== 'string') throw createHttpError(400, 'url is required');
@@ -47,6 +48,26 @@ router.post('/', async (req, res, next) => {
     if (!cleanUrl) throw createHttpError(400, 'url cannot be empty');
     if (!cleanTitle) throw createHttpError(400, 'title cannot be empty');
 
+    const duplicatesAllowed = allowDuplicate === true;
+
+    // Check for existing bookmarks with the same URL before starting transaction
+    const [existingRows] = await conn.query(
+      'SELECT id, url, title, created_at FROM bookmarks WHERE url = ? ORDER BY created_at DESC LIMIT 5',
+      [cleanUrl]
+    );
+
+    if (!duplicatesAllowed && Array.isArray(existingRows) && existingRows.length > 0) {
+      return res.status(409).json({
+        error: 'Bookmark already exists for this URL',
+        duplicates: existingRows.map(row => ({
+          id: row.id,
+          url: row.url,
+          title: row.title,
+          createdAt: row.created_at instanceof Date ? row.created_at.toISOString() : row.created_at,
+        })),
+      });
+    }
+
     // Convert flags to database boolean values (0/1)
     const readLater = flags?.readLater ? 1 : 0;
     const hotTopic = flags?.hotTopic ? 1 : 0;
@@ -56,6 +77,7 @@ router.post('/', async (req, res, next) => {
 
     // Start database transaction for atomic operation
     await conn.beginTransaction();
+    transactionStarted = true;
 
     // Insert main bookmark record
     const [r] = await conn.execute(
@@ -96,6 +118,7 @@ router.post('/', async (req, res, next) => {
 
     // Commit transaction - all operations succeeded
     await conn.commit();
+    transactionStarted = false;
 
     // Return created bookmark information
     res.status(201).json({
@@ -106,7 +129,13 @@ router.post('/', async (req, res, next) => {
     });
   } catch (err) {
     // Rollback transaction on any error
-    await conn.rollback();
+    if (transactionStarted) {
+      try {
+        await conn.rollback();
+      } catch {
+        // ignore rollback errors
+      }
+    }
 
     // Handle specific database constraint violations
     if (err && err.code === 'ER_DUP_ENTRY') {

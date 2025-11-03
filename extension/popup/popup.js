@@ -36,6 +36,7 @@ let state = {
   prefetchedTags: [], // Cache for prefetched tag results
   hasClassificationsPrefetched: false, // Track if classifications are loaded
   hasTagsPrefetched: false, // Track if initial tags are loaded
+  pendingDuplicate: null, // Store duplicate entries requiring confirmation
 };
 
 /**
@@ -463,6 +464,175 @@ function setStatus(text, success = false) {
 }
 
 /**
+ * Render duplicate warning list
+ *
+ * Populates the duplicate list container with any existing bookmark matches.
+ */
+function renderDuplicateWarning() {
+  const list = el('duplicate-list');
+  if (!list) return;
+  list.innerHTML = '';
+
+  const duplicates = state.pendingDuplicate?.duplicates || [];
+  duplicates.forEach((duplicate) => {
+    const item = document.createElement('li');
+    item.className = 'duplicate-item';
+
+    const title = document.createElement('span');
+    title.className = 'duplicate-item-title';
+    title.textContent = duplicate.title || '(Untitled bookmark)';
+    item.appendChild(title);
+
+    if (duplicate.url) {
+      const urlLine = document.createElement('span');
+      urlLine.className = 'duplicate-item-meta';
+      urlLine.textContent = duplicate.url;
+      item.appendChild(urlLine);
+    }
+
+    if (duplicate.createdAt) {
+      const date = new Date(duplicate.createdAt);
+      if (!Number.isNaN(date.getTime())) {
+        const dateLine = document.createElement('span');
+        dateLine.className = 'duplicate-item-meta';
+        dateLine.textContent = `Saved ${date.toLocaleString()}`;
+        item.appendChild(dateLine);
+      }
+    }
+
+    list.appendChild(item);
+  });
+}
+
+/**
+ * Show duplicate warning panel
+ *
+ * @param {Array} duplicates - Duplicate bookmark entries from API
+ */
+function showDuplicateWarning(duplicates) {
+  const container = el('duplicate-warning');
+  const confirmBtn = el('duplicate-confirm');
+  const cancelBtn = el('duplicate-cancel');
+
+  state.pendingDuplicate = {
+    duplicates: Array.isArray(duplicates) ? duplicates : []
+  };
+
+  renderDuplicateWarning();
+
+  if (container) {
+    container.classList.remove('hidden');
+  }
+  if (confirmBtn) {
+    confirmBtn.disabled = false;
+    confirmBtn.textContent = 'Save Duplicate';
+  }
+  if (cancelBtn) {
+    cancelBtn.disabled = false;
+  }
+}
+
+/**
+ * Hide duplicate warning panel and reset state
+ */
+function hideDuplicateWarning() {
+  const container = el('duplicate-warning');
+  const list = el('duplicate-list');
+  const confirmBtn = el('duplicate-confirm');
+  const cancelBtn = el('duplicate-cancel');
+
+  if (container) {
+    container.classList.add('hidden');
+  }
+  if (list) {
+    list.innerHTML = '';
+  }
+  if (confirmBtn) {
+    confirmBtn.disabled = false;
+    confirmBtn.textContent = 'Save Duplicate';
+  }
+  if (cancelBtn) {
+    cancelBtn.disabled = false;
+  }
+  state.pendingDuplicate = null;
+}
+
+/**
+ * Cancel duplicate save flow
+ */
+function onDuplicateCancel() {
+  hideDuplicateWarning();
+  const saveBtn = el('save');
+  if (saveBtn) saveBtn.disabled = false;
+  setStatus('Duplicate save cancelled');
+  setTimeout(() => setStatus(''), 2000);
+}
+
+/**
+ * Confirm duplicate save flow
+ */
+async function onDuplicateConfirm() {
+  if (!state.pendingDuplicate) return;
+
+  const url = el('url').value.trim();
+  const title = el('title').value.trim();
+  if (!url) {
+    setStatus('Missing URL', false);
+    return;
+  }
+  if (!title) {
+    setStatus('Missing title', false);
+    return;
+  }
+
+  const confirmBtn = el('duplicate-confirm');
+  const cancelBtn = el('duplicate-cancel');
+  const saveBtn = el('save');
+
+  if (confirmBtn) {
+    confirmBtn.disabled = true;
+    confirmBtn.textContent = 'Saving…';
+  }
+  if (cancelBtn) cancelBtn.disabled = true;
+  if (saveBtn) saveBtn.disabled = true;
+
+  setStatus('Saving duplicate…');
+
+  const payload = { ...buildBookmarkPayload(url, title), allowDuplicate: true };
+
+  try {
+    const res = await send('saveBookmark', payload);
+    if (res?.ok) {
+      hideDuplicateWarning();
+      setStatus('Bookmark saved!', true);
+      setTimeout(() => window.close(), 1200);
+      return;
+    }
+
+    if (res?.status === 409 && res?.data?.duplicates?.length) {
+      showDuplicateWarning(res.data.duplicates);
+      setStatus('Bookmark already exists. Review duplicates below.', false);
+    } else {
+      setStatus(res?.error || 'Failed to save bookmark', false);
+    }
+  } catch (error) {
+    setStatus('Failed to save bookmark', false);
+  } finally {
+    const pending = !!state.pendingDuplicate;
+    if (pending && confirmBtn) {
+      confirmBtn.disabled = false;
+      confirmBtn.textContent = 'Save Duplicate';
+    }
+    if (pending && cancelBtn) {
+      cancelBtn.disabled = false;
+    }
+    if (pending && saveBtn) {
+      saveBtn.disabled = false;
+    }
+  }
+}
+
+/**
  * On Create Classification Button Click
  *
  * Event handler for the "Add Classification" button.
@@ -643,6 +813,8 @@ function initEvents() {
   el('tag-input').addEventListener('click', onTagFocus);
   el('tag-input').addEventListener('keydown', onTagEnterCreateIfNeeded);
   el('form').addEventListener('submit', onSubmit);
+  el('duplicate-cancel').addEventListener('click', onDuplicateCancel);
+  el('duplicate-confirm').addEventListener('click', onDuplicateConfirm);
 
   // Modal events
   el('modal-cancel').addEventListener('click', hideModal);
@@ -728,23 +900,14 @@ async function onTagEnterCreateIfNeeded(e) {
 }
 
 /**
- * Form Submit Handler
+ * Build bookmark payload from current form state
  *
- * Gathers the form data and submits it to save a new or updated bookmark.
- * Validates required fields and shows status messages based on the result.
- *
- * @param {Event} e - Submit event
+ * @param {string} url - Bookmark URL
+ * @param {string} title - Bookmark title
+ * @returns {Object} Payload for API submission
  */
-async function onSubmit(e) {
-  e.preventDefault();
-
-  const url = el('url').value.trim();
-  const title = el('title').value.trim();
-
-  if (!url) return setStatus('Missing URL', false);
-  if (!title) return setStatus('Missing title', false);
-
-  const payload = {
+function buildBookmarkPayload(url, title) {
+  return {
     url,
     title,
     description: el('description').value || '',
@@ -759,6 +922,28 @@ async function onSubmit(e) {
     },
     faviconUrl: '',
   };
+}
+
+/**
+ * Form Submit Handler
+ *
+ * Gathers the form data and submits it to save a new or updated bookmark.
+ * Validates required fields and shows status messages based on the result.
+ *
+ * @param {Event} e - Submit event
+ */
+async function onSubmit(e) {
+  e.preventDefault();
+
+  hideDuplicateWarning();
+
+  const url = el('url').value.trim();
+  const title = el('title').value.trim();
+
+  if (!url) return setStatus('Missing URL', false);
+  if (!title) return setStatus('Missing title', false);
+
+  const payload = buildBookmarkPayload(url, title);
 
   const saveBtn = el('save');
   saveBtn.disabled = true;
@@ -769,10 +954,13 @@ async function onSubmit(e) {
     if (res?.ok) {
       setStatus('Bookmark saved!', true);
       setTimeout(() => window.close(), 1200);
+    } else if (res?.status === 409 && res?.data?.duplicates?.length) {
+      saveBtn.disabled = false;
+      showDuplicateWarning(res.data.duplicates);
+      setStatus('Bookmark already exists. Review duplicates below.', false);
     } else {
       saveBtn.disabled = false;
-      const msg = res?.status === 409 ? 'Already saved' : (res?.error || 'Failed to save');
-      setStatus(msg, false);
+      setStatus(res?.error || 'Failed to save bookmark', false);
     }
   } catch (error) {
     saveBtn.disabled = false;

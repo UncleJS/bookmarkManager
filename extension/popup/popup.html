@@ -128,6 +128,19 @@
         </fieldset>
       </div>
 
+      <!-- Duplicate warning -->
+      <div id="duplicate-warning" class="duplicate-warning hidden">
+        <div class="duplicate-warning-text">
+          <h2>Possible duplicate</h2>
+          <p>This URL already exists in your bookmarks. Review the existing entries below.</p>
+        </div>
+        <ul id="duplicate-list" class="duplicate-list"></ul>
+        <div class="duplicate-actions">
+          <button type="button" id="duplicate-cancel" class="secondary-button">Cancel</button>
+          <button type="button" id="duplicate-confirm" class="save-button duplicate-confirm">Save Duplicate</button>
+        </div>
+      </div>
+
       <!-- Actions -->
       <div class="actions-container">
         <span id="status" class="status-text"></span>
