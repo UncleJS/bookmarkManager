@@ -11,6 +11,13 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+html,
+body {
+  height: auto;
+  min-height: 100%;
+  overflow: visible;
+}
+
 /* Dark/Light mode variables */
 .dark-bg {
   background-color: #0f172a;
@@ -32,7 +39,7 @@ body {
 .main-container {
   padding: 16px;
   width: 384px;
-  min-height: 500px;
+  height: auto;
 }
 
 .header {
