@@ -191,8 +191,6 @@ body {
   right: 0;
   z-index: 10;
   margin-top: 4px;
-  max-height: 192px;
-  overflow-y: auto;
   background-color: white;
   border: 1px solid #d1d5db;
   border-radius: 6px;
