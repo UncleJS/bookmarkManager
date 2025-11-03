@@ -53,7 +53,7 @@ Status: Planning Only — Do NOT implement yet. This document is a precise bluep
 - API
   - Provide endpoints to list/create classifications and tags, and to create bookmarks.
   - No auth or CORS; rely on frontend validation before sending.
-  - Enforce unique constraints to prevent duplicate bookmarks by URL (DB-level).
+- Detect existing bookmarks with the same URL and require explicit user confirmation before creating a duplicate entry.
 
 
 ## 4) Non-Functional Requirements
@@ -146,7 +146,7 @@ Status: Planning Only — Do NOT implement yet. This document is a precise bluep
 
 ### 5.8 Edge Cases
 - Very long titles or URLs: truncate in UI display but send full to API.
-- Duplicate URL: API returns conflict; show message and offer to update or ignore (initially: show a simple "Already saved" info).
+- Duplicate URL: API returns conflict alongside existing bookmark metadata; popup presents the duplicates and lets the user cancel or continue to save another copy.
 - Large tag set: paginate suggestions; only fetch top N matches.
 - Empty API configuration: prompt user to open Options.
 - API failure/timeouts: inform user; do not retry POST to avoid duplicates (unless idempotency key is added later).
@@ -221,7 +221,7 @@ Status: Planning Only — Do NOT implement yet. This document is a precise bluep
     - 201 { id, url, title, createdAt }
     - Errors
       - 400 malformed input (e.g., invalid JSON)
-      - 409 conflict (duplicate URL)
+      - 409 conflict (duplicate URL, response includes existing bookmark list so clients can prompt for confirmation)
 
 - Optional
   - GET /bookmarks?search=&tag=...&classificationId=... (basic listing)
@@ -231,11 +231,11 @@ Status: Planning Only — Do NOT implement yet. This document is a precise bluep
   - classification_groups (id PK, name, order INT, created_at)
   - classifications (id PK, group_id FK, name, order INT, created_at)
   - tags (id PK, name UNIQUE, created_at)
-  - bookmarks (id PK, url UNIQUE, title, description TEXT, classification_id FK NULL, favicon_url, read_later TINYINT, hot_topic TINYINT, cheatsheets TINYINT, archived TINYINT, created_at, updated_at)
+  - bookmarks (id PK, url TEXT, title, description TEXT, classification_id FK NULL, favicon_url, read_later TINYINT, hot_topic TINYINT, cheatsheets TINYINT, archived TINYINT, created_at, updated_at)
   - bookmark_tags (bookmark_id FK, tag_id FK, PRIMARY KEY (bookmark_id, tag_id))
 
 - Indexes
-  - bookmarks.url UNIQUE
+  - (Optional) index on bookmarks.url for faster duplicate lookups
   - tags.name UNIQUE
   - FK indexes on join columns
 
@@ -258,8 +258,8 @@ Status: Planning Only — Do NOT implement yet. This document is a precise bluep
 - Use pino in JSON mode. Log method, path, status, duration, and errors.
 
 ### 6.11 Duplicate Handling
-- Unique constraint on bookmarks.url.
-- On conflict, return 409. Later enhancement: add an "upsert" query parameter to update existing records if desired.
+- Before inserting, query for existing bookmarks with the same URL and return their metadata with a 409 response.
+- Allow clients to resend the request with an `allowDuplicate` flag after explicit user confirmation to create another record.
 
 
 ## 7) Contracts and Example Payloads
@@ -440,6 +440,5 @@ export type BgMessage =
 
 ## 16) Open Questions (if needed for later phases)
 - Should Quick Save set readLater=true by default? (Assumed yes.)
-- Should duplicate URL upsert be allowed behind a flag? (Later.)
+- Duplicate URL override implemented via `allowDuplicate` flag after user confirmation.
 - Do we need export/import of bookmarks? (Out of scope for v1.)
-

@@ -8,6 +8,7 @@ A Chrome Manifest V3 extension that captures bookmarks and sends them to a local
 - **Quick Save**: Right-click context menu for instant bookmark saving
 - **Full Save**: Detailed form with tags, classifications, and metadata
 - **Auto-fill**: Automatically captures page title, URL, and favicon
+- **Duplicate Detection**: Highlights existing bookmarks with the same URL and lets you cancel or proceed with saving another copy
 
 ### Organization System
 - **Classifications**: Hierarchical categorization system with groups

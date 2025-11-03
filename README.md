@@ -96,11 +96,10 @@ curl http://localhost:3000/health
 - POST /tags → create tag
 - POST /bookmarks → create bookmark
 
-The database enforces uniqueness on bookmark URLs via a SHA-256 hash of the URL (hex) and on tag names.
+The API detects bookmarks that already exist for a URL and returns the matching records so the extension can warn users before they choose to save a duplicate. Tag names remain unique at the database level.
 
 ## Troubleshooting
 
 - Dev DB port busy (3306): edit `api/docker-compose.yml` to map another host port.
 - API can’t reach DB: verify `.env` matches your DB host/port/creds.
 - Extension can’t reach API: set the correct base URL in Options and ensure `host_permissions` in `extension/manifest.json` includes your API origin.
-

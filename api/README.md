@@ -50,7 +50,9 @@ The API follows a clean architecture pattern with the following layers:
 - `POST /tags` - Create new tag
 
 ### Bookmarks
-- `POST /bookmarks` - Create new bookmark with tags and classifications
+- `POST /bookmarks` - Create new bookmark with tags and classifications  
+  - Detects existing bookmarks with the same URL and responds with `409 Conflict` plus a `duplicates` array so clients can warn the user  
+  - Include `allowDuplicate: true` in the request body to bypass the warning after explicit user confirmation
 
 ## Environment Variables
 
