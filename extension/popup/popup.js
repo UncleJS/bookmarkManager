@@ -32,7 +32,7 @@ let state = {
   allClassifications: [], // All available classifications with groups from API
   filteredClassifications: [], // Filtered classifications for display in search
   tagSuggestions: [], // Tag suggestions for autocomplete dropdown
-  existingGroups: [], // Available classification groups for modal
+  existingGroups: [], // Available classification groups for modal: { id, name }
   prefetchedTags: [], // Cache for prefetched tag results
   hasClassificationsPrefetched: false, // Track if classifications are loaded
   hasTagsPrefetched: false, // Track if initial tags are loaded
@@ -292,8 +292,8 @@ function showModal() {
   groupsSelect.innerHTML = '<option value="">Select a group</option>';
   state.existingGroups.forEach(group => {
     const option = document.createElement('option');
-    option.value = group;
-    option.textContent = group;
+    option.value = String(group.id);
+    option.textContent = group.name;
     groupsSelect.appendChild(option);
   });
 
@@ -365,16 +365,22 @@ async function handleCreateClassification() {
   }
 
   const groupOption = document.querySelector('input[name="group-option"]:checked')?.value;
+  let groupId = null;
   let groupName = null;
+  let resolvedGroupName = null;
 
   if (groupOption === 'existing') {
-    groupName = el('modal-existing-groups').value || null;
+    const selected = el('modal-existing-groups').value;
+    groupId = selected ? Number(selected) : null;
+    if (Number.isNaN(groupId)) groupId = null;
+    resolvedGroupName = state.existingGroups.find(g => g.id === groupId)?.name || null;
   } else if (groupOption === 'new') {
     groupName = el('modal-new-group-name').value.trim() || null;
+    resolvedGroupName = groupName || null;
   }
 
   try {
-    const res = await send('createClassification', { name, groupName });
+    const res = await send('createClassification', { name, groupId, groupName });
     if (!res?.ok) {
       setStatus(res.error || 'Failed to create classification', false);
       return;
@@ -384,13 +390,17 @@ async function handleCreateClassification() {
     const newClassification = {
       id: res.data.id,
       name: res.data.name,
-      groupName: groupName
+      groupId: res.data.groupId ?? groupId ?? null,
+      groupName: resolvedGroupName
     };
     state.allClassifications.push(newClassification);
 
     // Update existing groups if we created a new one
-    if (groupName && !state.existingGroups.includes(groupName)) {
-      state.existingGroups.push(groupName);
+    if (groupName && res.data.groupId) {
+      const hasGroup = state.existingGroups.some(group => group.id === res.data.groupId);
+      if (!hasGroup) {
+        state.existingGroups.push({ id: res.data.groupId, name: groupName });
+      }
     }
 
     // Auto-select the newly created classification
@@ -427,14 +437,16 @@ async function loadInitial() {
     state.existingGroups = [];
     if (classifications.groups) {
       classifications.groups.forEach(group => {
-        if (group.name) {
-          state.existingGroups.push(group.name);
+        if (group?.id && group?.name) {
+          const hasGroup = state.existingGroups.some(existing => existing.id === group.id);
+          if (!hasGroup) state.existingGroups.push({ id: group.id, name: group.name });
         }
         if (group.classifications) {
           group.classifications.forEach(c => {
             state.allClassifications.push({
               id: c.id,
               name: c.name,
+              groupId: group.id,
               groupName: group.name
             });
           });
