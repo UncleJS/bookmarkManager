@@ -3,19 +3,23 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Node.js API for Bookmark Manager (Express + MariaDB)",
+  "description": "Bookmark Manager API (Bun + Elysia + Drizzle + MariaDB)",
   "scripts": {
-    "start": "node src/server.js",
-    "migrate": "node src/db/runMigrations.js",
-    "dev": "node --watch src/server.js",
-    "smoke": "node src/smoke/health.js"
+    "start": "bun run src/server.ts",
+    "dev": "bun --watch src/server.ts",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:studio": "drizzle-kit studio",
+    "smoke": "bun run src/smoke/health.ts"
   },
   "dependencies": {
-    "dotenv": "^16.4.5",
-    "express": "^4.19.2",
-    "mysql2": "^3.11.0",
-    "pino": "^9.3.2",
-    "pino-http": "^10.3.0",
-    "pino-pretty": "^11.0.0"
+    "@elysiajs/swagger": "^1.2.2",
+    "drizzle-orm": "^0.44.0",
+    "elysia": "^1.2.25",
+    "mysql2": "^3.14.4"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "drizzle-kit": "^0.31.0"
   }
 }

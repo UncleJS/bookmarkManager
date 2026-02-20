@@ -22,7 +22,7 @@ const KEY = 'apiBaseUrl';
 export async function getApiBaseUrl() {
   return new Promise((resolve) => {
     chrome.storage.sync.get([KEY], (items) => {
-      resolve(items[KEY] || 'http://localhost:3000');
+      resolve(items[KEY] || 'http://localhost:11650');
     });
   });
 }

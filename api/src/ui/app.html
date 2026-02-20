@@ -1,0 +1,724 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Bookmark Manager</title>
+  <style>
+    /* ── Reset & base ────────────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0a0a0a;
+      --surface:   #111111;
+      --surface2:  #1a1a1a;
+      --border:    #2a2a2a;
+      --border2:   #333333;
+      --text:      #f0f0f0;
+      --text-muted:#888888;
+      --accent:    #4f9cf9;
+      --accent-dim:#1d3d6b;
+      --tag-bg:    #1e2a3a;
+      --tag-text:  #7fb8f8;
+      --flag-read: #4ade80;
+      --flag-hot:  #f97316;
+      --flag-cs:   #a78bfa;
+      --flag-rev:  #facc15;
+      --danger:    #ef4444;
+      --sidebar-w: 260px;
+    }
+
+    html, body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: ui-monospace, 'Cascadia Code', 'Fira Code', monospace;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    /* ── Layout ──────────────────────────────────────────────────────────── */
+    #layout {
+      display: flex;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* ── Sidebar ─────────────────────────────────────────────────────────── */
+    #sidebar {
+      width: var(--sidebar-w);
+      flex-shrink: 0;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    #sidebar-header {
+      padding: 16px 14px 12px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    #sidebar-header h1 {
+      font-size: 15px;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      color: var(--text);
+    }
+
+    #sidebar-header p {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    #sidebar-nav {
+      flex: 1;
+      overflow-y: auto;
+      padding: 8px 0;
+    }
+
+    .nav-section-label {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      padding: 10px 14px 4px;
+    }
+
+    .nav-item {
+      display: block;
+      width: 100%;
+      text-align: left;
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      font-family: inherit;
+      font-size: 13px;
+      padding: 6px 14px;
+      border-radius: 0;
+      transition: background 0.1s, color 0.1s;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .nav-item:hover {
+      background: var(--surface2);
+      color: var(--text);
+    }
+
+    .nav-item.active {
+      background: var(--accent-dim);
+      color: var(--accent);
+      font-weight: 600;
+    }
+
+    .nav-group-heading {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--text-muted);
+      padding: 8px 14px 2px;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+
+    /* ── Main ────────────────────────────────────────────────────────────── */
+    #main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    #topbar {
+      padding: 12px 20px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      background: var(--surface);
+      flex-shrink: 0;
+    }
+
+    #topbar-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text);
+      flex: 1;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    #topbar-count {
+      font-size: 12px;
+      color: var(--text-muted);
+      white-space: nowrap;
+    }
+
+    .sort-btn {
+      background: var(--surface2);
+      border: 1px solid var(--border2);
+      color: var(--text-muted);
+      font-family: inherit;
+      font-size: 12px;
+      padding: 4px 10px;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: border-color 0.1s, color 0.1s;
+    }
+
+    .sort-btn:hover, .sort-btn.active {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    /* ── Content ─────────────────────────────────────────────────────────── */
+    #content {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px 20px;
+    }
+
+    /* ── Bookmark card ───────────────────────────────────────────────────── */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 14px 16px;
+      margin-bottom: 10px;
+      transition: border-color 0.15s;
+    }
+
+    .card:hover {
+      border-color: var(--border2);
+    }
+
+    .card-title-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      margin-bottom: 4px;
+    }
+
+    .card-favicon {
+      width: 16px;
+      height: 16px;
+      margin-top: 2px;
+      flex-shrink: 0;
+      border-radius: 2px;
+    }
+
+    .card-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text);
+      flex: 1;
+      line-height: 1.4;
+    }
+
+    .card-title a {
+      color: var(--text);
+    }
+
+    .card-title a:hover {
+      color: var(--accent);
+      text-decoration: none;
+    }
+
+    .card-url {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .card-description {
+      font-size: 13px;
+      color: #aaaaaa;
+      margin-bottom: 8px;
+      line-height: 1.5;
+    }
+
+    .card-meta {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 6px;
+      margin-top: 8px;
+    }
+
+    .tag {
+      font-size: 11px;
+      background: var(--tag-bg);
+      color: var(--tag-text);
+      border-radius: 3px;
+      padding: 2px 7px;
+    }
+
+    .classification-badge {
+      font-size: 11px;
+      background: #1a2a1a;
+      color: #6ee06e;
+      border-radius: 3px;
+      padding: 2px 7px;
+    }
+
+    .flag {
+      font-size: 10px;
+      font-weight: 700;
+      border-radius: 3px;
+      padding: 2px 7px;
+      letter-spacing: 0.04em;
+    }
+
+    .flag-read   { background: #0d2b19; color: var(--flag-read); }
+    .flag-hot    { background: #2b1400; color: var(--flag-hot);  }
+    .flag-cs     { background: #1e1330; color: var(--flag-cs);   }
+    .flag-rev    { background: #2b2200; color: var(--flag-rev);  }
+
+    /* ── Archive toggle ───────────────────────────────────────────────────── */
+    #archive-toggle {
+      display: flex;
+      gap: 0;
+      border: 1px solid var(--border2);
+      border-radius: 4px;
+      overflow: hidden;
+      flex-shrink: 0;
+    }
+
+    .toggle-btn {
+      background: var(--surface2);
+      border: none;
+      color: var(--text-muted);
+      font-family: inherit;
+      font-size: 12px;
+      padding: 4px 12px;
+      cursor: pointer;
+      transition: background 0.1s, color 0.1s;
+    }
+
+    .toggle-btn + .toggle-btn {
+      border-left: 1px solid var(--border2);
+    }
+
+    .toggle-btn.active {
+      background: var(--accent-dim);
+      color: var(--accent);
+      font-weight: 600;
+    }
+
+    /* ── Archive action button on cards ──────────────────────────────────── */
+    .card-actions {
+      display: flex;
+      justify-content: flex-end;
+      margin-top: 8px;
+    }
+
+    .btn-archive, .btn-restore {
+      background: none;
+      border: 1px solid var(--border2);
+      color: var(--text-muted);
+      font-family: inherit;
+      font-size: 11px;
+      padding: 3px 10px;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: border-color 0.1s, color 0.1s;
+    }
+
+    .btn-archive:hover {
+      border-color: var(--danger);
+      color: var(--danger);
+    }
+
+    .btn-restore:hover {
+      border-color: var(--flag-read);
+      color: var(--flag-read);
+    }
+
+    .flag-archived { background: #2a1a1a; color: var(--danger); }
+
+    .card-date {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-left: auto;
+      white-space: nowrap;
+    }
+
+    /* ── Empty / loading / error states ──────────────────────────────────── */
+    .state-box {
+      text-align: center;
+      padding: 60px 20px;
+      color: var(--text-muted);
+      font-size: 13px;
+    }
+
+    .state-box .icon {
+      font-size: 32px;
+      margin-bottom: 12px;
+    }
+
+    /* ── Pagination ──────────────────────────────────────────────────────── */
+    #pagination {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 16px 20px;
+      border-top: 1px solid var(--border);
+      flex-shrink: 0;
+      background: var(--surface);
+    }
+
+    .page-btn {
+      background: var(--surface2);
+      border: 1px solid var(--border2);
+      color: var(--text-muted);
+      font-family: inherit;
+      font-size: 12px;
+      padding: 4px 12px;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: border-color 0.1s, color 0.1s;
+    }
+
+    .page-btn:disabled {
+      opacity: 0.35;
+      cursor: not-allowed;
+    }
+
+    .page-btn:not(:disabled):hover {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    #page-info {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    /* ── Scrollbar ───────────────────────────────────────────────────────── */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #555; }
+  </style>
+</head>
+<body>
+<div id="layout">
+
+  <!-- ── Sidebar ──────────────────────────────────────────────────────────── -->
+  <aside id="sidebar">
+    <div id="sidebar-header">
+      <h1>🔖 Bookmarks</h1>
+      <p id="sidebar-subtitle">Loading…</p>
+    </div>
+    <nav id="sidebar-nav">
+      <button class="nav-item active" data-id="" onclick="selectCategory(null, 'All bookmarks', this)">
+        All bookmarks
+      </button>
+    </nav>
+  </aside>
+
+  <!-- ── Main ─────────────────────────────────────────────────────────────── -->
+  <div id="main">
+
+    <div id="topbar">
+      <span id="topbar-title">All bookmarks</span>
+      <span id="topbar-count"></span>
+      <div id="archive-toggle">
+        <button class="toggle-btn active" id="btn-active"   onclick="setArchived(false)">Active</button>
+        <button class="toggle-btn"        id="btn-archived" onclick="setArchived(true)">Archived</button>
+      </div>
+      <button class="sort-btn active" id="btn-newest" onclick="setSort('newest')">↓ Newest</button>
+      <button class="sort-btn"        id="btn-oldest" onclick="setSort('oldest')">↑ Oldest</button>
+    </div>
+
+    <div id="content">
+      <div class="state-box"><div class="icon">⏳</div>Loading…</div>
+    </div>
+
+    <div id="pagination" style="display:none">
+      <button class="page-btn" id="btn-prev" onclick="changePage(-1)">← Prev</button>
+      <span id="page-info"></span>
+      <button class="page-btn" id="btn-next" onclick="changePage(1)">Next →</button>
+    </div>
+
+  </div>
+</div>
+
+<script>
+  // ── State ──────────────────────────────────────────────────────────────────
+  const PAGE_SIZE = 20;
+  let state = {
+    classificationId: null,   // null = all
+    categoryLabel: 'All bookmarks',
+    sortBy: 'newest',
+    showArchived: false,
+    page: 0,
+    total: 0,
+  };
+
+  // ── Boot ───────────────────────────────────────────────────────────────────
+  loadSidebar();
+  fetchBookmarks();
+
+  // ── Sidebar ────────────────────────────────────────────────────────────────
+  async function loadSidebar() {
+    try {
+      const res = await fetch('/classifications');
+      if (!res.ok) throw new Error(res.statusText);
+      const { groups } = await res.json();
+
+      const nav = document.getElementById('sidebar-nav');
+      // keep the "All" button
+      const allBtn = nav.querySelector('[data-id=""]');
+
+      // count total classifications for subtitle
+      let total = 0;
+      groups.forEach(g => total += g.classifications.length);
+      document.getElementById('sidebar-subtitle').textContent =
+        `${total} categories`;
+
+      groups.forEach(group => {
+        if (!group.classifications.length) return;
+
+        const heading = document.createElement('div');
+        heading.className = 'nav-group-heading';
+        heading.textContent = group.name;
+        nav.appendChild(heading);
+
+        group.classifications.forEach(c => {
+          const btn = document.createElement('button');
+          btn.className = 'nav-item';
+          btn.dataset.id = String(c.id);
+          btn.textContent = c.name;
+          btn.title = c.name;
+          btn.onclick = () => selectCategory(c.id, c.name, btn);
+          nav.appendChild(btn);
+        });
+      });
+    } catch (e) {
+      document.getElementById('sidebar-subtitle').textContent = 'Failed to load';
+      console.error('loadSidebar:', e);
+    }
+  }
+
+  function selectCategory(id, label, btnEl) {
+    document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
+    btnEl.classList.add('active');
+    state.classificationId = id;
+    state.categoryLabel = label;
+    state.page = 0;
+    document.getElementById('topbar-title').textContent = label;
+    fetchBookmarks();
+  }
+
+  // ── Sort ───────────────────────────────────────────────────────────────────
+  function setSort(dir) {
+    state.sortBy = dir;
+    state.page = 0;
+    document.getElementById('btn-newest').classList.toggle('active', dir === 'newest');
+    document.getElementById('btn-oldest').classList.toggle('active', dir === 'oldest');
+    fetchBookmarks();
+  }
+
+  // ── Archived toggle ────────────────────────────────────────────────────────
+  function setArchived(archived) {
+    state.showArchived = archived;
+    state.page = 0;
+    document.getElementById('btn-active').classList.toggle('active', !archived);
+    document.getElementById('btn-archived').classList.toggle('active', archived);
+    fetchBookmarks();
+  }
+
+  // ── Pagination ─────────────────────────────────────────────────────────────
+  function changePage(delta) {
+    const maxPage = Math.ceil(state.total / PAGE_SIZE) - 1;
+    state.page = Math.max(0, Math.min(maxPage, state.page + delta));
+    fetchBookmarks();
+  }
+
+  // ── Fetch & render bookmarks ───────────────────────────────────────────────
+  async function fetchBookmarks() {
+    const content = document.getElementById('content');
+    content.innerHTML = '<div class="state-box"><div class="icon">⏳</div>Loading…</div>';
+    document.getElementById('pagination').style.display = 'none';
+
+    const params = new URLSearchParams({
+      limit: String(PAGE_SIZE),
+      offset: String(state.page * PAGE_SIZE),
+      sortBy: state.sortBy,
+    });
+    if (state.classificationId) {
+      params.set('classificationId', String(state.classificationId));
+    }
+    if (state.showArchived) {
+      params.set('archived', 'true');
+    }
+
+    try {
+      const res = await fetch('/bookmarks?' + params);
+      if (!res.ok) throw new Error(res.statusText);
+      const { items, total } = await res.json();
+
+      state.total = total;
+      document.getElementById('topbar-count').textContent =
+        total === 0 ? 'No bookmarks' : `${total} bookmark${total === 1 ? '' : 's'}`;
+
+      if (items.length === 0) {
+        content.innerHTML = '<div class="state-box"><div class="icon">🔍</div>No bookmarks here yet.</div>';
+        return;
+      }
+
+      content.innerHTML = items.map(renderCard).join('');
+
+      // Pagination
+      const totalPages = Math.ceil(total / PAGE_SIZE);
+      if (totalPages > 1) {
+        const pg = document.getElementById('pagination');
+        pg.style.display = 'flex';
+        document.getElementById('btn-prev').disabled = state.page === 0;
+        document.getElementById('btn-next').disabled = state.page >= totalPages - 1;
+        document.getElementById('page-info').textContent =
+          `Page ${state.page + 1} of ${totalPages}`;
+      }
+
+    } catch (e) {
+      content.innerHTML = `<div class="state-box"><div class="icon">⚠️</div>Failed to load bookmarks.<br><small>${e.message}</small></div>`;
+      console.error('fetchBookmarks:', e);
+    }
+  }
+
+  // ── Card renderer ──────────────────────────────────────────────────────────
+  function renderCard(b) {
+    const domain = (() => {
+      try { return new URL(b.url).hostname; } catch { return ''; }
+    })();
+
+    const favicon = b.faviconUrl
+      ? `<img class="card-favicon" src="${esc(b.faviconUrl)}" alt="" onerror="this.style.display='none'" />`
+      : `<img class="card-favicon" src="https://www.google.com/s2/favicons?domain=${esc(domain)}&sz=16" alt="" onerror="this.style.display='none'" />`;
+
+    const description = b.description
+      ? `<div class="card-description">${esc(b.description)}</div>`
+      : '';
+
+    const tags = (b.tags || [])
+      .map(t => `<span class="tag">#${esc(t.name)}</span>`)
+      .join('');
+
+    const classes = (b.classifications || [])
+      .map(c => `<span class="classification-badge">${esc(c.name)}</span>`)
+      .join('');
+
+    const flags = [
+      b.readLater  ? `<span class="flag flag-read">READ LATER</span>` : '',
+      b.hotTopic   ? `<span class="flag flag-hot">HOT TOPIC</span>`   : '',
+      b.cheatsheets? `<span class="flag flag-cs">CHEATSHEET</span>`   : '',
+      b.forReview  ? `<span class="flag flag-rev">FOR REVIEW</span>`  : '',
+      b.archivedAt ? `<span class="flag flag-archived">ARCHIVED</span>` : '',
+    ].join('');
+
+    const dateStr = b.createdAt ? formatDate(b.createdAt) : '';
+
+    const actionBtn = state.showArchived
+      ? `<button class="btn-restore" data-id="${b.id}" title="Restore bookmark">↩ Restore</button>`
+      : `<button class="btn-archive" data-id="${b.id}" title="Archive bookmark">Archive</button>`;
+
+    return `
+    <div class="card" data-bookmark-id="${b.id}">
+      <div class="card-title-row">
+        ${favicon}
+        <div class="card-title">
+          <a href="${esc(b.url)}" target="_blank" rel="noopener noreferrer">${esc(b.title)}</a>
+        </div>
+      </div>
+      <div class="card-url">${esc(b.url)}</div>
+      ${description}
+      <div class="card-meta">
+        ${flags}${classes}${tags}
+        <span class="card-date">${dateStr}</span>
+      </div>
+      <div class="card-actions">${actionBtn}</div>
+    </div>`;
+  }
+
+  // ── Archive / Restore actions (delegated) ──────────────────────────────────
+  document.getElementById('content').addEventListener('click', async (e) => {
+    const archiveBtn = e.target.closest('.btn-archive');
+    const restoreBtn = e.target.closest('.btn-restore');
+    if (!archiveBtn && !restoreBtn) return;
+
+    const btn = archiveBtn || restoreBtn;
+    const id = btn.dataset.id;
+    const action = archiveBtn ? 'archive' : 'restore';
+
+    btn.disabled = true;
+    btn.textContent = action === 'archive' ? 'Archiving…' : 'Restoring…';
+
+    try {
+      const res = await fetch(`/bookmarks/${id}/${action}`, { method: 'PATCH' });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        alert(data.error || `Failed to ${action}`);
+        btn.disabled = false;
+        btn.textContent = action === 'archive' ? 'Archive' : '↩ Restore';
+        return;
+      }
+      // Remove the card from the current view immediately
+      const card = btn.closest('.card');
+      card.style.transition = 'opacity 0.2s';
+      card.style.opacity = '0';
+      setTimeout(() => {
+        card.remove();
+        // Update the count
+        state.total = Math.max(0, state.total - 1);
+        document.getElementById('topbar-count').textContent =
+          state.total === 0 ? 'No bookmarks' :
+          `${state.total} bookmark${state.total === 1 ? '' : 's'}`;
+        if (document.querySelectorAll('.card').length === 0) {
+          document.getElementById('content').innerHTML =
+            `<div class="state-box"><div class="icon">🔍</div>No bookmarks here yet.</div>`;
+        }
+      }, 200);
+    } catch (err) {
+      alert(`Failed to ${action}: ${err.message}`);
+      btn.disabled = false;
+      btn.textContent = action === 'archive' ? 'Archive' : '↩ Restore';
+    }
+  });
+
+  // ── Helpers ────────────────────────────────────────────────────────────────
+  function esc(str) {
+    if (!str) return '';
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  // Display local time as YYYY-MM-DD HH:mm:ss
+  function formatDate(raw) {
+    try {
+      const d = new Date(raw);
+      if (isNaN(d)) return raw;
+      const pad = n => String(n).padStart(2, '0');
+      return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ` +
+             `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+    } catch { return raw; }
+  }
+</script>
+</body>
+</html>

@@ -159,7 +159,7 @@ async function notify(title, message, type) {
  */
 async function apiBase() {
   const base = await getApiBaseUrl();
-  return base?.replace(/\/$/, '') || 'http://localhost:3000';
+  return base?.replace(/\/$/, '') || 'http://localhost:11650';
 }
 
 async function apiFetch(path, { method = 'GET', body, headers = {}, timeoutMs = 5000 } = {}) {

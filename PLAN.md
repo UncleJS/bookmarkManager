@@ -155,33 +155,28 @@ Status: Planning Only — Do NOT implement yet. This document is a precise bluep
 ## 6) API Plan (Node.js + MariaDB)
 
 ### 6.1 Tech Choices
-- Node.js LTS, Express.js, mysql2/promise, pino (logging), dotenv.
-- Optional: helmet (security headers); TypeScript recommended.
+- Bun runtime, Elysia framework, Drizzle ORM, mysql2 (driver), TypeScript.
+- Swagger UI at `/docs`; OpenAPI spec JSON at `/openapi.json`.
+- dotenv loaded automatically by Bun.
 
 ### 6.2 Project Structure (api/)
 - api/
   - src/
-    - app.ts (Express app config)
-    - server.ts (bootstrap)
-    - routes/
-      - bookmarks.ts
-      - tags.ts
-      - classifications.ts
-      - health.ts
+    - server.ts (Elysia app + all routes)
     - db/
-      - pool.ts (mysql2 pool)
-      - migrations/ (SQL files)
-      - queries/ (parameterized SQL)
-    - middleware/
-      - error.ts (error handler)
-    - types/
-      - index.ts (shared types/interfaces)
-  - package.json, tsconfig.json (or use JS if preferred)
+      - schema.ts (Drizzle table definitions)
+      - client.ts (Drizzle + mysql2 pool)
+      - migrations/ (Drizzle-generated SQL)
+      - upgrade_from_v1.sql (one-time migration for existing databases)
+    - smoke/
+      - health.ts (no-DB smoke test)
+  - drizzle.config.ts
+  - package.json, tsconfig.json
+  - Dockerfile (Bun-based production image)
   - .env.example
-  - Dockerfile, docker-compose.yml (MariaDB + API)
 
 ### 6.3 Environment Variables
-- API_PORT (default 3000)
+- API_PORT (default 11650)
 - DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME
 
 ### 6.4 Authentication
@@ -244,8 +239,10 @@ Status: Planning Only — Do NOT implement yet. This document is a precise bluep
   - TINYINT(1) for booleans.
 
 ### 6.7 Migrations
-- Store SQL files in api/src/db/migrations with an id and description prefix (e.g., 001_init.sql).
-- Provide a minimal migration runner script (Node) to apply in order and record applied migrations in a migrations table.
+- Managed by Drizzle Kit. Schema defined in `src/db/schema.ts`.
+- Generate: `bun run db:generate`; Apply: `bun run db:migrate`
+- Migration files live in `src/db/migrations/`.
+- For existing databases from the original Express schema, run `src/db/upgrade_from_v1.sql` first (adds `archived_at` columns, migrates archived rows, registers Drizzle baseline).
 
 ### 6.8 Validation and Error Handling
 - Frontend performs input validation before calling the API.
@@ -302,12 +299,12 @@ Status: Planning Only — Do NOT implement yet. This document is a precise bluep
   - Add PLAN.md (this file). Add LICENSE and basic README.
 
 - Phase 1 — API (scaffold and DB)
-  - Initialize Node project; add dependencies (express, mysql2, dotenv, pino).
-  - Create db schema migrations and runner.
-  - Implement routes: /health, /classifications, /tags, /bookmarks.
-  - Add error handler.
-  - Add basic tests for DB queries and endpoint responses.
-  - Provide Docker Compose for MariaDB + API.
+  - Initialize Bun project; add dependencies (elysia, @elysiajs/swagger, drizzle-orm, mysql2, drizzle-kit).
+  - Define Drizzle schema with archive-only semantics (archived_at columns on all tables).
+  - Generate and apply Drizzle migrations (bun run db:generate && bun run db:migrate).
+  - Implement all routes in src/server.ts: /health, /classifications, /tags, /bookmarks, /docs, /openapi.json.
+  - Add smoke test.
+  - Dev infrastructure: rootless Podman Quadlet pod (MariaDB + phpMyAdmin).
 
 - Phase 2 — Extension (scaffold)
   - Create manifest.json (MV3) with permissions and host_permissions.
@@ -354,10 +351,13 @@ Status: Planning Only — Do NOT implement yet. This document is a precise bluep
 ## 11) Deployment Plan
 
 - API
-  - Docker image build and push.
-  - MariaDB via managed service or Docker. Apply migrations.
-  - Set environment variables securely.
-  - Expose HTTPS with reverse proxy (e.g., Nginx) as appropriate.
+  - Build Podman image: `podman build -t localhost/bookmark-api:latest api/`
+  - Production pod via Quadlet: `bookmark.pod` + `bookmark-db.container` + `bookmark-pma.container` + `bookmark-api.container`
+  - Credentials via `~/bookmark-manager.env` (not committed to git).
+  - Apply migrations on first run (Dockerfile CMD runs `bun run db:migrate` before server start).
+  - Expose API on port 11650; phpMyAdmin on 127.0.0.1:11651.
+  - Reverse proxy (e.g., Nginx or Caddy) in front of the API for HTTPS as appropriate.
+  - Boot persistence: `loginctl enable-linger $USER` (optional, document for server deployments).
 
 - Extension
   - Development: load unpacked extension from extension/.

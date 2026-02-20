@@ -31,6 +31,13 @@
 export async function send(type, payload) {
   return new Promise((resolve) => {
     chrome.runtime.sendMessage({ type, payload }, (res) => {
+      // Always read lastError to suppress Chrome's "unchecked runtime.lastError" warning.
+      // If there's an error (e.g. no listener, background crashed), surface it as ok:false.
+      const err = chrome.runtime.lastError;
+      if (err) {
+        resolve({ ok: false, error: err.message || 'Extension messaging error' });
+        return;
+      }
       resolve(res);
     });
   });

@@ -380,7 +380,12 @@ async function handleCreateClassification() {
   }
 
   try {
-    const res = await send('createClassification', { name, groupId, groupName });
+  const payload = {
+    name,
+    ...(groupId != null ? { groupId } : {}),
+    ...(groupName != null ? { groupName } : {}),
+  };
+  const res = await send('createClassification', payload);
     if (!res?.ok) {
       setStatus(res.error || 'Failed to create classification', false);
       return;

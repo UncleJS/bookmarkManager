@@ -1,105 +1,95 @@
-# Bookmark Manager (JavaScript)
+# Bookmark Manager
 
-This repo contains:
-- Chrome Extension (MV3) to capture bookmarks
-- Node.js API (Express + MariaDB) to store bookmarks, tags, and classifications
+A Chrome extension (MV3) that captures bookmarks and sends them to a local Bun/Elysia API backed by MariaDB.
 
-Everything is implemented in JavaScript (no TypeScript).
+Everything is implemented in JavaScript (no TypeScript) for the extension; the API uses TypeScript with Bun.
+
+## Stack
+
+| Layer | Technology |
+|---|---|
+| Chrome Extension | Manifest V3, vanilla JS/HTML/CSS |
+| API | Bun + Elysia + TypeScript |
+| ORM | Drizzle |
+| Database | MariaDB 11 |
+| Dev infrastructure | Rootless Podman + systemd (Quadlet) |
 
 ## Quick Start
 
-### Dev environment (local API + dev DB in Docker)
+### 1. Start the dev database pod
 
-- Start MariaDB only (dev compose):
+```fish
+systemctl --user daemon-reload
+systemctl --user enable --now bookmark-dev-pod
+```
+
+Starts MariaDB (pod-internal) and phpMyAdmin on `http://localhost:11651`.
+
+### 2. Configure and migrate
 
 ```fish
 cd api
-docker compose up -d
+cp .env.example .env
+# Edit .env — set DB_PASSWORD, MARIADB_PASSWORD, MARIADB_ROOT_PASSWORD
+bun install
+bun run db:migrate
 ```
 
-- Prepare API env and run migrations:
+### 3. Start the API
 
 ```fish
 cd api
-cp -n .env.example .env
-npm install
-npm run migrate
+bun run dev
 ```
 
-- Start the API locally:
+- API: `http://localhost:11650`
+- Swagger UI: `http://localhost:11650/docs`
+- OpenAPI JSON: `http://localhost:11650/openapi.json`
+
+### 4. Health check
 
 ```fish
-cd api
-npm start
+curl http://localhost:11650/health
+# → {"status":"ok"}
 ```
 
-- Health check:
+### 5. Load the Chrome extension
 
-```fish
-curl http://localhost:3000/health
-```
+- Open `chrome://extensions`
+- Enable Developer mode
+- Click "Load unpacked" → select the `extension/` folder
+- Open Options → set API base URL to `http://localhost:11650`
 
-- Optional: quick smoke test (no DB required):
-
-```fish
-cd api
-npm run smoke
-```
-
-Notes:
-- The dev DB listens on host port 3306. If you already have MySQL/MariaDB on 3306, change the port mapping in `api/docker-compose.yml`.
-- The default `.env.example` points the API at `127.0.0.1:3306`, which works for the dev DB container.
-
-### Production-like (API in a container, external DB)
-
-- Create an API production env file:
-
-```fish
-cd api
-cp .env.prod.example .env.prod
-# edit .env.prod to point DB_* to your production/external database
-```
-
-- Build and run only the API container:
-
-```fish
-cd api
-docker compose -f docker-compose.prod.yml up -d --build
-```
-
-- Health check:
-
-```fish
-curl http://localhost:3000/health
-```
-
-## Chrome Extension
-
-- Load the extension:
-  - Open chrome://extensions
-  - Enable Developer mode
-  - Click "Load unpacked" and select the `extension/` folder
-
-- Configure API base URL:
-  - Options → set `http://localhost:3000` (or your deployed API URL)
-
-- Use:
-  - Click the action icon for the popup (full save)
-  - Right-click a page for context menus (Quick Save / Full Save)
+---
 
 ## API Overview
 
-- GET /health → `{ status: "ok" }`
-- GET /classifications → grouped payload for optgroups
-- POST /classifications → create classification (and group if provided)
-- GET /tags?query=&limit=&offset=
-- POST /tags → create tag
-- POST /bookmarks → create bookmark
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/health` | Health check |
+| `GET` | `/docs` | Swagger UI |
+| `GET` | `/openapi.json` | OpenAPI spec |
+| `GET` | `/classifications` | List classifications (grouped) |
+| `POST` | `/classifications` | Create classification |
+| `GET` | `/tags` | Search tags |
+| `POST` | `/tags` | Create tag |
+| `GET` | `/bookmarks` | List bookmarks |
+| `POST` | `/bookmarks` | Save bookmark |
 
-The API detects bookmarks that already exist for a URL and returns the matching records so the extension can warn users before they choose to save a duplicate. Tag names remain unique at the database level.
+Duplicate URL detection: the API returns `409` with existing bookmark metadata. Include `allowDuplicate: true` to save anyway after explicit user confirmation.
+
+---
+
+## Chrome Extension
+
+- Click the action icon for the popup (full save with form)
+- Right-click a page for context menus: **Quick Save** / **Full Save**
+
+See `extension/README.md` for full extension documentation.
+See `api/README.md` for full API documentation including production deployment.
 
 ## Troubleshooting
 
-- Dev DB port busy (3306): edit `api/docker-compose.yml` to map another host port.
-- API can’t reach DB: verify `.env` matches your DB host/port/creds.
-- Extension can’t reach API: set the correct base URL in Options and ensure `host_permissions` in `extension/manifest.json` includes your API origin.
+- **Dev DB port busy:** Another service is using the dev pod ports. Edit `~/.config/containers/systemd/bookmark-dev.pod` to change the host port mappings.
+- **API can't reach DB:** Check `api/.env` matches your DB credentials and `DB_HOST=127.0.0.1`.
+- **Extension can't reach API:** Verify the base URL in Options and ensure `host_permissions` in `extension/manifest.json` includes your API origin.

@@ -72,7 +72,7 @@ extension/
 - `contextMenus`: Add right-click menu items
 - `storage`: Save extension settings
 - `notifications`: Show success/error messages
-- `host_permissions`: Access to API endpoint (localhost:3000)
+- `host_permissions`: Access to API endpoint (localhost:11650)
 
 ## Data Flow
 
@@ -98,7 +98,7 @@ extension/
 
 ## API Integration
 
-The extension communicates with the Node.js API via:
+The extension communicates with the Bun/Elysia API via:
 - `GET /classifications` - Fetch classification groups
 - `GET /tags?query=...` - Search tags with autocomplete
 - `POST /bookmarks` - Create new bookmark
@@ -107,16 +107,17 @@ The extension communicates with the Node.js API via:
 
 ## Installation
 
-1. Open Chrome Extensions page (`chrome://extensions/`)
-2. Enable "Developer mode"
-3. Click "Load unpacked"
-4. Select the `extension/` directory
-5. Configure API URL in extension options if needed
+1. Start the dev pod and API — see `api/README.md` for setup instructions.
+2. Open Chrome Extensions page (`chrome://extensions/`)
+3. Enable "Developer mode"
+4. Click "Load unpacked"
+5. Select the `extension/` directory
+6. Configure API URL in extension options if needed
 
 ## Configuration
 
 ### API Base URL
-The extension defaults to `http://localhost:3000` but can be configured:
+The extension defaults to `http://localhost:11650` but can be configured:
 1. Right-click extension icon → "Options"
 2. Update "API Base URL" field
 3. Save changes
