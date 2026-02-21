@@ -17,6 +17,7 @@ import { join } from "path";
 const UI_DIR = join(import.meta.dir, "ui");
 
 function readUI(name: string): string {
+  // Read from disk on every request so UI changes are always live
   return readFileSync(join(UI_DIR, name), "utf-8");
 }
 
@@ -126,7 +127,10 @@ const app = new Elysia()
     "/app",
     () =>
       new Response(readUI("app.html"), {
-        headers: { "Content-Type": "text/html; charset=utf-8" },
+        headers: {
+          "Content-Type": "text/html; charset=utf-8",
+          "Cache-Control": "no-store",
+        },
       }),
     {
       detail: {
@@ -147,7 +151,10 @@ const app = new Elysia()
     "/categories",
     () =>
       new Response(readUI("categories.html"), {
-        headers: { "Content-Type": "text/html; charset=utf-8" },
+        headers: {
+          "Content-Type": "text/html; charset=utf-8",
+          "Cache-Control": "no-store",
+        },
       }),
     {
       detail: {

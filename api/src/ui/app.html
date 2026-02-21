@@ -1441,8 +1441,8 @@
         return;
       }
       closeModal();
-      fetchBookmarks();    // reload to show updated card
-      refreshCounts();     // update sidebar counts
+      await fetchBookmarks();    // reload to show updated card
+      await refreshCounts();     // update sidebar counts
     } catch (err) {
       alert('Failed to save: ' + err.message);
     } finally {
