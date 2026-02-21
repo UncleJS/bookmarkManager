@@ -1356,9 +1356,16 @@
     if (e.target === document.getElementById('modal-overlay')) closeModal();
   });
 
-  // Close on Escape
+  // Close on Escape — but if tag-search has content, just clear it first
   document.addEventListener('keydown', e => {
-    if (e.key === 'Escape') closeModal();
+    if (e.key !== 'Escape') return;
+    const tagSearch = document.getElementById('tag-search');
+    if (tagSearch && tagSearch.value) {
+      tagSearch.value = '';
+      renderChips('tag');
+    } else {
+      closeModal();
+    }
   });
 
   function filterChips(type) { renderChips(type); }
@@ -1394,26 +1401,48 @@
     renderChips('class');
   });
 
+  async function createOrSelectTag(name) {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+
+    // If an exact match exists, just select it
+    const existing = modalState.allTags.find(t => t.name.toLowerCase() === trimmed.toLowerCase());
+    if (existing) {
+      modalState.selTagIds.add(existing.id);
+      document.getElementById('tag-search').value = '';
+      renderChips('tag');
+      return;
+    }
+
+    // Otherwise create it
+    try {
+      const res = await fetch('/tags', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: trimmed }),
+      });
+      const data = await res.json();
+      if (!res.ok) { alert(data.error || 'Failed to create tag'); return; }
+      modalState.allTags.push({ id: data.id, name: data.name });
+      modalState.selTagIds.add(data.id);
+      document.getElementById('tag-search').value = '';
+      renderChips('tag');
+    } catch (err) { alert('Failed to create tag: ' + err.message); }
+  }
+
+  // Enter in tag search → create/select immediately
+  document.getElementById('tag-search').addEventListener('keydown', async e => {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    await createOrSelectTag(document.getElementById('tag-search').value);
+  });
+
   document.getElementById('tag-chips').addEventListener('click', async e => {
     const chip = e.target.closest('.picker-chip');
     if (!chip) return;
 
     if (chip.dataset.type === 'tag-create') {
-      const name = chip.dataset.name;
-      chip.textContent = 'Creating…';
-      try {
-        const res = await fetch('/tags', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name }),
-        });
-        const data = await res.json();
-        if (!res.ok) { alert(data.error || 'Failed to create tag'); return; }
-        modalState.allTags.push({ id: data.id, name: data.name });
-        modalState.selTagIds.add(data.id);
-        document.getElementById('tag-search').value = '';
-        renderChips('tag');
-      } catch (err) { alert('Failed to create tag: ' + err.message); }
+      await createOrSelectTag(chip.dataset.name);
       return;
     }
 
