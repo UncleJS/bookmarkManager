@@ -1,0 +1,37 @@
+# =============================================================================
+# Bookmark Manager Production DB — Quadlet unit file
+# Installs to: ~/.config/containers/systemd/bookmark-db.container
+# MariaDB — never exposed outside the pod (no PublishPort here).
+# =============================================================================
+
+[Unit]
+Description=Bookmark Manager production MariaDB
+PartOf=bookmark-pod.service
+After=bookmark-pod.service
+
+[Container]
+Image=docker.io/mariadb:11
+ContainerName=bookmark-db
+
+# Load all env vars (includes MARIADB_* for container init and DB_* for app)
+EnvironmentFile=%h/0_opencode/bookmarkManager/api/.env
+
+# Persistent data volume
+Volume=/home/jacos/.local/share/bookmark-manager/prod-db:/var/lib/mysql:Z
+
+# Join the pod
+Pod=bookmark.pod
+
+# Health check
+HealthCmd=mariadb-admin ping -h localhost
+HealthInterval=10s
+HealthTimeout=5s
+HealthRetries=5
+HealthStartPeriod=30s
+
+[Service]
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=bookmark-pod.service

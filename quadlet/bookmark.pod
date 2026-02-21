@@ -1,0 +1,22 @@
+# =============================================================================
+# Bookmark Manager Production Pod — Quadlet unit file
+# Installs to: ~/.config/containers/systemd/bookmark.pod
+# Contains: MariaDB + phpMyAdmin + API
+# Port bindings:
+#   11650 → API
+#   11651 → phpMyAdmin (127.0.0.1 only — access via SSH tunnel or reverse proxy)
+# MariaDB is pod-internal only (no host port binding).
+# =============================================================================
+
+[Unit]
+Description=Bookmark Manager production pod
+After=default.target
+
+[Pod]
+# API — host 11650 → container 11650 (API_PORT=11650 in bookmark-manager.env)
+PublishPort=11650:11650
+# phpMyAdmin — localhost only
+PublishPort=127.0.0.1:11651:80
+
+[Install]
+WantedBy=default.target

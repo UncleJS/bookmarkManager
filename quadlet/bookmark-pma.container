@@ -1,0 +1,37 @@
+# =============================================================================
+# Bookmark Manager Production phpMyAdmin — Quadlet unit file
+# Installs to: ~/.config/containers/systemd/bookmark-pma.container
+# phpMyAdmin — always requires login, no auto-login.
+# Internal port 80 → host 127.0.0.1:11651 (via bookmark.pod PublishPort).
+# =============================================================================
+
+[Unit]
+Description=Bookmark Manager production phpMyAdmin
+PartOf=bookmark-pod.service
+After=bookmark-pod.service bookmark-db.service
+
+[Container]
+Image=docker.io/phpmyadmin:5
+ContainerName=bookmark-pma
+
+# Load env vars from prod env file (provides PMA_HOST, PMA_PORT, PMA_ABSOLUTE_URI)
+EnvironmentFile=%h/0_opencode/bookmarkManager/api/.env
+
+# Do NOT set PMA_USER / PMA_PASSWORD — that would enable auto-login (disallowed).
+
+# Join the pod
+Pod=bookmark.pod
+
+# Health check
+HealthCmd=curl -sf http://localhost:80/
+HealthInterval=20s
+HealthTimeout=5s
+HealthRetries=3
+HealthStartPeriod=15s
+
+[Service]
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=bookmark-pod.service

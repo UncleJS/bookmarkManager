@@ -2,26 +2,32 @@
 
 A Bun + Elysia API for managing bookmarks, tags, and classifications. Backed by MariaDB with Drizzle ORM. Data is never hard-deleted — all "delete" actions archive rows (`archived_at`).
 
+---
+
 ## Quick Start
 
 ### 1. Configure environment
 
-```fish
+```bash
 cp api/.env.example api/.env
 # Edit api/.env — set DB_PASSWORD, MARIADB_PASSWORD, MARIADB_ROOT_PASSWORD
+nano api/.env
 ```
 
 > **Important:** `MARIADB_USER`/`MARIADB_PASSWORD` and `DB_USER`/`DB_PASSWORD` must match.
 
-### 2. Build the API image
+### 2. Install and start (from repo root)
 
-```fish
-podman build -t localhost/bookmark-api:latest api/
+```bash
+./scripts/install.sh
 ```
 
-### 3. Start the pod
+This will build the API image, copy Quadlet unit files, reload systemd, and start the pod.
 
-```fish
+Alternatively, run individual steps manually:
+
+```bash
+podman build -t localhost/bookmark-api:latest api/
 systemctl --user daemon-reload
 systemctl --user start bookmark-pod.service
 ```
@@ -31,63 +37,68 @@ This starts:
 - **phpMyAdmin** on `http://localhost:11651` (localhost only, login required)
 - **API** on `http://localhost:11650` (migrations run automatically on start)
 
-Check status and logs:
-```fish
-systemctl --user status bookmark-pod bookmark-db bookmark-pma bookmark-api
-journalctl --user -u bookmark-api -f
-```
+### 3. Health check
 
-Stop the pod:
-```fish
-systemctl --user stop bookmark-pod.service
-```
-
-### 4. Health check
-
-```fish
+```bash
 curl http://localhost:11650/health
 # → {"status":"ok"}
 ```
 
-- **API:** `http://localhost:11650`
-- **Swagger UI:** `http://localhost:11650/docs`
-- **OpenAPI JSON:** `http://localhost:11650/openapi.json`
-- **Bookmark viewer:** `http://localhost:11650/app`
-- **Category manager:** `http://localhost:11650/categories`
+| Service | URL |
+|---|---|
+| API | `http://localhost:11650` |
+| Swagger UI | `http://localhost:11650/docs` |
+| OpenAPI JSON | `http://localhost:11650/openapi.json` |
+| Bookmark viewer | `http://localhost:11650/app` |
+| Category manager | `http://localhost:11650/categories` |
+| phpMyAdmin | `http://localhost:11651` |
 
-### 5. Boot persistence
+### 4. Boot persistence
 
 To start automatically at boot without an interactive login session:
-```fish
+
+```bash
 loginctl enable-linger $USER
 ```
 
 ---
 
-## Making changes to the source
+## Scripts (from repo root)
 
-After editing source files, rebuild the image and restart the API:
-
-```fish
-podman build -t localhost/bookmark-api:latest api/
-systemctl --user restart bookmark-api.service
-```
-
-For schema changes, generate a new migration before rebuilding:
-```fish
-cd api && bun run db:generate
-```
+| Script | Description |
+|---|---|
+| `./scripts/install.sh` | Full install: build image, deploy Quadlet files, start pod |
+| `./scripts/uninstall.sh` | Stop services, remove Quadlet files, optionally remove image + data |
+| `./scripts/rebuild.sh` | Rebuild API image, restart `bookmark-api.service`, wait for health |
+| `./scripts/start.sh` | Start the pod (all services) |
+| `./scripts/stop.sh` | Stop the pod (all services) |
+| `./scripts/restart.sh [api\|db\|pma]` | Restart one service or whole pod |
+| `./scripts/logs.sh [api\|db\|pma\|all]` | Tail logs — defaults to `api` |
+| `./scripts/status.sh` | Show `systemctl --user status` for all services |
+| `./scripts/dev.sh` | Run API locally via `bun run dev` (no container, watch mode) |
 
 ---
 
-## Scripts
+## Bun scripts (in `api/`)
 
 | Command | Description |
 |---|---|
+| `bun run dev` | Watch mode (`bun --watch src/server.ts`) |
+| `bun run start` | Production start |
+| `bun run db:generate` | Generate a new Drizzle migration from schema changes |
 | `bun run db:migrate` | Apply pending Drizzle migrations |
-| `bun run db:generate` | Generate a new migration from schema changes |
 | `bun run db:studio` | Open Drizzle Studio (visual DB browser) |
 | `bun run smoke` | Smoke test — verifies `/health` (no DB required) |
+
+### Workflow for schema changes
+
+```bash
+# 1. Edit api/src/db/schema.ts
+# 2. Generate the migration
+cd api && bun run db:generate
+# 3. Rebuild and restart
+./scripts/rebuild.sh
+```
 
 ---
 
@@ -96,6 +107,7 @@ cd api && bun run db:generate
 Interactive docs always available at **`http://localhost:11650/docs`**.
 
 ### Health & UI
+
 | Method | Path | Description |
 |---|---|---|
 | `GET` | `/` | Redirect to `/app` |
@@ -104,26 +116,29 @@ Interactive docs always available at **`http://localhost:11650/docs`**.
 | `GET` | `/categories` | Category management UI |
 
 ### Tags
+
 | Method | Path | Description |
 |---|---|---|
 | `GET` | `/tags` | List/search tags (`?query=&limit=&offset=`) |
 | `POST` | `/tags` | Create a tag (`{ name }`) |
 
 ### Classifications
+
 | Method | Path | Description |
 |---|---|---|
 | `GET` | `/classifications` | All classifications grouped |
 | `POST` | `/classifications` | Create classification + optional group |
 
 ### Bookmarks
+
 | Method | Path | Description |
 |---|---|---|
 | `GET` | `/bookmarks` | List bookmarks (`?limit=&offset=`) |
 | `POST` | `/bookmarks` | Create bookmark |
-| `PATCH` | `/bookmarks/:id` | Update bookmark |
+| `PATCH` | `/bookmarks/:id` | Update bookmark fields |
 | `DELETE` | `/bookmarks/:id` | Archive bookmark (sets `archived_at`) |
 
-**POST /bookmarks** — duplicate detection:
+**POST /bookmarks — duplicate detection:**
 - Returns `409` with a `duplicates` array if the URL already exists.
 - To save anyway after user confirmation, include `allowDuplicate: true` in the body.
 
@@ -166,6 +181,39 @@ All vars live in `api/.env` (gitignored). Copy from `api/.env.example` to get st
 | `PMA_HOST` | `127.0.0.1` | phpMyAdmin DB host (within pod) |
 | `PMA_PORT` | `3306` | phpMyAdmin DB port |
 | `PMA_ABSOLUTE_URI` | `http://localhost:11651/` | phpMyAdmin canonical URL |
+
+---
+
+## Infrastructure
+
+### Pod: `bookmark.pod`
+
+| Port | Service | Access |
+|---|---|---|
+| `11650` | API | host + LAN |
+| `11651` | phpMyAdmin | `127.0.0.1` only |
+
+MariaDB is pod-internal only — never exposed to the host.
+
+### Quadlet unit files
+
+Canonical copies live in `quadlet/` (version-controlled). `scripts/install.sh` copies them to `~/.config/containers/systemd/`.
+
+```
+quadlet/
+├── bookmark.pod
+├── bookmark-api.container
+├── bookmark-db.container
+└── bookmark-pma.container
+```
+
+### DB data volume
+
+```
+~/.local/share/bookmark-manager/prod-db
+```
+
+Created automatically by `scripts/install.sh`. **Not removed by `uninstall.sh` unless explicitly confirmed.**
 
 ---
 

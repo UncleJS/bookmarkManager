@@ -255,38 +255,64 @@ All tables include `archived_at DATETIME NULL`. `NULL` = active. "Delete" sets `
 - Loaded by all three containers via `EnvironmentFile=%h/0_opencode/bookmarkManager/api/.env`
 - Template: `api/.env.example`
 
-### Quadlet unit files location
+### Quadlet unit files
+Canonical copies live in `quadlet/` (version-controlled). `scripts/install.sh` deploys them to `~/.config/containers/systemd/`.
+
 ```
-~/.config/containers/systemd/
+quadlet/                                  ← source of truth (repo)
+├── bookmark.pod
+├── bookmark-api.container
+├── bookmark-db.container
+└── bookmark-pma.container
+
+~/.config/containers/systemd/             ← deployed by install.sh
 ├── bookmark.pod
 ├── bookmark-api.container
 ├── bookmark-db.container
 └── bookmark-pma.container
 ```
 
-### Common commands
-```fish
-# Start
-systemctl --user daemon-reload
-systemctl --user start bookmark-pod.service
-
-# Stop
-systemctl --user stop bookmark-pod.service
-
-# Restart API only (after rebuild)
-systemctl --user restart bookmark-api.service
-
-# Logs
-journalctl --user -u bookmark-api -f
-
-# Status
-systemctl --user status bookmark-pod bookmark-api bookmark-db bookmark-pma
+### DB data volume
 ```
+~/.local/share/bookmark-manager/prod-db
+```
+Created by `scripts/install.sh`. Never removed automatically — only on explicit confirmation in `scripts/uninstall.sh`.
 
-### Rebuild API image
-```fish
-podman build -t localhost/bookmark-api:latest api/
-systemctl --user restart bookmark-api.service
+### Lifecycle scripts
+All scripts live in `scripts/` and are run from the repo root.
+
+| Script | Description |
+|---|---|
+| `./scripts/install.sh` | Full install: build image, deploy Quadlet files, start pod |
+| `./scripts/uninstall.sh` | Stop services, remove Quadlet files, optionally remove image + data |
+| `./scripts/rebuild.sh` | Rebuild API image, restart `bookmark-api.service`, wait for health |
+| `./scripts/start.sh` | Start the pod (all services) |
+| `./scripts/stop.sh` | Stop the pod (all services) |
+| `./scripts/restart.sh [api\|db\|pma]` | Restart one service or whole pod |
+| `./scripts/logs.sh [api\|db\|pma\|all]` | Tail logs — defaults to `api` |
+| `./scripts/status.sh` | Show `systemctl --user status` for all services |
+| `./scripts/dev.sh` | Run API locally via `bun run dev` (no container, watch mode) |
+
+### Common commands (manual equivalents)
+```bash
+# Install (first time)
+./scripts/install.sh
+
+# Start / stop
+./scripts/start.sh
+./scripts/stop.sh
+
+# Rebuild API after source changes
+./scripts/rebuild.sh
+
+# Tail API logs
+./scripts/logs.sh
+
+# Status overview
+./scripts/status.sh
+
+# Boot persistence (run once per user)
+loginctl enable-linger $USER
 ```
 
 ---

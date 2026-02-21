@@ -14,47 +14,114 @@ Everything is implemented in JavaScript (no TypeScript) for the extension; the A
 | Database | MariaDB 11 |
 | Infrastructure | Rootless Podman + systemd (Quadlet) |
 
+---
+
 ## Quick Start
 
 ### 1. Configure environment
 
-```fish
+```bash
 cp api/.env.example api/.env
 # Edit api/.env — set DB_PASSWORD, MARIADB_PASSWORD, MARIADB_ROOT_PASSWORD
+nano api/.env
 ```
 
-### 2. Build the API image
+### 2. Install (build image + deploy Quadlet + start pod)
 
-```fish
-podman build -t localhost/bookmark-api:latest api/
+```bash
+./scripts/install.sh
 ```
 
-### 3. Start the pod
+`install.sh` will:
+- Copy `api/.env.example → api/.env` if missing (then exit so you can set passwords)
+- Pull `mariadb:11` and `phpmyadmin:5`
+- Build `localhost/bookmark-api:latest`
+- Copy `quadlet/` unit files into `~/.config/containers/systemd/`
+- Run `systemctl --user daemon-reload` and start the pod
 
-```fish
-systemctl --user daemon-reload
-systemctl --user start bookmark-pod.service
-```
+### 3. Health check
 
-Starts MariaDB, phpMyAdmin (`http://localhost:11651`), and the API. Migrations run automatically on first start.
-
-### 4. Health check
-
-```fish
+```bash
 curl http://localhost:11650/health
 # → {"status":"ok"}
 ```
 
-- API: `http://localhost:11650`
-- Swagger UI: `http://localhost:11650/docs`
-- OpenAPI JSON: `http://localhost:11650/openapi.json`
+| Service | URL |
+|---|---|
+| API | `http://localhost:11650` |
+| Swagger UI | `http://localhost:11650/docs` |
+| OpenAPI JSON | `http://localhost:11650/openapi.json` |
+| Bookmark viewer | `http://localhost:11650/app` |
+| Category manager | `http://localhost:11650/categories` |
+| phpMyAdmin | `http://localhost:11651` |
 
-### 5. Load the Chrome extension
+### 4. Load the Chrome extension
 
-- Open `chrome://extensions`
-- Enable Developer mode
-- Click "Load unpacked" → select the `extension/` folder
-- The extension defaults to `http://localhost:11650` — change it in Options if needed
+1. Open `chrome://extensions`
+2. Enable **Developer mode**
+3. Click **Load unpacked** → select the `extension/` folder
+4. The extension defaults to `http://localhost:11650` — change it in Options if needed
+
+---
+
+## Scripts
+
+All scripts live in `scripts/` and are run from the repo root.
+
+| Script | Description |
+|---|---|
+| `./scripts/install.sh` | Full install: build image, deploy Quadlet files, start pod |
+| `./scripts/uninstall.sh` | Stop services, remove Quadlet files, optionally remove image + data |
+| `./scripts/rebuild.sh` | Rebuild API image and restart `bookmark-api.service` |
+| `./scripts/start.sh` | Start the pod (all services) |
+| `./scripts/stop.sh` | Stop the pod (all services) |
+| `./scripts/restart.sh [api\|db\|pma]` | Restart one service or the whole pod |
+| `./scripts/logs.sh [api\|db\|pma\|all]` | Tail logs — defaults to `api` |
+| `./scripts/status.sh` | Show `systemctl --user status` for all services |
+| `./scripts/dev.sh` | Run API locally via `bun run dev` (no container) |
+
+---
+
+## Repository Structure
+
+```
+bookmarkManager/
+├── api/                    # Bun/Elysia API
+│   ├── src/
+│   │   ├── server.ts       # Elysia app + routes
+│   │   ├── db/             # Drizzle schema, client, migrations
+│   │   ├── ui/             # Served HTML pages (/app, /categories)
+│   │   └── smoke/          # No-DB health smoke test
+│   ├── Dockerfile
+│   ├── drizzle.config.ts
+│   ├── package.json
+│   ├── .env                # Live credentials (gitignored)
+│   └── .env.example        # Template — copy to .env
+├── extension/              # Chrome MV3 extension (vanilla JS)
+│   ├── manifest.json
+│   ├── popup/
+│   ├── background/
+│   ├── options/
+│   ├── lib/
+│   └── assets/
+├── quadlet/                # Canonical Quadlet unit files (version-controlled)
+│   ├── bookmark.pod
+│   ├── bookmark-api.container
+│   ├── bookmark-db.container
+│   └── bookmark-pma.container
+├── scripts/                # Lifecycle scripts
+│   ├── install.sh
+│   ├── uninstall.sh
+│   ├── rebuild.sh
+│   ├── start.sh
+│   ├── stop.sh
+│   ├── restart.sh
+│   ├── logs.sh
+│   ├── status.sh
+│   └── dev.sh
+├── PLAN.md                 # Full project reference
+└── README.md               # This file
+```
 
 ---
 
@@ -70,12 +137,14 @@ curl http://localhost:11650/health
 | `GET` | `/categories` | Category management UI |
 | `GET` | `/classifications` | List classifications (grouped) |
 | `POST` | `/classifications` | Create classification |
-| `GET` | `/tags` | Search tags |
+| `GET` | `/tags` | Search tags (`?query=&limit=&offset=`) |
 | `POST` | `/tags` | Create tag |
-| `GET` | `/bookmarks` | List bookmarks |
+| `GET` | `/bookmarks` | List bookmarks (`?limit=&offset=`) |
 | `POST` | `/bookmarks` | Save bookmark |
+| `PATCH` | `/bookmarks/:id` | Update bookmark |
+| `DELETE` | `/bookmarks/:id` | Archive bookmark (sets `archived_at`) |
 
-Duplicate URL detection: the API returns `409` with existing bookmark metadata. Include `allowDuplicate: true` to save anyway after explicit user confirmation.
+**Duplicate URL detection:** the API returns `409` with existing bookmark metadata. Include `allowDuplicate: true` to save anyway after explicit user confirmation.
 
 ---
 
@@ -91,6 +160,9 @@ See `api/README.md` for full API documentation.
 
 ## Troubleshooting
 
-- **Port busy:** Another service is using port 11650 or 11651. Edit `~/.config/containers/systemd/bookmark.pod` to change the host port mappings.
-- **API can't reach DB:** Check `api/.env` — ensure `DB_PASSWORD` matches `MARIADB_PASSWORD` and `DB_HOST=127.0.0.1`.
-- **Extension can't reach API:** Verify the base URL in Options and ensure `host_permissions` in `extension/manifest.json` includes your API origin.
+| Symptom | Fix |
+|---|---|
+| Port 11650 or 11651 busy | Edit `quadlet/bookmark.pod`, change `PublishPort`, re-run `./scripts/install.sh` |
+| API can't reach DB | Check `api/.env` — `DB_PASSWORD` must match `MARIADB_PASSWORD`; `DB_HOST` must be `127.0.0.1` |
+| Extension can't reach API | Verify base URL in Options; check `host_permissions` in `extension/manifest.json` |
+| Services not starting at boot | Run `loginctl enable-linger $USER` to enable linger for your user |
