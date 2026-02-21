@@ -991,9 +991,10 @@
   // Refresh sidebar counts after any mutation (edit, archive, restore)
   async function refreshCounts() {
     try {
-      const [flagRes, tagRes] = await Promise.all([
+      const [flagRes, tagRes, classRes] = await Promise.all([
         fetch('/flag-counts'),
         fetch(`/tags?limit=200&sort=${state.tagSortOrder}`),
+        fetch('/classifications'),
       ]);
 
       if (flagRes.ok) {
@@ -1027,6 +1028,19 @@
           }
         });
         if (changed) renderTagList(items);
+      }
+
+      if (classRes.ok) {
+        const { groups } = await classRes.json();
+        groups.forEach(group => {
+          group.classifications.forEach(c => {
+            const btn = document.querySelector(`.nav-item[data-id="${c.id}"]`);
+            if (btn) {
+              const cnt = btn.querySelector('.nav-item-count');
+              if (cnt) cnt.textContent = String(c.bookmarkCount ?? 0);
+            }
+          });
+        });
       }
     } catch (e) {
       console.error('refreshCounts:', e);
