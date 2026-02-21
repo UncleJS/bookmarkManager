@@ -1247,6 +1247,12 @@
     const id = btn.dataset.id;
     const action = archiveBtn ? 'archive' : 'restore';
 
+    if (archiveBtn) {
+      const bm = state.lastItems?.find(b => String(b.id) === id);
+      const label = bm?.title ? `"${bm.title}"` : 'this bookmark';
+      if (!confirm(`Archive ${label}?`)) return;
+    }
+
     btn.disabled = true;
     btn.textContent = action === 'archive' ? 'Archiving…' : 'Restoring…';
 
