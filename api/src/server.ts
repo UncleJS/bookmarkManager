@@ -931,6 +931,11 @@ const app = new Elysia()
         if (!t) { set.status = 400; return { error: "title cannot be empty" }; }
         updates.title = t;
       }
+      if (body.url !== undefined) {
+        const u = body.url.trim();
+        if (!u) { set.status = 400; return { error: "url cannot be empty" }; }
+        updates.url = u;
+      }
       if (body.description !== undefined) updates.description = body.description ?? null;
       if (body.flags !== undefined) {
         const f = body.flags;
@@ -967,6 +972,7 @@ const app = new Elysia()
     {
       body: t.Object({
         title:             t.Optional(t.String({ description: "New title. Whitespace is trimmed. Cannot be set to an empty string." })),
+        url:               t.Optional(t.String({ description: "New URL. Whitespace is trimmed. Cannot be set to an empty string." })),
         description:       t.Optional(t.Nullable(t.String({ description: "New description. Pass null to clear the existing description." }))),
         tagIds:            t.Optional(t.Array(t.Number(), { description: "Replacement tag ID list. When provided, ALL existing tag associations are replaced with this set. Pass an empty array to remove all tags." })),
         classificationIds: t.Optional(t.Array(t.Number(), { description: "Replacement classification ID list. When provided, ALL existing classification associations are replaced with this set. Pass an empty array to remove all classifications." })),
@@ -988,6 +994,7 @@ const app = new Elysia()
           "Send an empty array to detach all tags or classifications.\n\n" +
           "**Flags:** each flag is independent. Omitting a flag key leaves it unchanged. " +
           "Pass `false` to clear a flag that was previously set.\n\n" +
+          "**URL:** when provided, whitespace is trimmed and an empty string is rejected with 400.\n\n" +
           "The `updatedAt` timestamp is set automatically by the database on every update.",
         responses: {
           200: { ...OkResp, description: "Bookmark updated successfully" },

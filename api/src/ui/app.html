@@ -757,6 +757,11 @@
     </div>
 
     <div class="modal-field">
+      <label>URL</label>
+      <input type="url" id="edit-url" />
+    </div>
+
+    <div class="modal-field">
       <label>Description</label>
       <textarea id="edit-description" rows="3"></textarea>
     </div>
@@ -1326,6 +1331,7 @@
     modalState.selTagIds   = new Set((bm.tags || []).map(t => t.id));
 
     document.getElementById('edit-title').value = bm.title || '';
+    document.getElementById('edit-url').value = bm.url || '';
     document.getElementById('edit-description').value = bm.description || '';
     document.getElementById('flag-readLater').checked   = !!bm.readLater;
     document.getElementById('flag-hotTopic').checked    = !!bm.hotTopic;
@@ -1424,6 +1430,7 @@
 
     const body = {
       title:             document.getElementById('edit-title').value.trim(),
+      url:               document.getElementById('edit-url').value.trim() || undefined,
       description:       document.getElementById('edit-description').value.trim() || null,
       classificationIds: [...modalState.selClassIds],
       tagIds:            [...modalState.selTagIds],
