@@ -1,0 +1,800 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Category Management – Bookmark Manager</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:         #0a0a0a;
+      --surface:    #111111;
+      --surface2:   #1a1a1a;
+      --surface3:   #222222;
+      --border:     #2a2a2a;
+      --border2:    #333333;
+      --text:       #f0f0f0;
+      --text-muted: #888888;
+      --accent:     #4f9cf9;
+      --accent-dim: #1d3d6b;
+      --danger:     #ef4444;
+      --danger-dim: #3b1010;
+      --success:    #4ade80;
+      --success-dim:#0d2b19;
+      --warn:       #facc15;
+    }
+
+    html, body {
+      min-height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: ui-monospace, 'Cascadia Code', 'Fira Code', monospace;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    /* ── Topbar ──────────────────────────────────────────────────────────── */
+    #topbar {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 12px 24px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+    }
+
+    #topbar a.back-link {
+      font-size: 12px;
+      color: var(--text-muted);
+      white-space: nowrap;
+    }
+    #topbar a.back-link:hover { color: var(--accent); text-decoration: none; }
+
+    #topbar h1 {
+      font-size: 15px;
+      font-weight: 700;
+      flex: 1;
+    }
+
+    /* archive toggle */
+    #archive-toggle {
+      display: flex;
+      border: 1px solid var(--border2);
+      border-radius: 4px;
+      overflow: hidden;
+    }
+    .toggle-btn {
+      background: var(--surface2);
+      border: none;
+      color: var(--text-muted);
+      font-family: inherit;
+      font-size: 12px;
+      padding: 4px 12px;
+      cursor: pointer;
+      transition: background 0.1s, color 0.1s;
+    }
+    .toggle-btn + .toggle-btn { border-left: 1px solid var(--border2); }
+    .toggle-btn.active {
+      background: var(--accent-dim);
+      color: var(--accent);
+      font-weight: 600;
+    }
+
+    /* ── Page content ────────────────────────────────────────────────────── */
+    #page {
+      max-width: 820px;
+      margin: 0 auto;
+      padding: 24px 20px 60px;
+    }
+
+    /* ── Group card ──────────────────────────────────────────────────────── */
+    .group-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      margin-bottom: 14px;
+      overflow: hidden;
+      transition: opacity 0.2s;
+    }
+
+    .group-card.archived-row {
+      opacity: 0.6;
+    }
+
+    .group-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 12px 16px;
+      background: var(--surface2);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .order-controls {
+      display: flex;
+      flex-direction: column;
+      gap: 1px;
+    }
+
+    .btn-order {
+      background: none;
+      border: 1px solid var(--border2);
+      color: var(--text-muted);
+      font-size: 9px;
+      line-height: 1;
+      width: 18px;
+      height: 14px;
+      border-radius: 2px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0;
+      transition: border-color 0.1s, color 0.1s;
+    }
+    .btn-order:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+    .btn-order:disabled { opacity: 0.25; cursor: not-allowed; }
+
+    .group-name {
+      flex: 1;
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--text);
+    }
+
+    .inline-edit-wrap {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .inline-input {
+      flex: 1;
+      background: var(--surface3);
+      border: 1px solid var(--accent);
+      color: var(--text);
+      font-family: inherit;
+      font-size: 13px;
+      padding: 3px 8px;
+      border-radius: 4px;
+      outline: none;
+    }
+
+    .badge-archived {
+      font-size: 10px;
+      font-weight: 700;
+      background: var(--danger-dim);
+      color: var(--danger);
+      border-radius: 3px;
+      padding: 1px 6px;
+      letter-spacing: 0.05em;
+    }
+
+    .btn-icon {
+      background: none;
+      border: 1px solid var(--border2);
+      color: var(--text-muted);
+      font-family: inherit;
+      font-size: 11px;
+      padding: 3px 10px;
+      border-radius: 4px;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: border-color 0.1s, color 0.1s;
+    }
+    .btn-icon:hover { border-color: var(--accent); color: var(--accent); }
+    .btn-icon.danger:hover { border-color: var(--danger); color: var(--danger); }
+    .btn-icon.success:hover { border-color: var(--success); color: var(--success); }
+    .btn-icon.confirm { border-color: var(--accent); color: var(--accent); }
+    .btn-icon.cancel  { border-color: var(--border2); color: var(--text-muted); }
+
+    /* ── Classification list ─────────────────────────────────────────────── */
+    .class-list {
+      padding: 8px 16px 12px;
+    }
+
+    .class-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 5px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .class-row:last-child { border-bottom: none; }
+    .class-row.archived-row { opacity: 0.55; }
+
+    .class-name {
+      flex: 1;
+      font-size: 13px;
+      color: var(--text);
+    }
+
+    .count-badge {
+      font-size: 11px;
+      color: #ffffff;
+      background: var(--surface3);
+      border: 1px solid var(--border2);
+      border-radius: 10px;
+      padding: 1px 7px;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    /* ── Add classification row ──────────────────────────────────────────── */
+    .add-class-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 0 0;
+      margin-top: 4px;
+    }
+
+    .add-input {
+      flex: 1;
+      background: var(--surface3);
+      border: 1px solid var(--border2);
+      color: var(--text);
+      font-family: inherit;
+      font-size: 13px;
+      padding: 5px 10px;
+      border-radius: 4px;
+      outline: none;
+      transition: border-color 0.1s;
+    }
+    .add-input:focus { border-color: var(--accent); }
+
+    .btn-add {
+      background: var(--accent-dim);
+      border: 1px solid var(--accent);
+      color: var(--accent);
+      font-family: inherit;
+      font-size: 12px;
+      padding: 5px 14px;
+      border-radius: 4px;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: background 0.1s;
+    }
+    .btn-add:hover { background: #254f8a; }
+    .btn-add:disabled { opacity: 0.45; cursor: not-allowed; }
+
+    /* ── Add group footer ────────────────────────────────────────────────── */
+    #add-group-section {
+      margin-bottom: 20px;
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+
+    #add-group-input {
+      flex: 1;
+      background: var(--surface);
+      border: 1px solid var(--border2);
+      color: var(--text);
+      font-family: inherit;
+      font-size: 13px;
+      padding: 8px 12px;
+      border-radius: 6px;
+      outline: none;
+      transition: border-color 0.1s;
+    }
+    #add-group-input:focus { border-color: var(--accent); }
+
+    #btn-add-group {
+      background: var(--accent-dim);
+      border: 1px solid var(--accent);
+      color: var(--accent);
+      font-family: inherit;
+      font-size: 13px;
+      padding: 8px 18px;
+      border-radius: 6px;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: background 0.1s;
+    }
+    #btn-add-group:hover { background: #254f8a; }
+    #btn-add-group:disabled { opacity: 0.45; cursor: not-allowed; }
+
+    /* ── Toast ───────────────────────────────────────────────────────────── */
+    #toast {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      background: var(--surface2);
+      border: 1px solid var(--border2);
+      color: var(--text);
+      font-size: 13px;
+      padding: 10px 18px;
+      border-radius: 6px;
+      display: none;
+      z-index: 100;
+      max-width: 340px;
+    }
+    #toast.show { display: block; }
+    #toast.error { border-color: var(--danger); color: var(--danger); }
+    #toast.ok    { border-color: var(--success); color: var(--success); }
+
+    /* ── State boxes ─────────────────────────────────────────────────────── */
+    .state-box {
+      text-align: center;
+      padding: 60px 20px;
+      color: var(--text-muted);
+      font-size: 13px;
+    }
+
+    /* ── Scrollbar ───────────────────────────────────────────────────────── */
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #555; }
+  </style>
+</head>
+<body>
+
+  <div id="topbar">
+    <a class="back-link" href="/app">← Bookmarks</a>
+    <h1>Category Management</h1>
+    <div id="archive-toggle">
+      <button class="toggle-btn active" id="btn-active"   onclick="setView('active')">Active</button>
+      <button class="toggle-btn"        id="btn-archived" onclick="setView('archived')">Archived</button>
+    </div>
+  </div>
+
+  <div id="page">
+
+    <div id="add-group-section" style="display:none">
+      <input id="add-group-input" type="text" placeholder="New group name…" maxlength="255"
+             onkeydown="if(event.key==='Enter') addGroup()" />
+      <button id="btn-add-group" onclick="addGroup()">+ Add Group</button>
+    </div>
+
+    <div id="groups-container">
+      <div class="state-box">⏳ Loading…</div>
+    </div>
+
+  </div>
+
+  <div id="toast"></div>
+
+<script>
+  // ── State ──────────────────────────────────────────────────────────────────
+  let viewMode = 'active'; // 'active' | 'archived'
+  let groups = [];         // [{id, name, order, archivedAt, classifications:[]}]
+
+  // ── Boot ───────────────────────────────────────────────────────────────────
+  loadAll();
+
+  // ── View toggle ────────────────────────────────────────────────────────────
+  function setView(mode) {
+    viewMode = mode;
+    document.getElementById('btn-active').classList.toggle('active', mode === 'active');
+    document.getElementById('btn-archived').classList.toggle('active', mode === 'archived');
+    document.getElementById('add-group-section').style.display = mode === 'active' ? 'flex' : 'none';
+    renderGroups();
+  }
+
+  // ── Load all data ──────────────────────────────────────────────────────────
+  async function loadAll() {
+    try {
+      // GET /classifications/groups?archived=true returns all groups with their
+      // classifications (active + archived) and bookmarkCount already embedded.
+      const res = await fetch('/classifications/groups?archived=true');
+      if (!res.ok) throw new Error('Failed to fetch');
+      const { items: allGroups } = await res.json();
+
+      // Attach ungrouped classifications (groupId === null) as a virtual group
+      // They come embedded in groups where id matches; collect those with no group
+      // by fetching active classifications separately only for the ungrouped case.
+      const clsRes = await fetch('/classifications');
+      if (!clsRes.ok) throw new Error('Failed to fetch classifications');
+      const { groups: activeGrouped } = await clsRes.json();
+      const ungroupedGroup = activeGrouped.find(g => g.id === 0);
+
+      groups = allGroups.map(g => ({
+        ...g,
+        // classifications already include bookmarkCount from the groups endpoint
+        classifications: g.classifications || [],
+      }));
+
+      if (ungroupedGroup && ungroupedGroup.classifications.length > 0) {
+        groups.push({
+          id: 0,
+          name: 'Ungrouped',
+          order: 999,
+          archivedAt: null,
+          classifications: ungroupedGroup.classifications,
+        });
+      }
+
+      renderGroups();
+      document.getElementById('add-group-section').style.display = viewMode === 'active' ? 'flex' : 'none';
+
+    } catch (e) {
+      document.getElementById('groups-container').innerHTML =
+        `<div class="state-box">⚠️ Failed to load categories.<br><small>${esc(e.message)}</small></div>`;
+      console.error(e);
+    }
+  }
+
+  // ── Render ─────────────────────────────────────────────────────────────────
+  function renderGroups() {
+    const container = document.getElementById('groups-container');
+
+    const visible = viewMode === 'archived'
+      ? groups.filter(g => g.archivedAt || g.classifications.some(c => c.archivedAt))
+      : groups.filter(g => !g.archivedAt);
+
+    if (visible.length === 0) {
+      container.innerHTML = viewMode === 'archived'
+        ? '<div class="state-box">📭 No archived categories.</div>'
+        : '<div class="state-box">📂 No categories yet. Add one below.</div>';
+      return;
+    }
+
+    container.innerHTML = visible.map((g, idx) => renderGroupCard(g, idx, visible)).join('');
+  }
+
+  function renderGroupCard(g, idx, allVisible) {
+    const isVirtual = g.id === 0; // ungrouped pseudo-group
+    const isArchived = !!g.archivedAt;
+
+    const orderControls = !isVirtual ? `
+      <div class="order-controls">
+        <button class="btn-order" title="Move up"
+          ${idx === 0 ? 'disabled' : ''}
+          onclick="reorderGroup(${g.id}, ${g.order - 1}, event)">▲</button>
+        <button class="btn-order" title="Move down"
+          ${idx === allVisible.length - 1 ? 'disabled' : ''}
+          onclick="reorderGroup(${g.id}, ${g.order + 1}, event)">▼</button>
+      </div>` : '';
+
+    const nameSection = `<span class="group-name">${esc(g.name)}</span>`;
+
+    const archivedBadge = isArchived ? `<span class="badge-archived">ARCHIVED</span>` : '';
+
+    let actionBtns = '';
+    if (!isVirtual) {
+      if (isArchived) {
+        actionBtns = `<button class="btn-icon success" onclick="restoreGroup(${g.id}, event)">↩ Restore</button>`;
+      } else {
+        actionBtns = `
+          <button class="btn-icon" onclick="startRenameGroup(${g.id}, event)">Rename</button>
+          <button class="btn-icon danger" onclick="archiveGroup(${g.id}, event)">Archive</button>`;
+      }
+    }
+
+    // Classifications within this group
+    const visibleClasses = viewMode === 'archived'
+      ? g.classifications.filter(c => c.archivedAt)
+      : g.classifications.filter(c => !c.archivedAt);
+
+    const classRows = visibleClasses.map((c, ci) => renderClassRow(c, ci, visibleClasses)).join('');
+
+    const addClassRow = (!isArchived && viewMode === 'active') ? `
+      <div class="add-class-row">
+        <input class="add-input" type="text" placeholder="New classification…" maxlength="255"
+               data-group-id="${g.id}"
+               onkeydown="if(event.key==='Enter') addClassification(${g.id}, this)" />
+        <button class="btn-add" onclick="addClassification(${g.id}, this.previousElementSibling)">+ Add</button>
+      </div>` : '';
+
+    return `
+    <div class="group-card ${isArchived ? 'archived-row' : ''}" data-group-id="${g.id}">
+      <div class="group-header" id="group-header-${g.id}">
+        ${orderControls}
+        ${nameSection}
+        ${archivedBadge}
+        ${actionBtns}
+      </div>
+      <div class="class-list">
+        ${classRows || (viewMode === 'archived' ? '' : '<div style="color:var(--text-muted);font-size:12px;padding:4px 0">No classifications yet.</div>')}
+        ${addClassRow}
+      </div>
+    </div>`;
+  }
+
+  function renderClassRow(c, idx, allVisible) {
+    const isArchived = !!c.archivedAt;
+    const orderControls = `
+      <div class="order-controls">
+        <button class="btn-order" title="Move up"
+          ${idx === 0 ? 'disabled' : ''}
+          onclick="reorderClass(${c.id}, ${c.order - 1}, event)">▲</button>
+        <button class="btn-order" title="Move down"
+          ${idx === allVisible.length - 1 ? 'disabled' : ''}
+          onclick="reorderClass(${c.id}, ${c.order + 1}, event)">▼</button>
+      </div>`;
+
+    const archivedBadge = isArchived ? `<span class="badge-archived">ARCHIVED</span>` : '';
+
+    const count = c.bookmarkCount ?? 0;
+    const countBadge = `<span class="count-badge" title="${count} active bookmark${count === 1 ? '' : 's'}">${count}</span>`;
+
+    let actionBtns = '';
+    if (isArchived) {
+      actionBtns = `<button class="btn-icon success" onclick="restoreClass(${c.id}, event)">↩ Restore</button>`;
+    } else {
+      actionBtns = `
+        <button class="btn-icon" onclick="startRenameClass(${c.id}, event)">Rename</button>
+        <button class="btn-icon danger" onclick="archiveClass(${c.id}, event)">Archive</button>`;
+    }
+
+    return `
+    <div class="class-row ${isArchived ? 'archived-row' : ''}" data-class-id="${c.id}" id="class-row-${c.id}">
+      ${orderControls}
+      <span class="class-name">${esc(c.name)}</span>
+      ${countBadge}
+      ${archivedBadge}
+      ${actionBtns}
+    </div>`;
+  }
+
+  // ── Add Group ──────────────────────────────────────────────────────────────
+  async function addGroup() {
+    const input = document.getElementById('add-group-input');
+    const name = input.value.trim();
+    if (!name) return;
+    const btn = document.getElementById('btn-add-group');
+    btn.disabled = true;
+    try {
+      const maxOrder = groups.reduce((m, g) => Math.max(m, g.order ?? 0), 0);
+      const res = await fetch('/classifications/groups', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, order: maxOrder + 1 }),
+      });
+      const data = await res.json();
+      if (!res.ok) { toast(data.error || 'Failed to add group', 'error'); return; }
+      input.value = '';
+      toast(`Group "${name}" created`, 'ok');
+      await loadAll();
+    } catch (e) {
+      toast(e.message, 'error');
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  // ── Add Classification ─────────────────────────────────────────────────────
+  async function addClassification(groupId, inputEl) {
+    const name = inputEl.value.trim();
+    if (!name) return;
+    const btn = inputEl.nextElementSibling;
+    btn.disabled = true;
+    try {
+      const body = { name };
+      if (groupId !== 0) body.groupId = groupId;
+      const res = await fetch('/classifications', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (!res.ok) { toast(data.error || 'Failed to add classification', 'error'); return; }
+      inputEl.value = '';
+      toast(`"${name}" added`, 'ok');
+      await loadAll();
+    } catch (e) {
+      toast(e.message, 'error');
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  // ── Rename Group ───────────────────────────────────────────────────────────
+  function startRenameGroup(groupId, e) {
+    e.stopPropagation();
+    const header = document.getElementById(`group-header-${groupId}`);
+    const nameSpan = header.querySelector('.group-name');
+    const currentName = nameSpan.textContent;
+
+    const wrap = document.createElement('div');
+    wrap.className = 'inline-edit-wrap';
+    const inp = document.createElement('input');
+    inp.className = 'inline-input';
+    inp.value = currentName;
+    inp.maxLength = 255;
+    const saveBtn = document.createElement('button');
+    saveBtn.className = 'btn-icon confirm';
+    saveBtn.textContent = 'Save';
+    const cancelBtn = document.createElement('button');
+    cancelBtn.className = 'btn-icon cancel';
+    cancelBtn.textContent = 'Cancel';
+
+    wrap.appendChild(inp);
+    wrap.appendChild(saveBtn);
+    wrap.appendChild(cancelBtn);
+
+    nameSpan.replaceWith(wrap);
+
+    inp.focus();
+    inp.select();
+
+    saveBtn.onclick = () => commitRenameGroup(groupId, inp.value);
+    cancelBtn.onclick = () => renderGroups();
+    inp.onkeydown = (ev) => {
+      if (ev.key === 'Enter') commitRenameGroup(groupId, inp.value);
+      if (ev.key === 'Escape') renderGroups();
+    };
+  }
+
+  async function commitRenameGroup(groupId, newName) {
+    newName = newName.trim();
+    if (!newName) return;
+    try {
+      const res = await fetch(`/classifications/groups/${groupId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: newName }),
+      });
+      const data = await res.json();
+      if (!res.ok) { toast(data.error || 'Failed to rename', 'error'); renderGroups(); return; }
+      toast(`Renamed to "${newName}"`, 'ok');
+      await loadAll();
+    } catch (e) {
+      toast(e.message, 'error');
+      renderGroups();
+    }
+  }
+
+  // ── Rename Classification ──────────────────────────────────────────────────
+  function startRenameClass(classId, e) {
+    e.stopPropagation();
+    const row = document.getElementById(`class-row-${classId}`);
+    const nameSpan = row.querySelector('.class-name');
+    const currentName = nameSpan.textContent;
+
+    const inp = document.createElement('input');
+    inp.className = 'inline-input';
+    inp.value = currentName;
+    inp.maxLength = 255;
+    inp.style.flex = '1';
+    const saveBtn = document.createElement('button');
+    saveBtn.className = 'btn-icon confirm';
+    saveBtn.textContent = 'Save';
+    const cancelBtn = document.createElement('button');
+    cancelBtn.className = 'btn-icon cancel';
+    cancelBtn.textContent = 'Cancel';
+
+    nameSpan.replaceWith(inp);
+    // Insert save/cancel after input — find existing action buttons and replace
+    const existingBtns = row.querySelectorAll('.btn-icon');
+    existingBtns.forEach(b => b.remove());
+    row.appendChild(saveBtn);
+    row.appendChild(cancelBtn);
+
+    inp.focus();
+    inp.select();
+
+    saveBtn.onclick = () => commitRenameClass(classId, inp.value);
+    cancelBtn.onclick = () => renderGroups();
+    inp.onkeydown = (ev) => {
+      if (ev.key === 'Enter') commitRenameClass(classId, inp.value);
+      if (ev.key === 'Escape') renderGroups();
+    };
+  }
+
+  async function commitRenameClass(classId, newName) {
+    newName = newName.trim();
+    if (!newName) return;
+    try {
+      const res = await fetch(`/classifications/${classId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: newName }),
+      });
+      const data = await res.json();
+      if (!res.ok) { toast(data.error || 'Failed to rename', 'error'); renderGroups(); return; }
+      toast(`Renamed to "${newName}"`, 'ok');
+      await loadAll();
+    } catch (e) {
+      toast(e.message, 'error');
+      renderGroups();
+    }
+  }
+
+  // ── Reorder Group ──────────────────────────────────────────────────────────
+  async function reorderGroup(groupId, newOrder, e) {
+    e.stopPropagation();
+    try {
+      await fetch(`/classifications/groups/${groupId}/reorder`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ order: newOrder }),
+      });
+      await loadAll();
+    } catch (e) { toast(e.message, 'error'); }
+  }
+
+  // ── Reorder Classification ─────────────────────────────────────────────────
+  async function reorderClass(classId, newOrder, e) {
+    e.stopPropagation();
+    try {
+      await fetch(`/classifications/${classId}/reorder`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ order: newOrder }),
+      });
+      await loadAll();
+    } catch (e) { toast(e.message, 'error'); }
+  }
+
+  // ── Archive / Restore Group ────────────────────────────────────────────────
+  async function archiveGroup(groupId, e) {
+    e.stopPropagation();
+    if (!confirm('Archive this group? Its classifications will still exist but the group will be hidden.')) return;
+    try {
+      const res = await fetch(`/classifications/groups/${groupId}/archive`, { method: 'PATCH' });
+      const data = await res.json();
+      if (!res.ok) { toast(data.error || 'Failed', 'error'); return; }
+      toast('Group archived', 'ok');
+      await loadAll();
+    } catch (e) { toast(e.message, 'error'); }
+  }
+
+  async function restoreGroup(groupId, e) {
+    e.stopPropagation();
+    try {
+      const res = await fetch(`/classifications/groups/${groupId}/restore`, { method: 'PATCH' });
+      const data = await res.json();
+      if (!res.ok) { toast(data.error || 'Failed', 'error'); return; }
+      toast('Group restored', 'ok');
+      await loadAll();
+    } catch (e) { toast(e.message, 'error'); }
+  }
+
+  // ── Archive / Restore Classification ──────────────────────────────────────
+  async function archiveClass(classId, e) {
+    e.stopPropagation();
+    if (!confirm('Archive this classification?')) return;
+    try {
+      const res = await fetch(`/classifications/${classId}/archive`, { method: 'PATCH' });
+      const data = await res.json();
+      if (!res.ok) { toast(data.error || 'Failed', 'error'); return; }
+      toast('Classification archived', 'ok');
+      await loadAll();
+    } catch (e) { toast(e.message, 'error'); }
+  }
+
+  async function restoreClass(classId, e) {
+    e.stopPropagation();
+    try {
+      const res = await fetch(`/classifications/${classId}/restore`, { method: 'PATCH' });
+      const data = await res.json();
+      if (!res.ok) { toast(data.error || 'Failed', 'error'); return; }
+      toast('Classification restored', 'ok');
+      await loadAll();
+    } catch (e) { toast(e.message, 'error'); }
+  }
+
+  // ── Toast ──────────────────────────────────────────────────────────────────
+  let toastTimer = null;
+  function toast(msg, type = 'ok') {
+    const el = document.getElementById('toast');
+    el.textContent = msg;
+    el.className = `show ${type}`;
+    if (toastTimer) clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => { el.className = ''; }, 3000);
+  }
+
+  // ── Helpers ────────────────────────────────────────────────────────────────
+  function esc(str) {
+    if (!str) return '';
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+</script>
+</body>
+</html>

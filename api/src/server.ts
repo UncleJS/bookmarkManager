@@ -13,10 +13,12 @@ import { eq, isNull, isNotNull, like, and, inArray, sql, desc, asc } from "drizz
 import { readFileSync } from "fs";
 import { join } from "path";
 
-const APP_HTML = readFileSync(
-  join(import.meta.dir, "ui/app.html"),
-  "utf-8"
-);
+const UI_DIR = join(import.meta.dir, "ui");
+
+function readUI(name: string): string {
+  return readFileSync(join(UI_DIR, name), "utf-8");
+}
+
 
 // ---------------------------------------------------------------------------
 // Load .env (Bun reads .env automatically but we call it explicitly for clarity)
@@ -45,6 +47,7 @@ const app = new Elysia()
           { name: "bookmarks", description: "Bookmark operations" },
           { name: "tags", description: "Tag management" },
           { name: "classifications", description: "Classification management" },
+          { name: "groups", description: "Classification group management" },
         ],
       },
     })
@@ -60,11 +63,23 @@ const app = new Elysia()
   .get(
     "/app",
     () =>
-      new Response(APP_HTML, {
+      new Response(readUI("app.html"), {
         headers: { "Content-Type": "text/html; charset=utf-8" },
       }),
     {
       detail: { tags: ["health"], summary: "Bookmark viewer web UI" },
+    }
+  )
+
+  // ── Category management UI ────────────────────────────────────────────────
+  .get(
+    "/categories",
+    () =>
+      new Response(readUI("categories.html"), {
+        headers: { "Content-Type": "text/html; charset=utf-8" },
+      }),
+    {
+      detail: { tags: ["health"], summary: "Category management web UI" },
     }
   )
 
@@ -149,7 +164,7 @@ const app = new Elysia()
   .get(
     "/classifications",
     async () => {
-      const [groups, classRows] = await Promise.all([
+      const [groups, classRows, countRows] = await Promise.all([
         db
           .select({
             id: classificationGroups.id,
@@ -169,16 +184,36 @@ const app = new Elysia()
           .from(classifications)
           .where(isNull(classifications.archivedAt))
           .orderBy(classifications.order, classifications.name),
+        // Active bookmark counts per classification
+        db
+          .select({
+            classificationId: bookmarkClassifications.classificationId,
+            count: sql<number>`COUNT(*)`,
+          })
+          .from(bookmarkClassifications)
+          .innerJoin(bookmarks, and(
+            eq(bookmarkClassifications.bookmarkId, bookmarks.id),
+            isNull(bookmarks.archivedAt)
+          ))
+          .groupBy(bookmarkClassifications.classificationId),
       ]);
+
+      const countMap = new Map<number, number>(
+        countRows.map((r) => [r.classificationId, Number(r.count)])
+      );
 
       // Build grouped response
       const grouped = groups.map((g) => ({
         ...g,
-        classifications: classRows.filter((c) => c.groupId === g.id),
+        classifications: classRows
+          .filter((c) => c.groupId === g.id)
+          .map((c) => ({ ...c, bookmarkCount: countMap.get(c.id) ?? 0 })),
       }));
 
       // Ungrouped classifications (no group)
-      const ungrouped = classRows.filter((c) => c.groupId === null);
+      const ungrouped = classRows
+        .filter((c) => c.groupId === null)
+        .map((c) => ({ ...c, bookmarkCount: countMap.get(c.id) ?? 0 }));
       if (ungrouped.length > 0) {
         grouped.push({
           id: 0,
@@ -467,11 +502,17 @@ const app = new Elysia()
                   bookmarkId: bookmarkClassifications.bookmarkId,
                   classId: classifications.id,
                   className: classifications.name,
+                  groupId: classificationGroups.id,
+                  groupName: classificationGroups.name,
                 })
                 .from(bookmarkClassifications)
                 .innerJoin(
                   classifications,
                   eq(bookmarkClassifications.classificationId, classifications.id)
+                )
+                .leftJoin(
+                  classificationGroups,
+                  eq(classifications.groupId, classificationGroups.id)
                 )
                 .where(inArray(bookmarkClassifications.bookmarkId, ids)),
             ])
@@ -484,7 +525,7 @@ const app = new Elysia()
           .map((t) => ({ id: t.tagId, name: t.tagName })),
         classifications: classRows
           .filter((c) => c.bookmarkId === b.id)
-          .map((c) => ({ id: c.classId, name: c.className })),
+          .map((c) => ({ id: c.classId, name: c.className, groupId: c.groupId ?? null, groupName: c.groupName ?? null })),
       }));
 
       return { items, total: Number(total) };
@@ -501,6 +542,71 @@ const app = new Elysia()
         tags: ["bookmarks"],
         summary: "List bookmarks (filter by classificationId, sort by newest/oldest, ?archived=true for archived)",
       },
+    }
+  )
+
+  // ── Bookmarks: PATCH /bookmarks/:id ──────────────────────────────────────
+  .patch(
+    "/bookmarks/:id",
+    async ({ params, body, set }) => {
+      const id = Number(params.id);
+      const [row] = await db.select({ id: bookmarks.id }).from(bookmarks).where(eq(bookmarks.id, id));
+      if (!row) { set.status = 404; return { error: "Bookmark not found" }; }
+
+      // Build update object from provided fields
+      const updates: Record<string, unknown> = {};
+      if (body.title !== undefined) {
+        const t = body.title.trim();
+        if (!t) { set.status = 400; return { error: "title cannot be empty" }; }
+        updates.title = t;
+      }
+      if (body.description !== undefined) updates.description = body.description ?? null;
+      if (body.flags !== undefined) {
+        const f = body.flags;
+        if (f.readLater   !== undefined) updates.readLater   = f.readLater   ? 1 : 0;
+        if (f.hotTopic    !== undefined) updates.hotTopic    = f.hotTopic    ? 1 : 0;
+        if (f.cheatsheets !== undefined) updates.cheatsheets = f.cheatsheets ? 1 : 0;
+        if (f.forReview   !== undefined) updates.forReview   = f.forReview   ? 1 : 0;
+      }
+
+      if (Object.keys(updates).length > 0) {
+        await db.update(bookmarks).set(updates).where(eq(bookmarks.id, id));
+      }
+
+      // Replace tags if provided
+      if (body.tagIds !== undefined) {
+        await db.delete(bookmarkTags).where(eq(bookmarkTags.bookmarkId, id));
+        const uniqueTagIds = [...new Set(body.tagIds)].filter(Boolean);
+        if (uniqueTagIds.length > 0) {
+          await db.insert(bookmarkTags).values(uniqueTagIds.map(tagId => ({ bookmarkId: id, tagId })));
+        }
+      }
+
+      // Replace classifications if provided
+      if (body.classificationIds !== undefined) {
+        await db.delete(bookmarkClassifications).where(eq(bookmarkClassifications.bookmarkId, id));
+        const uniqueClassIds = [...new Set(body.classificationIds)].filter(Boolean);
+        if (uniqueClassIds.length > 0) {
+          await db.insert(bookmarkClassifications).values(uniqueClassIds.map(classificationId => ({ bookmarkId: id, classificationId })));
+        }
+      }
+
+      return { ok: true };
+    },
+    {
+      body: t.Object({
+        title:             t.Optional(t.String()),
+        description:       t.Optional(t.Nullable(t.String())),
+        tagIds:            t.Optional(t.Array(t.Number())),
+        classificationIds: t.Optional(t.Array(t.Number())),
+        flags: t.Optional(t.Object({
+          readLater:   t.Optional(t.Boolean()),
+          hotTopic:    t.Optional(t.Boolean()),
+          cheatsheets: t.Optional(t.Boolean()),
+          forReview:   t.Optional(t.Boolean()),
+        })),
+      }),
+      detail: { tags: ["bookmarks"], summary: "Edit a bookmark (title, description, flags, tags, classifications)" },
     }
   )
 
@@ -543,6 +649,22 @@ const app = new Elysia()
         .from(classifications).where(eq(classifications.id, id));
       if (!row) { set.status = 404; return { error: "Classification not found" }; }
       if (row.archivedAt) { set.status = 409; return { error: "Already archived" }; }
+
+      // Block if active bookmarks are linked
+      const [{ count }] = await db
+        .select({ count: sql<number>`COUNT(*)` })
+        .from(bookmarkClassifications)
+        .innerJoin(bookmarks, and(
+          eq(bookmarkClassifications.bookmarkId, bookmarks.id),
+          isNull(bookmarks.archivedAt)
+        ))
+        .where(eq(bookmarkClassifications.classificationId, id));
+      const n = Number(count);
+      if (n > 0) {
+        set.status = 409;
+        return { error: `Cannot archive: ${n} active bookmark${n === 1 ? "" : "s"} linked to this classification` };
+      }
+
       await db.update(classifications).set({ archivedAt: sql`NOW()` }).where(eq(classifications.id, id));
       return { ok: true };
     },
@@ -592,6 +714,222 @@ const app = new Elysia()
       return { ok: true };
     },
     { detail: { tags: ["tags"], summary: "Restore an archived tag" } }
+  )
+
+  // ── Classification Groups: POST /classifications/groups ───────────────────
+  .post(
+    "/classifications/groups",
+    async ({ body, set }) => {
+      const name = body.name.trim();
+      if (!name) { set.status = 400; return { error: "name is required" }; }
+      try {
+        const [result] = await db
+          .insert(classificationGroups)
+          .values({ name, order: body.order ?? 0 })
+          .$returningId();
+        return { id: result.id, name, order: body.order ?? 0 };
+      } catch (err: unknown) {
+        if (isDupEntry(err)) { set.status = 409; return { error: "Group already exists" }; }
+        throw err;
+      }
+    },
+    {
+      body: t.Object({
+        name: t.String(),
+        order: t.Optional(t.Number()),
+      }),
+      detail: { tags: ["groups"], summary: "Create a classification group" },
+    }
+  )
+
+  // ── Classification Groups: GET /classifications/groups ────────────────────
+  // Returns all groups (active + archived) for the management UI
+  .get(
+    "/classifications/groups",
+    async ({ query }) => {
+      const includeArchived = query.archived === "true";
+      const groupWhere = includeArchived ? undefined : isNull(classificationGroups.archivedAt);
+
+      const [rows, classRows, countRows] = await Promise.all([
+        db
+          .select({
+            id: classificationGroups.id,
+            name: classificationGroups.name,
+            order: classificationGroups.order,
+            archivedAt: classificationGroups.archivedAt,
+          })
+          .from(classificationGroups)
+          .where(groupWhere)
+          .orderBy(classificationGroups.order, classificationGroups.name),
+        // All classifications (active + archived) for these groups
+        db
+          .select({
+            id: classifications.id,
+            name: classifications.name,
+            order: classifications.order,
+            groupId: classifications.groupId,
+            archivedAt: classifications.archivedAt,
+          })
+          .from(classifications)
+          .orderBy(classifications.order, classifications.name),
+        // Active bookmark counts per classification
+        db
+          .select({
+            classificationId: bookmarkClassifications.classificationId,
+            count: sql<number>`COUNT(*)`,
+          })
+          .from(bookmarkClassifications)
+          .innerJoin(bookmarks, and(
+            eq(bookmarkClassifications.bookmarkId, bookmarks.id),
+            isNull(bookmarks.archivedAt)
+          ))
+          .groupBy(bookmarkClassifications.classificationId),
+      ]);
+
+      const countMap = new Map<number, number>(
+        countRows.map((r) => [r.classificationId, Number(r.count)])
+      );
+
+      const items = rows.map((g) => ({
+        ...g,
+        classifications: classRows
+          .filter((c) => c.groupId === g.id)
+          .map((c) => ({ ...c, bookmarkCount: countMap.get(c.id) ?? 0 })),
+      }));
+
+      return { items };
+    },
+    {
+      query: t.Object({ archived: t.Optional(t.String()) }),
+      detail: { tags: ["groups"], summary: "List classification groups" },
+    }
+  )
+
+  // ── Classification Groups: PATCH /classifications/groups/:id (rename) ─────
+  .patch(
+    "/classifications/groups/:id",
+    async ({ params, body, set }) => {
+      const id = Number(params.id);
+      const [row] = await db.select({ id: classificationGroups.id })
+        .from(classificationGroups).where(eq(classificationGroups.id, id));
+      if (!row) { set.status = 404; return { error: "Group not found" }; }
+      const name = body.name.trim();
+      if (!name) { set.status = 400; return { error: "name is required" }; }
+      await db.update(classificationGroups).set({ name }).where(eq(classificationGroups.id, id));
+      return { ok: true, id, name };
+    },
+    {
+      body: t.Object({ name: t.String() }),
+      detail: { tags: ["groups"], summary: "Rename a classification group" },
+    }
+  )
+
+  // ── Classification Groups: PATCH /classifications/groups/:id/reorder ──────
+  .patch(
+    "/classifications/groups/:id/reorder",
+    async ({ params, body, set }) => {
+      const id = Number(params.id);
+      const [row] = await db.select({ id: classificationGroups.id })
+        .from(classificationGroups).where(eq(classificationGroups.id, id));
+      if (!row) { set.status = 404; return { error: "Group not found" }; }
+      await db.update(classificationGroups).set({ order: body.order }).where(eq(classificationGroups.id, id));
+      return { ok: true };
+    },
+    {
+      body: t.Object({ order: t.Number() }),
+      detail: { tags: ["groups"], summary: "Set display order for a classification group" },
+    }
+  )
+
+  // ── Classification Groups: PATCH /classifications/groups/:id/archive ──────
+  .patch(
+    "/classifications/groups/:id/archive",
+    async ({ params, set }) => {
+      const id = Number(params.id);
+      const [row] = await db.select({ id: classificationGroups.id, archivedAt: classificationGroups.archivedAt })
+        .from(classificationGroups).where(eq(classificationGroups.id, id));
+      if (!row) { set.status = 404; return { error: "Group not found" }; }
+      if (row.archivedAt) { set.status = 409; return { error: "Already archived" }; }
+
+      // Block if any active classification in the group has active bookmarks
+      const [{ count }] = await db
+        .select({ count: sql<number>`COUNT(*)` })
+        .from(bookmarkClassifications)
+        .innerJoin(bookmarks, and(
+          eq(bookmarkClassifications.bookmarkId, bookmarks.id),
+          isNull(bookmarks.archivedAt)
+        ))
+        .innerJoin(classifications, and(
+          eq(bookmarkClassifications.classificationId, classifications.id),
+          isNull(classifications.archivedAt),
+          eq(classifications.groupId, id)
+        ));
+      const n = Number(count);
+      if (n > 0) {
+        set.status = 409;
+        return { error: `Cannot archive: ${n} active bookmark${n === 1 ? "" : "s"} linked to classifications in this group` };
+      }
+
+      await db.update(classificationGroups).set({ archivedAt: sql`NOW()` }).where(eq(classificationGroups.id, id));
+      return { ok: true };
+    },
+    { detail: { tags: ["groups"], summary: "Archive a classification group" } }
+  )
+
+  // ── Classification Groups: PATCH /classifications/groups/:id/restore ──────
+  .patch(
+    "/classifications/groups/:id/restore",
+    async ({ params, set }) => {
+      const id = Number(params.id);
+      const [row] = await db.select({ id: classificationGroups.id, archivedAt: classificationGroups.archivedAt })
+        .from(classificationGroups).where(eq(classificationGroups.id, id));
+      if (!row) { set.status = 404; return { error: "Group not found" }; }
+      if (!row.archivedAt) { set.status = 409; return { error: "Not archived" }; }
+      await db.update(classificationGroups).set({ archivedAt: null }).where(eq(classificationGroups.id, id));
+      return { ok: true };
+    },
+    { detail: { tags: ["groups"], summary: "Restore an archived classification group" } }
+  )
+
+  // ── Classifications: PATCH /classifications/:id (rename) ──────────────────
+  .patch(
+    "/classifications/:id",
+    async ({ params, body, set }) => {
+      const id = Number(params.id);
+      const [row] = await db.select({ id: classifications.id })
+        .from(classifications).where(eq(classifications.id, id));
+      if (!row) { set.status = 404; return { error: "Classification not found" }; }
+      const name = body.name.trim();
+      if (!name) { set.status = 400; return { error: "name is required" }; }
+      try {
+        await db.update(classifications).set({ name }).where(eq(classifications.id, id));
+        return { ok: true, id, name };
+      } catch (err: unknown) {
+        if (isDupEntry(err)) { set.status = 409; return { error: "Classification name already exists in this group" }; }
+        throw err;
+      }
+    },
+    {
+      body: t.Object({ name: t.String() }),
+      detail: { tags: ["classifications"], summary: "Rename a classification" },
+    }
+  )
+
+  // ── Classifications: PATCH /classifications/:id/reorder ───────────────────
+  .patch(
+    "/classifications/:id/reorder",
+    async ({ params, body, set }) => {
+      const id = Number(params.id);
+      const [row] = await db.select({ id: classifications.id })
+        .from(classifications).where(eq(classifications.id, id));
+      if (!row) { set.status = 404; return { error: "Classification not found" }; }
+      await db.update(classifications).set({ order: body.order }).where(eq(classifications.id, id));
+      return { ok: true };
+    },
+    {
+      body: t.Object({ order: t.Number() }),
+      detail: { tags: ["classifications"], summary: "Set display order for a classification" },
+    }
   )
 
   // ── Start ──────────────────────────────────────────────────────────────────
