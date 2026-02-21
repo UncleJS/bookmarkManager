@@ -99,17 +99,36 @@ const app = new Elysia()
       const limit = Math.min(Number(query.limit ?? 20), 100);
       const offset = Number(query.offset ?? 0);
       const search = query.query?.trim() ?? "";
+      const sort   = query.sort === "alpha" ? "alpha" : "count";
 
       const where = and(
         isNull(tags.archivedAt),
         search ? like(tags.name, `%${search}%`) : undefined
       );
 
+      const orderBy = sort === "alpha"
+        ? [asc(tags.name)]
+        : [desc(sql`COUNT(DISTINCT ${bookmarkTags.bookmarkId})`), asc(tags.name)];
+
       const [rows, [countRow]] = await Promise.all([
         db
-          .select({ id: tags.id, name: tags.name })
+          .select({
+            id: tags.id,
+            name: tags.name,
+            bookmarkCount: sql<number>`COUNT(DISTINCT ${bookmarkTags.bookmarkId})`,
+          })
           .from(tags)
+          .leftJoin(
+            bookmarkTags,
+            and(
+              eq(bookmarkTags.tagId, tags.id),
+              // only count active (non-archived) bookmarks
+              sql`EXISTS (SELECT 1 FROM bookmarks b WHERE b.id = ${bookmarkTags.bookmarkId} AND b.archived_at IS NULL)`
+            )
+          )
           .where(where)
+          .groupBy(tags.id, tags.name)
+          .orderBy(...orderBy)
           .limit(limit)
           .offset(offset),
         db
@@ -118,16 +137,41 @@ const app = new Elysia()
           .where(where),
       ]);
 
-      return { items: rows, total: Number(countRow.total) };
+      return { items: rows.map(r => ({ ...r, bookmarkCount: Number(r.bookmarkCount) })), total: Number(countRow.total) };
     },
     {
       query: t.Object({
-        query: t.Optional(t.String()),
-        limit: t.Optional(t.String()),
+        query:  t.Optional(t.String()),
+        limit:  t.Optional(t.String()),
         offset: t.Optional(t.String()),
+        sort:   t.Optional(t.String()),
       }),
       detail: { tags: ["tags"], summary: "List / search tags" },
     }
+  )
+
+  // ── Flag counts: GET /flag-counts ─────────────────────────────────────────
+  .get(
+    "/flag-counts",
+    async () => {
+      const [row] = await db
+        .select({
+          readLater:   sql<number>`SUM(CASE WHEN read_later   = 1 THEN 1 ELSE 0 END)`,
+          hotTopic:    sql<number>`SUM(CASE WHEN hot_topic    = 1 THEN 1 ELSE 0 END)`,
+          cheatsheets: sql<number>`SUM(CASE WHEN cheatsheets  = 1 THEN 1 ELSE 0 END)`,
+          forReview:   sql<number>`SUM(CASE WHEN for_review   = 1 THEN 1 ELSE 0 END)`,
+        })
+        .from(bookmarks)
+        .where(isNull(bookmarks.archivedAt));
+
+      return {
+        readLater:   Number(row.readLater   ?? 0),
+        hotTopic:    Number(row.hotTopic    ?? 0),
+        cheatsheets: Number(row.cheatsheets ?? 0),
+        forReview:   Number(row.forReview   ?? 0),
+      };
+    },
+    { detail: { tags: ["bookmarks"], summary: "Count of active bookmarks per flag" } }
   )
 
   // ── Tags: POST /tags ───────────────────────────────────────────────────────
@@ -402,86 +446,69 @@ const app = new Elysia()
     async ({ query }) => {
       const limit = Math.min(Number(query.limit ?? 20), 100);
       const offset = Number(query.offset ?? 0);
-      const classificationId = query.classificationId
-        ? Number(query.classificationId)
-        : null;
-      const sortBy = query.sortBy === "oldest" ? "oldest" : "newest";
-      const showArchived = query.archived === "true";
+      const classificationId = query.classificationId ? Number(query.classificationId) : null;
+      const tagId            = query.tagId            ? Number(query.tagId)            : null;
+      const flag             = query.flag ?? null; // readLater | hotTopic | cheatsheets | forReview
+      const sortBy           = query.sortBy === "oldest" ? "oldest" : "newest";
+      const showArchived     = query.archived === "true";
 
-      // Build base WHERE: archived or active
-      const baseWhere = showArchived
-        ? isNotNull(bookmarks.archivedAt)
-        : isNull(bookmarks.archivedAt);
+      const orderCol = sortBy === "oldest" ? asc(bookmarks.createdAt) : desc(bookmarks.createdAt);
 
-      // When filtering by classification, join through bookmark_classifications
-      const orderCol =
-        sortBy === "oldest"
-          ? asc(bookmarks.createdAt)
-          : desc(bookmarks.createdAt);
+      // Build all WHERE conditions
+      const conditions = [
+        showArchived ? isNotNull(bookmarks.archivedAt) : isNull(bookmarks.archivedAt),
+      ];
 
-      let rows;
-      let total: number;
+      // Flag filter — map flag name to column
+      const flagColMap: Record<string, typeof bookmarks.readLater> = {
+        readLater:   bookmarks.readLater,
+        hotTopic:    bookmarks.hotTopic,
+        cheatsheets: bookmarks.cheatsheets,
+        forReview:   bookmarks.forReview,
+      };
+      if (flag && flagColMap[flag]) {
+        conditions.push(eq(flagColMap[flag], 1));
+      }
 
+      // Classification filter — subquery
       if (classificationId) {
-        // Subquery: bookmark IDs that belong to the given classification
         const matchingIds = db
           .select({ bookmarkId: bookmarkClassifications.bookmarkId })
           .from(bookmarkClassifications)
           .where(eq(bookmarkClassifications.classificationId, classificationId));
-
-        const where = and(baseWhere, inArray(bookmarks.id, matchingIds));
-
-        [rows, [{ total: total }]] = await Promise.all([
-          db
-            .select({
-              id: bookmarks.id,
-              url: bookmarks.url,
-              title: bookmarks.title,
-              description: bookmarks.description,
-              faviconUrl: bookmarks.faviconUrl,
-              readLater: bookmarks.readLater,
-              hotTopic: bookmarks.hotTopic,
-              cheatsheets: bookmarks.cheatsheets,
-              forReview: bookmarks.forReview,
-              createdAt: bookmarks.createdAt,
-              updatedAt: bookmarks.updatedAt,
-              archivedAt: bookmarks.archivedAt,
-            })
-            .from(bookmarks)
-            .where(where)
-            .orderBy(orderCol)
-            .limit(limit)
-            .offset(offset),
-          db.select({ total: sql<number>`COUNT(*)` }).from(bookmarks).where(where),
-        ]);
-      } else {
-        [rows, [{ total: total }]] = await Promise.all([
-          db
-            .select({
-              id: bookmarks.id,
-              url: bookmarks.url,
-              title: bookmarks.title,
-              description: bookmarks.description,
-              faviconUrl: bookmarks.faviconUrl,
-              readLater: bookmarks.readLater,
-              hotTopic: bookmarks.hotTopic,
-              cheatsheets: bookmarks.cheatsheets,
-              forReview: bookmarks.forReview,
-              createdAt: bookmarks.createdAt,
-              updatedAt: bookmarks.updatedAt,
-              archivedAt: bookmarks.archivedAt,
-            })
-            .from(bookmarks)
-            .where(baseWhere)
-            .orderBy(orderCol)
-            .limit(limit)
-            .offset(offset),
-          db
-            .select({ total: sql<number>`COUNT(*)` })
-            .from(bookmarks)
-            .where(baseWhere),
-        ]);
+        conditions.push(inArray(bookmarks.id, matchingIds));
       }
+
+      // Tag filter — subquery
+      if (tagId) {
+        const matchingIds = db
+          .select({ bookmarkId: bookmarkTags.bookmarkId })
+          .from(bookmarkTags)
+          .where(eq(bookmarkTags.tagId, tagId));
+        conditions.push(inArray(bookmarks.id, matchingIds));
+      }
+
+      const where = and(...conditions);
+
+      const bookmarkCols = {
+        id: bookmarks.id,
+        url: bookmarks.url,
+        title: bookmarks.title,
+        description: bookmarks.description,
+        faviconUrl: bookmarks.faviconUrl,
+        readLater: bookmarks.readLater,
+        hotTopic: bookmarks.hotTopic,
+        cheatsheets: bookmarks.cheatsheets,
+        forReview: bookmarks.forReview,
+        createdAt: bookmarks.createdAt,
+        updatedAt: bookmarks.updatedAt,
+        archivedAt: bookmarks.archivedAt,
+      };
+
+      const [rows, [{ total }]] = await Promise.all([
+        db.select(bookmarkCols).from(bookmarks).where(where).orderBy(orderCol).limit(limit).offset(offset),
+        db.select({ total: sql<number>`COUNT(*)` }).from(bookmarks).where(where),
+      ]);
 
       // Attach tags + classifications to each bookmark
       const ids = rows.map((r) => r.id);
@@ -506,14 +533,8 @@ const app = new Elysia()
                   groupName: classificationGroups.name,
                 })
                 .from(bookmarkClassifications)
-                .innerJoin(
-                  classifications,
-                  eq(bookmarkClassifications.classificationId, classifications.id)
-                )
-                .leftJoin(
-                  classificationGroups,
-                  eq(classifications.groupId, classificationGroups.id)
-                )
+                .innerJoin(classifications, eq(bookmarkClassifications.classificationId, classifications.id))
+                .leftJoin(classificationGroups, eq(classifications.groupId, classificationGroups.id))
                 .where(inArray(bookmarkClassifications.bookmarkId, ids)),
             ])
           : [[], []];
@@ -532,15 +553,17 @@ const app = new Elysia()
     },
     {
       query: t.Object({
-        limit: t.Optional(t.String()),
-        offset: t.Optional(t.String()),
+        limit:            t.Optional(t.String()),
+        offset:           t.Optional(t.String()),
         classificationId: t.Optional(t.String()),
-        sortBy: t.Optional(t.String()),
-        archived: t.Optional(t.String()),
+        tagId:            t.Optional(t.String()),
+        flag:             t.Optional(t.String()),
+        sortBy:           t.Optional(t.String()),
+        archived:         t.Optional(t.String()),
       }),
       detail: {
         tags: ["bookmarks"],
-        summary: "List bookmarks (filter by classificationId, sort by newest/oldest, ?archived=true for archived)",
+        summary: "List bookmarks (filter by classificationId, tagId, flag, sort, archived)",
       },
     }
   )

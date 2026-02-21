@@ -85,10 +85,30 @@
     .nav-section-label {
       font-size: 10px;
       font-weight: 700;
-      letter-spacing: 0.1em;
+      letter-spacing: 0.08em;
       text-transform: uppercase;
       color: var(--text-muted);
-      padding: 10px 14px 4px;
+      padding: 8px 14px 3px;
+      margin-top: 4px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .nav-section-label::before {
+      content: '';
+      display: inline-block;
+      width: 3px;
+      height: 10px;
+      background: var(--border2);
+      border-radius: 2px;
+      flex-shrink: 0;
+    }
+
+    /* indent category items under their group label */
+    .nav-item.cat-item {
+      padding-left: 24px;
     }
 
     .nav-item {
@@ -117,9 +137,15 @@
     }
 
     .nav-item-count {
-      font-size: 11px;
-      color: #ffffff;
+      font-size: 10px;
+      font-weight: 600;
+      color: var(--text);
+      background: var(--surface2);
+      border-radius: 8px;
+      padding: 1px 6px;
       flex-shrink: 0;
+      min-width: 18px;
+      text-align: center;
     }
 
     .nav-item:hover {
@@ -128,9 +154,14 @@
     }
 
     .nav-item.active {
-      background: var(--accent-dim);
-      color: var(--accent);
+      background: #1a2e1a;
+      color: #6ee76e;
       font-weight: 600;
+    }
+
+    .nav-item.active .nav-item-count {
+      background: #1f3d1f;
+      color: var(--text);
     }
 
     .nav-group-heading {
@@ -138,12 +169,64 @@
       font-weight: 700;
       color: var(--accent);
       background: var(--accent-dim);
-      padding: 5px 14px;
+      padding: 5px 8px 5px 14px;
       letter-spacing: 0.1em;
       text-transform: uppercase;
       margin-top: 6px;
       border-left: 3px solid var(--accent);
+      display: flex;
+      align-items: center;
+      gap: 6px;
     }
+
+    .nav-group-heading-label {
+      flex: 1;
+    }
+
+    .tag-sort-toggle {
+      display: flex;
+      gap: 2px;
+      flex-shrink: 0;
+    }
+
+    .tag-sort-btn {
+      font-size: 9px;
+      font-family: inherit;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      padding: 1px 5px;
+      border-radius: 3px;
+      border: 1px solid transparent;
+      cursor: pointer;
+      background: none;
+      color: var(--accent);
+      opacity: 0.5;
+      transition: opacity 0.1s, background 0.1s, border-color 0.1s;
+      text-transform: uppercase;
+    }
+
+    .tag-sort-btn:hover { opacity: 0.8; }
+
+    .tag-sort-btn.active {
+      opacity: 1;
+      background: var(--bg);
+      border-color: var(--accent);
+    }
+
+    /* flag filter items */
+    .nav-item.flag-read.active  { background:#0d2b19; color:var(--flag-read); }
+    .nav-item.flag-hot.active   { background:#2b1400; color:var(--flag-hot);  }
+    .nav-item.flag-cs.active    { background:#1e1330; color:var(--flag-cs);   }
+    .nav-item.flag-rev.active   { background:#2b2200; color:var(--flag-rev);  }
+    .nav-item.flag-dot::before {
+      content: '●';
+      font-size: 8px;
+      flex-shrink: 0;
+    }
+    .nav-item.flag-read::before { color: var(--flag-read); }
+    .nav-item.flag-hot::before  { color: var(--flag-hot);  }
+    .nav-item.flag-cs::before   { color: var(--flag-cs);   }
+    .nav-item.flag-rev::before  { color: var(--flag-rev);  }
 
     /* ── Main ────────────────────────────────────────────────────────────── */
     #main {
@@ -712,12 +795,15 @@
   const PAGE_SIZE = 20;
   let state = {
     classificationId: null,   // null = all
+    filterTagId:      null,   // null = all
+    filterFlag:       null,   // null | 'readLater' | 'hotTopic' | 'cheatsheets' | 'forReview'
     categoryLabel: 'All bookmarks',
     sortBy: 'newest',
     showArchived: false,
     page: 0,
     total: 0,
     lastItems: [],            // cached for edit modal
+    tagSortOrder: 'count',    // 'count' | 'alpha'
   };
 
   // ── Boot ───────────────────────────────────────────────────────────────────
@@ -727,31 +813,41 @@
   // ── Sidebar ────────────────────────────────────────────────────────────────
   async function loadSidebar() {
     try {
-      const res = await fetch('/classifications');
-      if (!res.ok) throw new Error(res.statusText);
-      const { groups } = await res.json();
+      const [classRes, tagRes, flagRes] = await Promise.all([
+        fetch('/classifications'),
+        fetch('/tags?limit=200'),
+        fetch('/flag-counts'),
+      ]);
+      if (!classRes.ok) throw new Error(classRes.statusText);
+      const { groups } = await classRes.json();
+      const { items: tagItems } = tagRes.ok ? await tagRes.json() : { items: [] };
+      const flagCounts = flagRes.ok ? await flagRes.json() : {};
 
       const nav = document.getElementById('sidebar-nav');
-      // keep the "All" button
-      const allBtn = nav.querySelector('[data-id=""]');
 
-      // count total classifications for subtitle
-      let total = 0;
-      groups.forEach(g => total += g.classifications.length);
+      // ── subtitle ─────────────────────────────────────────────────────────
+      let totalCats = 0;
+      groups.forEach(g => totalCats += g.classifications.length);
       document.getElementById('sidebar-subtitle').textContent =
-        `${total} categories`;
+        `${totalCats} categories · ${tagItems.length} tags`;
+
+      // ── Categories ───────────────────────────────────────────────────────
+      const catHeading = document.createElement('div');
+      catHeading.className = 'nav-group-heading';
+      catHeading.textContent = 'Categories';
+      nav.appendChild(catHeading);
 
       groups.forEach(group => {
         if (!group.classifications.length) return;
 
         const heading = document.createElement('div');
-        heading.className = 'nav-group-heading';
+        heading.className = 'nav-section-label';
         heading.textContent = group.name;
         nav.appendChild(heading);
 
         group.classifications.forEach(c => {
           const btn = document.createElement('button');
-          btn.className = 'nav-item';
+          btn.className = 'nav-item cat-item';
           btn.dataset.id = String(c.id);
           btn.title = c.name;
           btn.onclick = () => selectCategory(c.id, c.name, btn);
@@ -769,17 +865,164 @@
           nav.appendChild(btn);
         });
       });
+
+      // ── Flags ─────────────────────────────────────────────────────────────
+      const flagHeading = document.createElement('div');
+      flagHeading.className = 'nav-group-heading';
+      flagHeading.textContent = 'Flags';
+      nav.appendChild(flagHeading);
+
+      const flagDefs = [
+        { key: 'readLater',   label: 'Read Later',  cls: 'flag-read' },
+        { key: 'hotTopic',    label: 'Hot Topic',   cls: 'flag-hot'  },
+        { key: 'cheatsheets', label: 'Cheatsheet',  cls: 'flag-cs'   },
+        { key: 'forReview',   label: 'For Review',  cls: 'flag-rev'  },
+      ];
+      flagDefs.forEach(({ key, label, cls }) => {
+        const btn = document.createElement('button');
+        btn.className = `nav-item flag-dot ${cls}`;
+        btn.title = label;
+        btn.onclick = () => selectFlag(key, label, btn);
+
+        const lbl = document.createElement('span');
+        lbl.className = 'nav-item-label';
+        lbl.textContent = label;
+
+        const cnt = document.createElement('span');
+        cnt.className = 'nav-item-count';
+        cnt.textContent = String(flagCounts[key] ?? 0);
+
+        btn.appendChild(lbl);
+        btn.appendChild(cnt);
+        nav.appendChild(btn);
+      });
+
+      // ── Tags ──────────────────────────────────────────────────────────────
+      if (tagItems.length > 0) {
+        const tagHeading = document.createElement('div');
+        tagHeading.className = 'nav-group-heading';
+        tagHeading.id = 'tag-section-heading';
+
+        const headingLabel = document.createElement('span');
+        headingLabel.className = 'nav-group-heading-label';
+        headingLabel.textContent = 'Tags';
+
+        const sortToggle = document.createElement('div');
+        sortToggle.className = 'tag-sort-toggle';
+
+        const btnCount = document.createElement('button');
+        btnCount.className = 'tag-sort-btn' + (state.tagSortOrder === 'count' ? ' active' : '');
+        btnCount.textContent = '#';
+        btnCount.title = 'Sort by count';
+
+        const btnAlpha = document.createElement('button');
+        btnAlpha.className = 'tag-sort-btn' + (state.tagSortOrder === 'alpha' ? ' active' : '');
+        btnAlpha.textContent = 'A';
+        btnAlpha.title = 'Sort alphabetically';
+
+        btnCount.onclick = (e) => { e.stopPropagation(); setTagSort('count'); };
+        btnAlpha.onclick = (e) => { e.stopPropagation(); setTagSort('alpha'); };
+
+        sortToggle.appendChild(btnCount);
+        sortToggle.appendChild(btnAlpha);
+        tagHeading.appendChild(headingLabel);
+        tagHeading.appendChild(sortToggle);
+        nav.appendChild(tagHeading);
+
+        renderTagList(tagItems);
+      }
+
     } catch (e) {
       document.getElementById('sidebar-subtitle').textContent = 'Failed to load';
       console.error('loadSidebar:', e);
     }
   }
 
-  function selectCategory(id, label, btnEl) {
+  function renderTagList(tagItems) {
+    // Remove existing tag nav-items (but not the heading)
+    document.querySelectorAll('.nav-item[data-tag-id]').forEach(el => el.remove());
+
+    const nav = document.getElementById('sidebar-nav');
+
+    tagItems.forEach(tag => {
+      const btn = document.createElement('button');
+      btn.className = 'nav-item';
+      btn.dataset.tagId = String(tag.id);
+      btn.title = tag.name;
+      if (state.filterTagId === tag.id) btn.classList.add('active');
+      btn.onclick = () => selectTag(tag.id, `#${tag.name}`, btn);
+
+      const lbl = document.createElement('span');
+      lbl.className = 'nav-item-label';
+      lbl.textContent = `#${tag.name}`;
+
+      const cnt = document.createElement('span');
+      cnt.className = 'nav-item-count';
+      cnt.textContent = String(tag.bookmarkCount ?? 0);
+
+      btn.appendChild(lbl);
+      btn.appendChild(cnt);
+      nav.appendChild(btn);
+    });
+  }
+
+  async function setTagSort(order) {
+    if (state.tagSortOrder === order) return;
+    state.tagSortOrder = order;
+
+    // Update toggle button appearance
+    document.querySelectorAll('.tag-sort-btn').forEach(b => b.classList.remove('active'));
+    const target = order === 'count'
+      ? document.querySelector('.tag-sort-btn[title="Sort by count"]')
+      : document.querySelector('.tag-sort-btn[title="Sort alphabetically"]');
+    if (target) target.classList.add('active');
+
+    // Fetch sorted tags and re-render
+    try {
+      const res = await fetch(`/tags?limit=200&sort=${order}`);
+      if (!res.ok) return;
+      const { items } = await res.json();
+      renderTagList(items);
+    } catch (e) {
+      console.error('setTagSort:', e);
+    }
+  }
+
+  function clearNavActive() {
     document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
+  }
+
+  function selectCategory(id, label, btnEl) {
+    clearNavActive();
     btnEl.classList.add('active');
     state.classificationId = id;
-    state.categoryLabel = label;
+    state.filterTagId      = null;
+    state.filterFlag       = null;
+    state.categoryLabel    = label;
+    state.page = 0;
+    document.getElementById('topbar-title').textContent = label;
+    fetchBookmarks();
+  }
+
+  function selectFlag(flag, label, btnEl) {
+    clearNavActive();
+    btnEl.classList.add('active');
+    state.classificationId = null;
+    state.filterTagId      = null;
+    state.filterFlag       = flag;
+    state.categoryLabel    = label;
+    state.page = 0;
+    document.getElementById('topbar-title').textContent = label;
+    fetchBookmarks();
+  }
+
+  function selectTag(id, label, btnEl) {
+    clearNavActive();
+    btnEl.classList.add('active');
+    state.classificationId = null;
+    state.filterTagId      = id;
+    state.filterFlag       = null;
+    state.categoryLabel    = label;
     state.page = 0;
     document.getElementById('topbar-title').textContent = label;
     fetchBookmarks();
@@ -821,12 +1064,10 @@
       offset: String(state.page * PAGE_SIZE),
       sortBy: state.sortBy,
     });
-    if (state.classificationId) {
-      params.set('classificationId', String(state.classificationId));
-    }
-    if (state.showArchived) {
-      params.set('archived', 'true');
-    }
+    if (state.classificationId) params.set('classificationId', String(state.classificationId));
+    if (state.filterTagId)      params.set('tagId', String(state.filterTagId));
+    if (state.filterFlag)       params.set('flag', state.filterFlag);
+    if (state.showArchived)     params.set('archived', 'true');
 
     try {
       const res = await fetch('/bookmarks?' + params);
