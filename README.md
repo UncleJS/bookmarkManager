@@ -12,39 +12,31 @@ Everything is implemented in JavaScript (no TypeScript) for the extension; the A
 | API | Bun + Elysia + TypeScript |
 | ORM | Drizzle |
 | Database | MariaDB 11 |
-| Dev infrastructure | Rootless Podman + systemd (Quadlet) |
+| Infrastructure | Rootless Podman + systemd (Quadlet) |
 
 ## Quick Start
 
-### 1. Start the dev database pod
+### 1. Configure environment
+
+```fish
+cp api/.env.example api/.env
+# Edit api/.env — set DB_PASSWORD, MARIADB_PASSWORD, MARIADB_ROOT_PASSWORD
+```
+
+### 2. Build the API image
+
+```fish
+podman build -t localhost/bookmark-api:latest api/
+```
+
+### 3. Start the pod
 
 ```fish
 systemctl --user daemon-reload
-systemctl --user enable --now bookmark-dev-pod
+systemctl --user start bookmark-pod.service
 ```
 
-Starts MariaDB (pod-internal) and phpMyAdmin on `http://localhost:11651`.
-
-### 2. Configure and migrate
-
-```fish
-cd api
-cp .env.example .env
-# Edit .env — set DB_PASSWORD, MARIADB_PASSWORD, MARIADB_ROOT_PASSWORD
-bun install
-bun run db:migrate
-```
-
-### 3. Start the API
-
-```fish
-cd api
-bun run dev
-```
-
-- API: `http://localhost:11650`
-- Swagger UI: `http://localhost:11650/docs`
-- OpenAPI JSON: `http://localhost:11650/openapi.json`
+Starts MariaDB, phpMyAdmin (`http://localhost:11651`), and the API. Migrations run automatically on first start.
 
 ### 4. Health check
 
@@ -53,12 +45,16 @@ curl http://localhost:11650/health
 # → {"status":"ok"}
 ```
 
+- API: `http://localhost:11650`
+- Swagger UI: `http://localhost:11650/docs`
+- OpenAPI JSON: `http://localhost:11650/openapi.json`
+
 ### 5. Load the Chrome extension
 
 - Open `chrome://extensions`
 - Enable Developer mode
 - Click "Load unpacked" → select the `extension/` folder
-- Open Options → set API base URL to `http://localhost:11650`
+- The extension defaults to `http://localhost:11650` — change it in Options if needed
 
 ---
 
@@ -66,9 +62,12 @@ curl http://localhost:11650/health
 
 | Method | Path | Description |
 |---|---|---|
+| `GET` | `/` | Redirect to bookmark viewer UI |
 | `GET` | `/health` | Health check |
 | `GET` | `/docs` | Swagger UI |
 | `GET` | `/openapi.json` | OpenAPI spec |
+| `GET` | `/app` | Bookmark viewer UI |
+| `GET` | `/categories` | Category management UI |
 | `GET` | `/classifications` | List classifications (grouped) |
 | `POST` | `/classifications` | Create classification |
 | `GET` | `/tags` | Search tags |
@@ -86,10 +85,12 @@ Duplicate URL detection: the API returns `409` with existing bookmark metadata. 
 - Right-click a page for context menus: **Quick Save** / **Full Save**
 
 See `extension/README.md` for full extension documentation.
-See `api/README.md` for full API documentation including production deployment.
+See `api/README.md` for full API documentation.
+
+---
 
 ## Troubleshooting
 
-- **Dev DB port busy:** Another service is using the dev pod ports. Edit `~/.config/containers/systemd/bookmark-dev.pod` to change the host port mappings.
-- **API can't reach DB:** Check `api/.env` matches your DB credentials and `DB_HOST=127.0.0.1`.
+- **Port busy:** Another service is using port 11650 or 11651. Edit `~/.config/containers/systemd/bookmark.pod` to change the host port mappings.
+- **API can't reach DB:** Check `api/.env` — ensure `DB_PASSWORD` matches `MARIADB_PASSWORD` and `DB_HOST=127.0.0.1`.
 - **Extension can't reach API:** Verify the base URL in Options and ensure `host_permissions` in `extension/manifest.json` includes your API origin.

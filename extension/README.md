@@ -107,7 +107,7 @@ The extension communicates with the Bun/Elysia API via:
 
 ## Installation
 
-1. Start the dev pod and API — see `api/README.md` for setup instructions.
+1. Start the pod and API — see `api/README.md` for setup instructions.
 2. Open Chrome Extensions page (`chrome://extensions/`)
 3. Enable "Developer mode"
 4. Click "Load unpacked"
@@ -122,7 +122,7 @@ The extension defaults to `http://localhost:11650` but can be configured:
 2. Update "API Base URL" field
 3. Save changes
 
-### Development
+### Debugging
 - Uses `console.log` for debugging (visible in extension popup DevTools)
 - Error handling with user-friendly messages
 - Graceful degradation when API is unavailable

@@ -2,84 +2,80 @@
 
 A Bun + Elysia API for managing bookmarks, tags, and classifications. Backed by MariaDB with Drizzle ORM. Data is never hard-deleted — all "delete" actions archive rows (`archived_at`).
 
-## Quick Start (Development)
+## Quick Start
 
-### 1. Start the dev pod (MariaDB + phpMyAdmin)
-
-The dev pod is managed by rootless Podman via systemd (Quadlet). No Docker required.
-
-```fish
-systemctl --user daemon-reload
-systemctl --user enable --now bookmark-dev-pod
-```
-
-This starts:
-- **MariaDB** — pod-internal only (not exposed to host)
-- **phpMyAdmin** on `http://localhost:11651` (localhost only, login required)
-
-Check status and logs:
-```fish
-systemctl --user status bookmark-dev-pod bookmark-dev-db bookmark-dev-pma
-journalctl --user -u bookmark-dev-db -f
-```
-
-Stop the pod:
-```fish
-systemctl --user stop bookmark-dev-pod
-```
-
-### 2. Configure environment
+### 1. Configure environment
 
 ```fish
 cp api/.env.example api/.env
 # Edit api/.env — set DB_PASSWORD, MARIADB_PASSWORD, MARIADB_ROOT_PASSWORD
 ```
 
-> **Important:** `MARIADB_USER`, `MARIADB_PASSWORD`, and `DB_USER`, `DB_PASSWORD` must match.
+> **Important:** `MARIADB_USER`/`MARIADB_PASSWORD` and `DB_USER`/`DB_PASSWORD` must match.
 
-### 3. Install dependencies
-
-```fish
-cd api
-bun install
-```
-
-### 4. Run migrations
+### 2. Build the API image
 
 ```fish
-bun run db:migrate
+podman build -t localhost/bookmark-api:latest api/
 ```
 
-For existing databases originally created with the old Express/plain-SQL schema, run the one-time upgrade script first:
-```fish
-# Connect to MariaDB and run:
-# api/src/db/upgrade_from_v1.sql
-# Then run: bun run db:migrate
-```
-
-### 5. Start the API
+### 3. Start the pod
 
 ```fish
-bun run dev        # file-watching dev mode
-bun run start      # production mode
+systemctl --user daemon-reload
+systemctl --user start bookmark-pod.service
 ```
 
-- **API:** `http://localhost:11650`
-- **Swagger UI:** `http://localhost:11650/docs`
-- **OpenAPI JSON:** `http://localhost:11650/openapi.json`
+This starts:
+- **MariaDB** — pod-internal only (not exposed to host)
+- **phpMyAdmin** on `http://localhost:11651` (localhost only, login required)
+- **API** on `http://localhost:11650` (migrations run automatically on start)
 
-### 6. Health check
+Check status and logs:
+```fish
+systemctl --user status bookmark-pod bookmark-db bookmark-pma bookmark-api
+journalctl --user -u bookmark-api -f
+```
+
+Stop the pod:
+```fish
+systemctl --user stop bookmark-pod.service
+```
+
+### 4. Health check
 
 ```fish
 curl http://localhost:11650/health
 # → {"status":"ok"}
 ```
 
-### 7. Smoke test (no DB required)
+- **API:** `http://localhost:11650`
+- **Swagger UI:** `http://localhost:11650/docs`
+- **OpenAPI JSON:** `http://localhost:11650/openapi.json`
+- **Bookmark viewer:** `http://localhost:11650/app`
+- **Category manager:** `http://localhost:11650/categories`
+
+### 5. Boot persistence
+
+To start automatically at boot without an interactive login session:
+```fish
+loginctl enable-linger $USER
+```
+
+---
+
+## Making changes to the source
+
+After editing source files, rebuild the image and restart the API:
 
 ```fish
-bun run smoke
-# → OK: /health → { status: "ok" }
+podman build -t localhost/bookmark-api:latest api/
+systemctl --user restart bookmark-api.service
+```
+
+For schema changes, generate a new migration before rebuilding:
+```fish
+cd api && bun run db:generate
 ```
 
 ---
@@ -88,12 +84,10 @@ bun run smoke
 
 | Command | Description |
 |---|---|
-| `bun run start` | Start production server |
-| `bun run dev` | Start dev server with file watching |
 | `bun run db:migrate` | Apply pending Drizzle migrations |
 | `bun run db:generate` | Generate a new migration from schema changes |
 | `bun run db:studio` | Open Drizzle Studio (visual DB browser) |
-| `bun run smoke` | Smoke test (no DB required) |
+| `bun run smoke` | Smoke test — verifies `/health` (no DB required) |
 
 ---
 
@@ -101,10 +95,13 @@ bun run smoke
 
 Interactive docs always available at **`http://localhost:11650/docs`**.
 
-### Health
+### Health & UI
 | Method | Path | Description |
 |---|---|---|
+| `GET` | `/` | Redirect to `/app` |
 | `GET` | `/health` | Returns `{ status: "ok" }` |
+| `GET` | `/app` | Bookmark viewer UI |
+| `GET` | `/categories` | Category management UI |
 
 ### Tags
 | Method | Path | Description |
@@ -123,6 +120,8 @@ Interactive docs always available at **`http://localhost:11650/docs`**.
 |---|---|---|
 | `GET` | `/bookmarks` | List bookmarks (`?limit=&offset=`) |
 | `POST` | `/bookmarks` | Create bookmark |
+| `PATCH` | `/bookmarks/:id` | Update bookmark |
+| `DELETE` | `/bookmarks/:id` | Archive bookmark (sets `archived_at`) |
 
 **POST /bookmarks** — duplicate detection:
 - Returns `409` with a `duplicates` array if the URL already exists.
@@ -149,62 +148,30 @@ All tables include `archived_at DATETIME NULL`. A `NULL` value means the row is 
 
 ## Environment Variables
 
+All vars live in `api/.env` (gitignored). Copy from `api/.env.example` to get started.
+
 | Variable | Default | Description |
 |---|---|---|
 | `API_PORT` | `11650` | HTTP port |
 | `LOG_LEVEL` | `info` | Elysia log level |
-| `DB_HOST` | `127.0.0.1` | MariaDB host |
+| `DB_HOST` | `127.0.0.1` | MariaDB host (must be `127.0.0.1` within the pod) |
 | `DB_PORT` | `3306` | MariaDB port |
 | `DB_USER` | `bookmark` | DB username |
 | `DB_PASSWORD` | — | DB password |
 | `DB_NAME` | `bookmarks` | DB name |
-| `MARIADB_DATABASE` | — | Used by mariadb:11 container init |
-| `MARIADB_USER` | — | Used by mariadb:11 container init |
-| `MARIADB_PASSWORD` | — | Used by mariadb:11 container init |
-| `MARIADB_ROOT_PASSWORD` | — | Used by mariadb:11 container init |
+| `MARIADB_DATABASE` | — | Used by mariadb:11 container on first init |
+| `MARIADB_USER` | — | Used by mariadb:11 container on first init |
+| `MARIADB_PASSWORD` | — | Used by mariadb:11 container on first init |
+| `MARIADB_ROOT_PASSWORD` | — | Used by mariadb:11 container on first init |
 | `PMA_HOST` | `127.0.0.1` | phpMyAdmin DB host (within pod) |
 | `PMA_PORT` | `3306` | phpMyAdmin DB port |
 | `PMA_ABSOLUTE_URI` | `http://localhost:11651/` | phpMyAdmin canonical URL |
 
 ---
 
-## Production Deployment
-
-The production pod (`bookmark.pod`) contains MariaDB + phpMyAdmin + API container.
-
-### 1. Create prod env file
-
-```fish
-cp api/.env.example ~/bookmark-manager.env
-# Edit ~/bookmark-manager.env — set all passwords, set DB_HOST=127.0.0.1
-```
-
-### 2. Build the API image
-
-```fish
-cd api
-podman build -t localhost/bookmark-api:latest .
-```
-
-### 3. Start the pod
-
-```fish
-systemctl --user daemon-reload
-systemctl --user enable --now bookmark-pod
-```
-
-### 4. Boot persistence (optional)
-
-If services must start at boot without an interactive login session:
-```fish
-loginctl enable-linger $USER
-```
-
----
-
 ## phpMyAdmin
 
-Available at `http://localhost:11651` (dev) or `http://localhost:11651` via SSH tunnel (prod).
+Available at `http://localhost:11651`.
 
 - Auto-login is **disabled** — credentials required on every login.
 - Connect with the `bookmark` user (or `root` if needed).

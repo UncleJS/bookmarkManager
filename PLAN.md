@@ -1,38 +1,42 @@
-# Bookmark Manager — Project Plan (Planning-Only Document)
+# Bookmark Manager — Project Reference
 
-Status: Planning Only — Do NOT implement yet. This document is a precise blueprint that any person or AI can follow to implement the project end-to-end without additional context.
+A precise description of what is built, how it works, and how to extend it.
 
+---
 
 ## 1) Goals and Non-Goals
 
 - Goals
-  - Build a Chrome extension to capture bookmarks and send them to a Node.js API backed by MariaDB.
-  - Support a rich capture form (URL, Title, Description, Classification, Tags, Flags) with data pulled from the API.
-  - Support quick-save and full-save via context menu.
-  - Keep the extension implementation simple: vanilla HTML/CSS/JS (optional Tailwind via CDN).
+  - Chrome extension to capture bookmarks and send them to a Bun/Elysia API backed by MariaDB.
+  - Rich capture form (URL, Title, Description, Classification, Tags, Flags) with data pulled from the API.
+  - Quick-save and full-save via context menu.
+  - Simple extension implementation: vanilla HTML/CSS/JS.
 
-- Non-Goals (initial release)
-  - User management and multi-tenant accounts (assume a single-user deployment on a trusted network).
-  - Offline sync/queueing; if the network fails, show an error (queueing may be a later enhancement).
+- Non-Goals
+  - User management and multi-tenant accounts (single-user deployment on a trusted network).
+  - Offline sync/queueing; if the network fails, show an error.
   - Browser support beyond Chromium-based browsers.
-  - Complex search UI in the extension (minimal interactions only).
+  - Complex search UI in the extension.
 
+---
 
 ## 2) High-Level Architecture
 
 - Chrome Extension (Manifest V3)
   - Popup UI (form) for full bookmark capture.
   - Background Service Worker for context menus, tab info, API calls, and messaging.
-  - Optional Options page for configuring API base URL.
-- Node.js API (Express) + MariaDB
+  - Options page for configuring API base URL.
+- Bun/Elysia API + MariaDB
   - Endpoints for bookmarks, tags, and classifications.
-  - No authentication or CORS in v1; input validation is performed on the frontend.
+  - No authentication or CORS; input validation on the frontend.
+  - Swagger UI at `/docs`; OpenAPI spec at `/openapi.json`.
 - Data Flow
   1) Popup opens ➜ background fetches classifications/tags ➜ UI populates dropdowns.
   2) User submits ➜ popup sends message to background ➜ background POSTs to API ➜ background returns success/error to popup ➜ UI feedback.
   3) Context menu "Quick Save" ➜ background captures active tab (url/title) ➜ POST to API with defaults ➜ notification.
   4) Context menu "Full Save" ➜ background opens the popup, pre-filled with url/title.
 
+---
 
 ## 3) Functional Requirements
 
@@ -42,7 +46,7 @@ Status: Planning Only — Do NOT implement yet. This document is a precise bluep
   - Description: multiline textarea.
   - Classification: single-select with grouped options (optgroup). Options loaded from API. Ability to create a new classification on the fly.
   - Tags: multi-select (vanilla JS). Options loaded from API with search/autocomplete. Ability to create new tags on the fly.
-  - Flags (checkboxes): readLater, hotTopic, cheatsheets, archived.
+  - Flags (checkboxes): readLater, hotTopic, cheatsheets, forReview.
   - Save button submits to API. Show success/error message.
 - Context menus
   - "Quick Save Bookmark": immediately posts active tab url/title with defaults.
@@ -51,217 +55,245 @@ Status: Planning Only — Do NOT implement yet. This document is a precise bluep
   - Access to active tab (url/title), context menus, notifications, storage, and API host permissions.
   - Handle network errors with clear user feedback.
 - API
-  - Provide endpoints to list/create classifications and tags, and to create bookmarks.
-  - No auth or CORS; rely on frontend validation before sending.
-- Detect existing bookmarks with the same URL and require explicit user confirmation before creating a duplicate entry.
+  - Endpoints to list/create classifications and tags, and to create/edit/archive bookmarks.
+  - No auth or CORS.
+- Detect existing bookmarks with the same URL and require explicit user confirmation before creating a duplicate.
 
+---
 
 ## 4) Non-Functional Requirements
 
 - Simplicity: vanilla JS for the extension.
 - Performance: responsive popup (under 200ms UI operations, excluding network).
 - Reliability: API with clear errors; DB constraints enforce uniqueness/relations.
-- Security: no auth/CORS in v1; operate in a trusted environment or network. Minimize extension permissions. Document risks.
+- Security: no auth/CORS; operate in a trusted environment. Minimize extension permissions.
 - Observability: API logging for requests and errors.
+- Data safety: no hard deletes — all tables have `archived_at`; archive-only lifecycle.
 
+---
 
-## 5) Chrome Extension Plan (Manifest V3)
+## 5) Chrome Extension (Manifest V3)
 
 ### 5.1 Tech Choices
-- HTML, CSS (optional Tailwind via CDN), JS (ES modules where useful).
+- HTML, CSS, JS (ES modules).
 - No frameworks for popup UI.
 
-### 5.2 File/Folder Structure (extension)
-- extension/
-  - manifest.json
-  - popup/
-    - popup.html
-    - popup.css (optional if using Tailwind CDN)
-    - popup.js
-  - background/
-    - background.js (service worker)
-  - options/
-    - options.html (optional, for configuring API base URL)
-    - options.js
-  - assets/
-    - icons/ (16, 32, 48, 128 png)
-  - lib/
-    - api.js (fetch wrapper)
-    - dom.js (helpers for dropdowns/multi-select)
-    - storage.js (wrapper over chrome.storage.sync)
+### 5.2 File/Folder Structure
 
-### 5.3 Manifest (target: MV3)
-- Key fields
-  - name, description, version, manifest_version: 3
-  - action: default_popup to popup/popup.html
-  - background: service_worker: background/background.js, type: module
-  - permissions: ["tabs", "activeTab", "contextMenus", "storage", "notifications"]
-  - host_permissions: ["https://YOUR_API_HOST/*"]
-  - icons: point to assets/icons
+```
+extension/
+├── manifest.json
+├── popup/
+│   ├── popup.html
+│   ├── popup.css
+│   └── popup.js
+├── background/
+│   └── background.js       # Service worker
+├── options/
+│   ├── options.html
+│   └── options.js
+├── lib/
+│   ├── api.js              # fetch wrapper
+│   ├── dom.js              # DOM helpers
+│   └── storage.js          # chrome.storage.sync wrapper
+└── assets/
+    └── icons/
+```
 
-- Notes
-  - "tabs" and/or "activeTab" are needed to read the active tab’s URL and title. Include both to avoid surprises.
-  - host_permissions must include the API origin to allow fetch calls from background/popup.
+### 5.3 Manifest
+- `permissions`: `["tabs", "activeTab", "contextMenus", "storage", "notifications"]`
+- `host_permissions`: `["http://localhost:11650/*"]`
+- Configurable via Options page (stored in `chrome.storage.sync`)
 
 ### 5.4 Popup UI Behavior
-- On load
-  - Read active tab (url/title) via chrome.tabs.query.
-  - Fetch classification list (grouped) and tag suggestions (initial page) from API.
-  - Populate form elements. Use optgroup for classification grouping.
-- Tags multi-select
-  - Use a basic input + listbox approach:
-    - Input field for search; debounce API calls (250ms).
-    - Render suggestion list below; allow keyboard navigation.
-    - Selected tags shown as removable chips.
-    - Allow entry of a new tag name when no suggestion matches; on submit, create via API then include returned tag id.
-- Classification creation on the fly
-  - Provide an "Add new classification" affordance (button or last option).
-  - On click, show a minimal inline form (name + optional group selection) or prompt.
-  - Call POST /classifications; on success, refresh the classification dropdown and select the new one.
-- Submission
-  - Validate url, title and all inputs on the frontend.
-  - Construct payload; include selected classificationId, tagIds, flags, and description.
-  - Send message to background to perform POST /bookmarks. Disable button + show loading indicator.
-  - On success, show a success state (e.g., toast or text) and close popup after a short delay (e.g., 1–2s). On error, show inline error with retry.
+- On load: read active tab, fetch classifications and tag suggestions, populate form.
+- Tags multi-select: input + listbox, debounced API calls (250ms), removable chips, create new on the fly.
+- Classification creation: inline affordance → POST /classifications → refresh dropdown.
+- Submission: validate, construct payload, send via background message, disable button + loader, show success/error.
 
-### 5.5 Background Service Worker Responsibilities
-- Register context menus on install/activate.
-- Handle context menu clicks:
-  - Quick Save: get active tab, build minimal payload, call API, show notification on success/error.
-  - Full Save: open the popup programmatically (chrome.action.openPopup). If blocked (environment restrictions), fallback to opening a window to popup/popup.html with query params.
-- Centralize API calls
-  - Read API base URL from chrome.storage.sync.
-  - Implement fetch with timeouts (and optional light retries for idempotent GETs) and error mapping.
-- Message passing
-  - Listen for messages from popup (e.g., getInitialData, createTag, createClassification, saveBookmark) and respond with results or errors.
+### 5.5 Background Service Worker
+- Registers context menus on install/activate.
+- Quick Save: captures active tab → POST /bookmarks → notification.
+- Full Save: opens popup programmatically (fallback to window if blocked).
+- Centralises all API calls (reads base URL from storage, fetch with timeouts, error mapping).
+- Message types: `getInitialData`, `createTag`, `createClassification`, `saveBookmark`, `searchTags`.
 
-### 5.6 Permissions
-- permissions: ["tabs", "activeTab", "contextMenus", "storage", "notifications"]
-- host_permissions: ["https://YOUR_API_HOST/*"]
-
-### 5.7 UX and Feedback
-- Notifications for quick-save outcomes.
-- Inline status in popup for full-save.
-- Basic error messages for common issues (network, DB constraint conflict, etc.).
-
-### 5.8 Edge Cases
-- Very long titles or URLs: truncate in UI display but send full to API.
-- Duplicate URL: API returns conflict alongside existing bookmark metadata; popup presents the duplicates and lets the user cancel or continue to save another copy.
-- Large tag set: paginate suggestions; only fetch top N matches.
+### 5.6 Edge Cases
+- Very long titles/URLs: truncate in UI display; send full to API.
+- Duplicate URL: API returns 409 with existing metadata; UI presents duplicates and lets user cancel or proceed.
+- Large tag set: paginate suggestions; fetch top N matches only.
 - Empty API configuration: prompt user to open Options.
-- API failure/timeouts: inform user; do not retry POST to avoid duplicates (unless idempotency key is added later).
+- API failure/timeouts: inform user; do not retry POST.
 
+---
 
-## 6) API Plan (Node.js + MariaDB)
+## 6) API (Bun/Elysia + MariaDB)
 
 ### 6.1 Tech Choices
-- Bun runtime, Elysia framework, Drizzle ORM, mysql2 (driver), TypeScript.
-- Swagger UI at `/docs`; OpenAPI spec JSON at `/openapi.json`.
-- dotenv loaded automatically by Bun.
+- Bun runtime, Elysia framework, Drizzle ORM, mysql2 driver, TypeScript.
+- Swagger UI at `/docs`; OpenAPI spec at `/openapi.json`.
+- Environment loaded automatically by Bun from `api/.env`.
 
-### 6.2 Project Structure (api/)
-- api/
-  - src/
-    - server.ts (Elysia app + all routes)
-    - db/
-      - schema.ts (Drizzle table definitions)
-      - client.ts (Drizzle + mysql2 pool)
-      - migrations/ (Drizzle-generated SQL)
-      - upgrade_from_v1.sql (one-time migration for existing databases)
-    - smoke/
-      - health.ts (no-DB smoke test)
-  - drizzle.config.ts
-  - package.json, tsconfig.json
-  - Dockerfile (Bun-based production image)
-  - .env.example
+### 6.2 Project Structure
+
+```
+api/
+├── src/
+│   ├── server.ts               # Elysia app + all routes
+│   ├── db/
+│   │   ├── schema.ts           # Drizzle table definitions
+│   │   ├── client.ts           # Drizzle + mysql2 pool
+│   │   └── migrations/         # Drizzle-generated SQL
+│   ├── ui/
+│   │   ├── app.html            # Bookmark viewer UI (served at /app)
+│   │   └── categories.html     # Category management UI (served at /categories)
+│   └── smoke/
+│       └── health.ts           # No-DB smoke test
+├── drizzle.config.ts
+├── healthcheck.mjs             # Container healthcheck (reads $API_PORT)
+├── Dockerfile
+├── package.json
+├── tsconfig.json
+├── .env                        # Live credentials — gitignored
+└── .env.example                # Template — copy to .env
+```
 
 ### 6.3 Environment Variables
-- API_PORT (default 11650)
-- DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME
+
+| Variable | Default | Description |
+|---|---|---|
+| `API_PORT` | `11650` | HTTP port |
+| `LOG_LEVEL` | `info` | Log level |
+| `DB_HOST` | `127.0.0.1` | MariaDB host |
+| `DB_PORT` | `3306` | MariaDB port |
+| `DB_USER` | `bookmark` | DB username |
+| `DB_PASSWORD` | — | DB password |
+| `DB_NAME` | `bookmarks` | DB name |
+| `MARIADB_DATABASE` | — | MariaDB container init |
+| `MARIADB_USER` | — | MariaDB container init |
+| `MARIADB_PASSWORD` | — | MariaDB container init |
+| `MARIADB_ROOT_PASSWORD` | — | MariaDB container init |
+| `PMA_HOST` | `127.0.0.1` | phpMyAdmin DB host |
+| `PMA_PORT` | `3306` | phpMyAdmin DB port |
+| `PMA_ABSOLUTE_URI` | `http://localhost:11651/` | phpMyAdmin canonical URL |
 
 ### 6.4 Authentication
-- None in v1. API is assumed to run in a trusted environment/network.
+- None. API runs in a trusted local environment.
 
-### 6.5 Endpoints and Contracts
-- Health
-  - GET /health → 200 { status: "ok" }
+### 6.5 Endpoints
 
-- Classifications
-  - GET /classifications
-    - 200 { groups: [ { id, name, order, classifications: [ { id, name, order } ] } ] }
-  - POST /classifications
-    - Body: { name: string, groupId?: number, groupName?: string }
-    - Creates group if groupName is provided and groupId is missing.
-    - 201 { id, name, groupId }
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/` | Redirect to `/app` |
+| `GET` | `/health` | `{ status: "ok" }` |
+| `GET` | `/docs` | Swagger UI |
+| `GET` | `/openapi.json` | OpenAPI spec |
+| `GET` | `/app` | Bookmark viewer UI |
+| `GET` | `/categories` | Category management UI |
+| `GET` | `/classifications` | All classifications grouped |
+| `POST` | `/classifications` | Create classification + optional group |
+| `GET` | `/tags` | Search tags (`?query=&limit=&offset=`) |
+| `POST` | `/tags` | Create tag |
+| `GET` | `/bookmarks` | List bookmarks (`?limit=&offset=`) |
+| `POST` | `/bookmarks` | Create bookmark |
+| `PATCH` | `/bookmarks/:id` | Update bookmark |
+| `DELETE` | `/bookmarks/:id` | Archive bookmark |
 
-- Tags
-  - GET /tags?query=partial&limit=20&offset=0
-    - 200 { items: [ { id, name } ], total }
-  - POST /tags
-    - Body: { name: string }
-    - 201 { id, name }
+**POST /bookmarks duplicate detection:**
+- Returns `409` with a `duplicates` array if the URL already exists.
+- Send with `allowDuplicate: true` to create a copy after user confirmation.
 
-- Bookmarks
-  - POST /bookmarks
-    - Body
-      {
-        url: string,
-        title: string,
-        description?: string,
-        classificationId?: number,
-        tags?: number[],
-        flags?: { readLater?: boolean, hotTopic?: boolean, cheatsheets?: boolean, archived?: boolean },
-        faviconUrl?: string
-      }
-    - 201 { id, url, title, createdAt }
-    - Errors
-      - 400 malformed input (e.g., invalid JSON)
-      - 409 conflict (duplicate URL, response includes existing bookmark list so clients can prompt for confirmation)
+### 6.6 Database Schema
 
-- Optional
-  - GET /bookmarks?search=&tag=...&classificationId=... (basic listing)
+All tables include `archived_at DATETIME NULL`. `NULL` = active. "Delete" sets `archived_at = NOW()`.
 
-### 6.6 Database Schema (MariaDB)
-- Tables
-  - classification_groups (id PK, name, order INT, created_at)
-  - classifications (id PK, group_id FK, name, order INT, created_at)
-  - tags (id PK, name UNIQUE, created_at)
-  - bookmarks (id PK, url TEXT, title, description TEXT, classification_id FK NULL, favicon_url, read_later TINYINT, hot_topic TINYINT, cheatsheets TINYINT, archived TINYINT, created_at, updated_at)
-  - bookmark_tags (bookmark_id FK, tag_id FK, PRIMARY KEY (bookmark_id, tag_id))
+| Table | Purpose |
+|---|---|
+| `bookmarks` | Core bookmark store |
+| `classification_groups` | Groups for organizing classifications |
+| `classifications` | Individual categories; many-to-many with bookmarks |
+| `tags` | Flexible labels; many-to-many with bookmarks |
+| `bookmark_tags` | Junction table |
+| `bookmark_classifications` | Junction table |
 
-- Indexes
-  - (Optional) index on bookmarks.url for faster duplicate lookups
-  - tags.name UNIQUE
-  - FK indexes on join columns
-
-- Notes
-  - Use utf8mb4, proper collations.
-  - TINYINT(1) for booleans.
+**Uniqueness among active rows** — `tags` and `classifications` use a generated column (`name_active`) that is `NULL` when archived, with a unique index. Archived rows may share names with active rows.
 
 ### 6.7 Migrations
 - Managed by Drizzle Kit. Schema defined in `src/db/schema.ts`.
-- Generate: `bun run db:generate`; Apply: `bun run db:migrate`
-- Migration files live in `src/db/migrations/`.
-- For existing databases from the original Express schema, run `src/db/upgrade_from_v1.sql` first (adds `archived_at` columns, migrates archived rows, registers Drizzle baseline).
+- Generate: `bun run db:generate` → Apply: `bun run db:migrate`
+- Migration files: `src/db/migrations/`
+- Migrations run automatically at container start (Dockerfile CMD).
 
 ### 6.8 Validation and Error Handling
-- Frontend performs input validation before calling the API.
-- API performs minimal checks and relies on DB constraints. Standard error response shape: { error: string, details?: any }.
+- Frontend validates before calling the API.
+- API validates with Elysia's type system and DB constraints.
+- Error response shape: `{ error: string, details?: any }`.
 
-### 6.9 CORS
-- Not enabled in v1. Chrome extension will communicate directly with the API (ensure network accessibility). No server-side CORS middleware.
+### 6.9 Duplicate Handling
+- Before inserting, query for existing bookmarks with the same URL.
+- Return 409 with existing bookmark metadata.
+- Client resends with `allowDuplicate: true` after user confirmation.
 
-### 6.10 Logging
-- Use pino in JSON mode. Log method, path, status, duration, and errors.
+---
 
-### 6.11 Duplicate Handling
-- Before inserting, query for existing bookmarks with the same URL and return their metadata with a 409 response.
-- Allow clients to resend the request with an `allowDuplicate` flag after explicit user confirmation to create another record.
+## 7) Infrastructure (Rootless Podman + Quadlet)
 
+### Pod: `bookmark.pod`
+- Ports: `11650` (API), `127.0.0.1:11651` (phpMyAdmin)
+- All containers share the pod network (`127.0.0.1` routing within the pod)
+- Starts at boot via `WantedBy=default.target` (Quadlet generator)
 
-## 7) Contracts and Example Payloads
+### Containers
+| Unit file | Image | Purpose |
+|---|---|---|
+| `bookmark-api.container` | `localhost/bookmark-api:latest` | Bun/Elysia API |
+| `bookmark-db.container` | `docker.io/mariadb:11` | MariaDB (pod-internal only) |
+| `bookmark-pma.container` | `docker.io/phpmyadmin:5` | phpMyAdmin |
 
-- POST /bookmarks request example
+### Environment
+- Single file: `api/.env` (gitignored)
+- Loaded by all three containers via `EnvironmentFile=%h/0_opencode/bookmarkManager/api/.env`
+- Template: `api/.env.example`
+
+### Quadlet unit files location
+```
+~/.config/containers/systemd/
+├── bookmark.pod
+├── bookmark-api.container
+├── bookmark-db.container
+└── bookmark-pma.container
+```
+
+### Common commands
+```fish
+# Start
+systemctl --user daemon-reload
+systemctl --user start bookmark-pod.service
+
+# Stop
+systemctl --user stop bookmark-pod.service
+
+# Restart API only (after rebuild)
+systemctl --user restart bookmark-api.service
+
+# Logs
+journalctl --user -u bookmark-api -f
+
+# Status
+systemctl --user status bookmark-pod bookmark-api bookmark-db bookmark-pma
+```
+
+### Rebuild API image
+```fish
+podman build -t localhost/bookmark-api:latest api/
+systemctl --user restart bookmark-api.service
+```
+
+---
+
+## 8) Contracts and Example Payloads
+
+POST /bookmarks request:
 ```json
 {
   "url": "https://example.com/article",
@@ -269,176 +301,46 @@ Status: Planning Only — Do NOT implement yet. This document is a precise bluep
   "description": "Why this is useful…",
   "classificationId": 3,
   "tags": [1, 4, 7],
-  "flags": { "readLater": true, "hotTopic": false, "cheatsheets": false, "archived": false },
+  "flags": { "readLater": true, "hotTopic": false, "cheatsheets": false, "forReview": false },
   "faviconUrl": "https://example.com/favicon.ico"
 }
 ```
-- POST /bookmarks 201 response
+
+POST /bookmarks 201 response:
 ```json
-{ "id": 123, "url": "https://example.com/article", "title": "Great Article", "createdAt": "2025-09-20T12:34:56Z" }
+{ "id": 123, "url": "https://example.com/article", "title": "Great Article", "createdAt": "2026-02-21T07:05:28Z" }
 ```
-- GET /classifications response example
+
+GET /classifications response:
 ```json
 {
   "groups": [
-    { "id": 1, "name": "Work", "order": 1, "classifications": [ { "id": 10, "name": "Project A" } ] },
-    { "id": 2, "name": "Personal", "order": 2, "classifications": [ { "id": 20, "name": "Learning" } ] }
+    { "id": 1, "name": "Personal", "order": 1, "classifications": [ { "id": 10, "name": "Learning" } ] },
+    { "id": 2, "name": "Technology", "order": 2, "classifications": [ { "id": 20, "name": "Database" } ] }
   ]
 }
 ```
-- GET /tags response example
+
+GET /tags response:
 ```json
 { "items": [ { "id": 1, "name": "javascript" }, { "id": 2, "name": "database" } ], "total": 2 }
 ```
 
+---
 
-## 8) Implementation Steps (Do Not Execute Yet)
+## 9) Security and Privacy Considerations
 
-- Phase 0 — Repo layout
-  - Create folders: extension/, api/
-  - Add PLAN.md (this file). Add LICENSE and basic README.
+- No authentication or CORS; operate in a trusted local network only.
+- Extension requests only necessary permissions.
+- No content scripts reading page content beyond URL and title.
+- `api/.env` is gitignored — credentials never committed.
 
-- Phase 1 — API (scaffold and DB)
-  - Initialize Bun project; add dependencies (elysia, @elysiajs/swagger, drizzle-orm, mysql2, drizzle-kit).
-  - Define Drizzle schema with archive-only semantics (archived_at columns on all tables).
-  - Generate and apply Drizzle migrations (bun run db:generate && bun run db:migrate).
-  - Implement all routes in src/server.ts: /health, /classifications, /tags, /bookmarks, /docs, /openapi.json.
-  - Add smoke test.
-  - Dev infrastructure: rootless Podman Quadlet pod (MariaDB + phpMyAdmin).
+---
 
-- Phase 2 — Extension (scaffold)
-  - Create manifest.json (MV3) with permissions and host_permissions.
-  - Implement background service worker: context menus, messaging, API wrapper, notifications.
-  - Implement popup UI (HTML/CSS/JS) with form, data loading, multi-select tags, classification creation.
-  - Implement options page to set API base URL (stored in chrome.storage.sync).
-  - Wire popup to background for all network calls and do frontend validation.
+## 10) Glossary
 
-- Phase 3 — QA and polishing
-  - Manual test plan (below) and fix defects.
-  - Performance checks (debounce, minimal reflows).
-  - Accessibility pass (labels, keyboard nav for listbox).
-  - Packaging instructions (.crx or Chrome Web Store items for later phase).
-
-
-## 9) Manual Test Plan
-
-- Configuration
-  - Set API base URL via extension options; verify storage and retrieval.
-
-- Popup
-  - Open on any page; URL/title pre-filled.
-  - Classifications load; groups render as optgroup; can create a new classification and it appears selected.
-  - Tags: type to search, select multiple, remove chips, create new tag when none matches.
-  - Flags toggle correctly; frontend validation triggers on missing/invalid data; Save posts; success message then closes.
-  - Simulate API error (network/DB conflict) and verify error message.
-
-- Context menus
-  - Right-click → Quick Save; verify notification success and entry exists in DB.
-  - Right-click → Full Save; popup opens with pre-filled values.
-
-- Edge cases
-  - Duplicate URL: verify 409 handling and UI message.
-  - Long titles/urls: UI remains responsive.
-  - No network: errors appear, no crash.
-
-
-## 10) Security and Privacy Considerations
-- No authentication or CORS in v1; operate in a trusted environment. Understand the risk of unauthenticated endpoints.
-- Request only necessary extension permissions.
-- No content scripts reading page content beyond URL/title.
-
-
-## 11) Deployment Plan
-
-- API
-  - Build Podman image: `podman build -t localhost/bookmark-api:latest api/`
-  - Production pod via Quadlet: `bookmark.pod` + `bookmark-db.container` + `bookmark-pma.container` + `bookmark-api.container`
-  - Credentials via `~/bookmark-manager.env` (not committed to git).
-  - Apply migrations on first run (Dockerfile CMD runs `bun run db:migrate` before server start).
-  - Expose API on port 11650; phpMyAdmin on 127.0.0.1:11651.
-  - Reverse proxy (e.g., Nginx or Caddy) in front of the API for HTTPS as appropriate.
-  - Boot persistence: `loginctl enable-linger $USER` (optional, document for server deployments).
-
-- Extension
-  - Development: load unpacked extension from extension/.
-  - Production: prepare assets and versioning, submit to Chrome Web Store (later phase).
-
-
-## 12) Risks and Mitigations
-- MV3 constraints on background tasks → keep logic lightweight; avoid long-running operations.
-- openPopup limitations → fallback to opening a window/tab if blocked.
-- Large taxonomy (tags/classifications) → paginate and debounce; limit rendering to visible items.
-- Unauthenticated, no-CORS API exposure → deploy only on trusted networks; consider adding auth later if exposed publicly.
-
-
-## 13) Acceptance Criteria (Definition of Done)
-- Extension
-  - Popup loads, pre-fills, fetches options, validates inputs on the frontend, and saves bookmarks successfully.
-  - Context menus work for quick and full save; user feedback via notifications.
-  - Options page configures API base URL; values persist.
-  - No console errors; permissions minimal and correct.
-
-- API
-  - All endpoints return correct status codes and integrate with DB as expected.
-  - DB schema created; constraints and indexes in place.
-  - Logs available for requests and errors.
-
-
-## 14) Glossary
-- Quick Save: one-click save of url/title with default flags and no description, tags, or classification.
-- Full Save: user completes the form in the popup before saving.
-- Classification: a single category; grouped under a Classification Group for UI optgroup display.
-- Tags: multiple labels that can be attached to bookmarks.
-
-
-## 15) Appendix — Pseudo/Skeleton References (for implementers)
-
-- manifest.json skeleton (do not copy verbatim; fill placeholders)
-```json
-{
-  "manifest_version": 3,
-  "name": "Bookmark Capture",
-  "version": "0.1.0",
-  "description": "Capture bookmarks to an API",
-  "action": { "default_popup": "popup/popup.html" },
-  "background": { "service_worker": "background/background.js", "type": "module" },
-  "permissions": ["tabs", "activeTab", "contextMenus", "storage", "notifications"],
-  "host_permissions": ["https://YOUR_API_HOST/*"],
-  "icons": { "16": "assets/icons/icon16.png", "48": "assets/icons/icon48.png", "128": "assets/icons/icon128.png" }
-}
-```
-
-- Background message types (example)
-```ts
-// Message envelope (TypeScript example)
-export type BgMessage =
-  | { type: "getInitialData" }
-  | { type: "createTag"; payload: { name: string } }
-  | { type: "createClassification"; payload: { name: string; groupId?: number; groupName?: string } }
-  | { type: "saveBookmark"; payload: BookmarkPayload };
-```
-
-- Example background message instance (JSON)
-```json
-{ "type": "getInitialData" }
-```
-
-- Quick Save defaults
-  - description: ""
-  - classificationId: null
-  - tags: []
-  - flags: { readLater: true, hotTopic: false, cheatsheets: false, archived: false }
-
-- Recommended debounce for tag search: 250ms
-
-- Timeouts
-  - GET: 5s; POST: 8s (tunable).
-
-- HTTP status handling
-  - 2xx: success; 4xx: show user-facing message; 5xx: show retry suggestion.
-
-
-## 16) Open Questions (if needed for later phases)
-- Should Quick Save set readLater=true by default? (Assumed yes.)
-- Duplicate URL override implemented via `allowDuplicate` flag after user confirmation.
-- Do we need export/import of bookmarks? (Out of scope for v1.)
+- **Quick Save**: one-click save of url/title with default flags; no description, tags, or classification.
+- **Full Save**: user completes the form in the popup before saving.
+- **Classification**: a single category; grouped under a Classification Group for UI optgroup display.
+- **Tags**: multiple labels that can be attached to bookmarks.
+- **Archive**: soft-delete — sets `archived_at = NOW()`; row remains in DB and can be restored.
