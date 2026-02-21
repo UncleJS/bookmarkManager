@@ -988,6 +988,51 @@
     }
   }
 
+  // Refresh sidebar counts after any mutation (edit, archive, restore)
+  async function refreshCounts() {
+    try {
+      const [flagRes, tagRes] = await Promise.all([
+        fetch('/flag-counts'),
+        fetch(`/tags?limit=200&sort=${state.tagSortOrder}`),
+      ]);
+
+      if (flagRes.ok) {
+        const flagCounts = await flagRes.json();
+        const flagDefs = [
+          { key: 'readLater', cls: 'flag-read' },
+          { key: 'hotTopic',  cls: 'flag-hot'  },
+          { key: 'cheatsheets', cls: 'flag-cs' },
+          { key: 'forReview', cls: 'flag-rev'  },
+        ];
+        flagDefs.forEach(({ key, cls }) => {
+          const btn = document.querySelector(`.nav-item.${cls}`);
+          if (btn) {
+            const cnt = btn.querySelector('.nav-item-count');
+            if (cnt) cnt.textContent = String(flagCounts[key] ?? 0);
+          }
+        });
+      }
+
+      if (tagRes.ok) {
+        const { items } = await tagRes.json();
+        // Update counts on existing tag buttons; re-render if list changed
+        let changed = false;
+        items.forEach(tag => {
+          const btn = document.querySelector(`.nav-item[data-tag-id="${tag.id}"]`);
+          if (btn) {
+            const cnt = btn.querySelector('.nav-item-count');
+            if (cnt) cnt.textContent = String(tag.bookmarkCount ?? 0);
+          } else {
+            changed = true;
+          }
+        });
+        if (changed) renderTagList(items);
+      }
+    } catch (e) {
+      console.error('refreshCounts:', e);
+    }
+  }
+
   function clearNavActive() {
     document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
   }
@@ -1215,6 +1260,7 @@
           document.getElementById('content').innerHTML =
             `<div class="state-box"><div class="icon">🔍</div>No bookmarks here yet.</div>`;
         }
+        refreshCounts();   // update sidebar counts
       }, 200);
     } catch (err) {
       alert(`Failed to ${action}: ${err.message}`);
@@ -1382,6 +1428,7 @@
       }
       closeModal();
       fetchBookmarks();    // reload to show updated card
+      refreshCounts();     // update sidebar counts
     } catch (err) {
       alert('Failed to save: ' + err.message);
     } finally {
