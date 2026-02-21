@@ -53,6 +53,11 @@ const app = new Elysia()
     })
   )
 
+  // ── Root redirect ─────────────────────────────────────────────────────────
+  .get("/", ({ redirect }) => redirect("/app"), {
+    detail: { tags: ["health"], summary: "Redirect to bookmark viewer UI" },
+  })
+
   // ── OpenAPI JSON alias at /openapi.json ───────────────────────────────────
   // @elysiajs/swagger serves the spec at /docs/json; expose the standard path too
   .get("/openapi.json", async ({ redirect }) => redirect("/docs/json"), {
