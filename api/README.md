@@ -112,34 +112,57 @@ Interactive docs always available at **`http://localhost:11650/docs`**.
 |---|---|---|
 | `GET` | `/` | Redirect to `/app` |
 | `GET` | `/health` | Returns `{ status: "ok" }` |
+| `GET` | `/docs` | Swagger UI |
+| `GET` | `/openapi.json` | OpenAPI spec |
 | `GET` | `/app` | Bookmark viewer UI |
 | `GET` | `/categories` | Category management UI |
-
-### Tags
-
-| Method | Path | Description |
-|---|---|---|
-| `GET` | `/tags` | List/search tags (`?query=&limit=&offset=`) |
-| `POST` | `/tags` | Create a tag (`{ name }`) |
-
-### Classifications
-
-| Method | Path | Description |
-|---|---|---|
-| `GET` | `/classifications` | All classifications grouped |
-| `POST` | `/classifications` | Create classification + optional group |
+| `GET` | `/flag-counts` | Count of active bookmarks per flag |
 
 ### Bookmarks
 
 | Method | Path | Description |
 |---|---|---|
-| `GET` | `/bookmarks` | List bookmarks (`?limit=&offset=`) |
+| `GET` | `/bookmarks` | List/filter bookmarks (`?limit=&offset=&classificationId=&tagId=&flag=&sortBy=&archived=`) |
 | `POST` | `/bookmarks` | Create bookmark |
-| `PATCH` | `/bookmarks/:id` | Update bookmark fields |
-| `DELETE` | `/bookmarks/:id` | Archive bookmark (sets `archived_at`) |
+| `PATCH` | `/bookmarks/:id` | Edit title, description, flags, tags, classifications |
+| `PATCH` | `/bookmarks/:id/archive` | Soft-delete (sets `archivedAt`) |
+| `PATCH` | `/bookmarks/:id/restore` | Restore archived bookmark |
+
+### Tags
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/tags` | List/search tags (`?query=&limit=&offset=&sort=`) |
+| `POST` | `/tags` | Create tag |
+| `PATCH` | `/tags/:id/archive` | Archive tag |
+| `PATCH` | `/tags/:id/restore` | Restore archived tag |
+
+### Classifications
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/classifications` | All active classifications, nested by group |
+| `POST` | `/classifications` | Create classification (optionally with new group) |
+| `PATCH` | `/classifications/:id` | Rename classification |
+| `PATCH` | `/classifications/:id/reorder` | Set display order |
+| `PATCH` | `/classifications/:id/archive` | Archive classification |
+| `PATCH` | `/classifications/:id/restore` | Restore archived classification |
+
+### Classification Groups
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/classifications/groups` | List groups with nested classifications (management view) |
+| `POST` | `/classifications/groups` | Create group |
+| `PATCH` | `/classifications/groups/:id` | Rename group |
+| `PATCH` | `/classifications/groups/:id/reorder` | Set display order |
+| `PATCH` | `/classifications/groups/:id/archive` | Archive group |
+| `PATCH` | `/classifications/groups/:id/restore` | Restore archived group |
+
+**Data lifecycle:** nothing is hard-deleted. All "delete" actions set `archivedAt` and can be reversed with the corresponding `/restore` endpoint.
 
 **POST /bookmarks — duplicate detection:**
-- Returns `409` with a `duplicates` array if the URL already exists.
+- Returns `409` with a `duplicates` array if an active bookmark with the same URL already exists.
 - To save anyway after user confirmation, include `allowDuplicate: true` in the body.
 
 ---
