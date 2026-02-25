@@ -4,6 +4,19 @@ A Chrome extension (MV3) that captures bookmarks and sends them to a local Bun/E
 
 Everything is implemented in JavaScript (no TypeScript) for the extension; the API uses TypeScript with Bun.
 
+## Table of Contents
+
+- [Stack](#stack)
+- [Quick Start](#quick-start)
+- [Scripts](#scripts)
+- [Repository Structure](#repository-structure)
+- [API Overview](#api-overview)
+- [Chrome Extension](#chrome-extension)
+- [Troubleshooting](#troubleshooting)
+- [License](#license)
+
+---
+
 ## Stack
 
 | Layer | Technology |
@@ -15,6 +28,8 @@ Everything is implemented in JavaScript (no TypeScript) for the extension; the A
 | Infrastructure | Rootless Podman + systemd (Quadlet) |
 
 ---
+
+[↑ Table of Contents](#table-of-contents)
 
 ## Quick Start
 
@@ -64,6 +79,8 @@ curl http://localhost:11650/health
 
 ---
 
+[↑ Table of Contents](#table-of-contents)
+
 ## Scripts
 
 All scripts live in `scripts/` and are run from the repo root.
@@ -81,6 +98,8 @@ All scripts live in `scripts/` and are run from the repo root.
 | `./scripts/dev.sh` | Run API locally via `bun run dev` (no container) |
 
 ---
+
+[↑ Table of Contents](#table-of-contents)
 
 ## Repository Structure
 
@@ -124,6 +143,8 @@ bookmarkManager/
 ```
 
 ---
+
+[↑ Table of Contents](#table-of-contents)
 
 ## API Overview
 
@@ -188,6 +209,8 @@ Interactive docs always available at **`http://localhost:11650/docs`**.
 
 ---
 
+[↑ Table of Contents](#table-of-contents)
+
 ## Chrome Extension
 
 - Click the action icon for the popup (full save with form)
@@ -198,6 +221,8 @@ See `api/README.md` for full API documentation.
 
 ---
 
+[↑ Table of Contents](#table-of-contents)
+
 ## Troubleshooting
 
 | Symptom | Fix |
@@ -206,3 +231,20 @@ See `api/README.md` for full API documentation.
 | API can't reach DB | Check `api/.env` — `DB_PASSWORD` must match `MARIADB_PASSWORD`; `DB_HOST` must be `127.0.0.1` |
 | Extension can't reach API | Verify base URL in Options; check `host_permissions` in `extension/manifest.json` |
 | Services not starting at boot | Run `loginctl enable-linger $USER` to enable linger for your user |
+
+---
+
+[↑ Table of Contents](#table-of-contents)
+
+## License
+
+This project is licensed under the
+Creative Commons Attribution-ShareAlike 4.0 International (CC BY-SA 4.0).
+
+https://creativecommons.org/licenses/by-sa/4.0/
+
+[↑ Table of Contents](#table-of-contents)
+
+---
+
+© 2026 Jaco Steyn — Licensed under CC BY-SA 4.0

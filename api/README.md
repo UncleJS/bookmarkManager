@@ -246,3 +246,7 @@ Available at `http://localhost:11651`.
 
 - Auto-login is **disabled** — credentials required on every login.
 - Connect with the `bookmark` user (or `root` if needed).
+
+---
+
+© 2026 Jaco Steyn — Licensed under CC BY-SA 4.0

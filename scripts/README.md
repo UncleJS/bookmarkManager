@@ -245,3 +245,7 @@ Runs the API locally using Bun in watch mode, without any container. Useful for 
 systemctl --user stop bookmark-api.service  # stop only the API container
 ./scripts/dev.sh              # run API locally against the container DB
 ```
+
+---
+
+© 2026 Jaco Steyn — Licensed under CC BY-SA 4.0

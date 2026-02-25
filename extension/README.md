@@ -194,3 +194,7 @@ POST /bookmarks → API returns 409 with duplicates array
 - No content scripts — page content is never read beyond URL and title
 - No sensitive data stored in `chrome.storage`
 - Input validation on both popup and API side
+
+---
+
+© 2026 Jaco Steyn — Licensed under CC BY-SA 4.0

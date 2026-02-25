@@ -408,3 +408,7 @@ GET /tags response:
 - **Classification**: a single category; grouped under a Classification Group for UI optgroup display.
 - **Tags**: multiple labels that can be attached to bookmarks.
 - **Archive**: soft-delete — sets `archived_at = NOW()`; row remains in DB and can be restored.
+
+---
+
+© 2026 Jaco Steyn — Licensed under CC BY-SA 4.0
