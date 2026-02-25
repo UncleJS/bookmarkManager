@@ -23,6 +23,7 @@ Everything is implemented in JavaScript (no TypeScript) for the extension; the A
     - [Classifications](#classifications)
     - [Classification Groups](#classification-groups)
   - [Chrome Extension](#chrome-extension)
+  - [Backup](#backup)
   - [Troubleshooting](#troubleshooting)
   - [License](#license)
 
@@ -112,6 +113,7 @@ All scripts live in `scripts/` and are run from the repo root.
 | `./scripts/logs.sh [api\|db\|pma\|all]` | Tail logs — defaults to `api` |
 | `./scripts/status.sh` | Show `systemctl --user status` for all services |
 | `./scripts/dev.sh` | Run API locally via `bun run dev` (no container) |
+| `./scripts/backup.sh` | Dump MariaDB to `backups/bookmark_YYYY-MM-DD_HHMMSS.sql.gz` |
 
 ---
 
@@ -153,7 +155,9 @@ bookmarkManager/
 │   ├── restart.sh
 │   ├── logs.sh
 │   ├── status.sh
-│   └── dev.sh
+│   ├── dev.sh
+│   └── backup.sh           # DB dump → backups/
+├── backups/                # Dump files (gitignored)
 ├── PLAN.md                 # Full project reference
 └── README.md               # This file
 ```
@@ -177,6 +181,7 @@ Interactive docs always available at **`http://localhost:11650/docs`**.
 | `GET` | `/app` | Bookmark viewer UI |
 | `GET` | `/categories` | Category management UI |
 | `GET` | `/flag-counts` | Count of active bookmarks per flag |
+| `GET` | `/backup` | Download a gzipped MariaDB dump (requires `?token=`) |
 
 ### Bookmarks
 
@@ -234,6 +239,44 @@ Interactive docs always available at **`http://localhost:11650/docs`**.
 
 See `extension/README.md` for full extension documentation.
 See `api/README.md` for full API documentation.
+
+---
+
+[↑ Table of Contents](#table-of-contents)
+
+## Backup
+
+Two backup methods are available: a **shell script** (recommended for cron/automation) and an in-browser **API endpoint**.
+
+### Shell script
+
+```bash
+./scripts/backup.sh
+```
+
+- Runs `mariadb-dump` inside the `bookmark-db` container via `podman exec`
+- Pipes output through `gzip -9`
+- Saves to `backups/bookmark_YYYY-MM-DD_HHMMSS.sql.gz` (directory is gitignored)
+
+See [`scripts/README.md`](scripts/README.md) for full options and a restore command.
+
+### API endpoint
+
+```
+GET http://localhost:11650/backup?token=<BACKUP_TOKEN>
+```
+
+- Returns a `bookmark_YYYY-MM-DD_HHMMSS.sql.gz` download
+- Requires `BACKUP_TOKEN` to be set in `api/.env` (a strong random value — the default `change_me_please` is refused with `503`)
+- Returns `401` on token mismatch, `503` if token is unconfigured
+- The **⬇ Backup** button in the `http://localhost:11650/app` topbar calls this endpoint — it will prompt for your token
+
+### Restore
+
+```bash
+gunzip -c backups/bookmark_YYYY-MM-DD_HHMMSS.sql.gz \
+  | podman exec -i bookmark-db mariadb -u bookmarks -p bookmarks
+```
 
 ---
 
