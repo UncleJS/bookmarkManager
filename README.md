@@ -6,14 +6,30 @@ Everything is implemented in JavaScript (no TypeScript) for the extension; the A
 
 ## Table of Contents
 
-- [Stack](#stack)
-- [Quick Start](#quick-start)
-- [Scripts](#scripts)
-- [Repository Structure](#repository-structure)
-- [API Overview](#api-overview)
-- [Chrome Extension](#chrome-extension)
-- [Troubleshooting](#troubleshooting)
-- [License](#license)
+- [Bookmark Manager](#bookmark-manager)
+  - [Table of Contents](#table-of-contents)
+  - [Stack](#stack)
+  - [Quick Start](#quick-start)
+    - [1. Configure environment](#1-configure-environment)
+    - [2. Install (build image + deploy Quadlet + start pod)](#2-install-build-image--deploy-quadlet--start-pod)
+    - [3. Health check](#3-health-check)
+    - [4. Load the Chrome extension](#4-load-the-chrome-extension)
+  - [Scripts](#scripts)
+  - [Repository Structure](#repository-structure)
+  - [API Overview](#api-overview)
+    - [Health \& UI](#health--ui)
+    - [Bookmarks](#bookmarks)
+    - [Tags](#tags)
+    - [Classifications](#classifications)
+    - [Classification Groups](#classification-groups)
+  - [Chrome Extension](#chrome-extension)
+  - [Troubleshooting](#troubleshooting)
+  - [License](#license)
+
+</br></br>
+![Homepage](screenshotMain.png)
+</br></br>
+![Edit Bookamrk](screenshotEditBookmark.png)
 
 ---
 
