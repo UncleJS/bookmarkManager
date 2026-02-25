@@ -69,7 +69,7 @@ body {
   font-size: 14px;
   font-weight: 500;
   margin-bottom: 4px;
-  color: #6b7280;
+  color: #ffffff;
 }
 
 .dark .field-label {
@@ -234,13 +234,13 @@ body {
   padding: 8px 12px;
   font-size: 12px;
   font-weight: 600;
-  color: #6b7280;
+  color: #ffffff;
   background-color: #f9fafb;
   border-bottom: 1px solid #e5e7eb;
 }
 
 .dark .group-header {
-  color: #9ca3af;
+  color: #ffffff;
   background-color: #1f2937;
   border-bottom-color: #4b5563;
 }
@@ -286,7 +286,7 @@ body {
   padding: 0 8px;
   font-size: 14px;
   font-weight: 500;
-  color: #6b7280;
+  color: #ffffff;
 }
 
 .dark .flags-legend {
@@ -304,7 +304,7 @@ body {
   align-items: center;
   gap: 8px;
   font-size: 14px;
-  color: #6b7280;
+  color: #ffffff;
 }
 
 .dark .flag-label {
@@ -458,11 +458,11 @@ body {
 
 .status-text {
   font-size: 14px;
-  color: #6b7280;
+  color: #ffffff;
 }
 
 .dark .status-text {
-  color: #9ca3af;
+  color: #ffffff;
 }
 
 .status-text.success {
@@ -554,7 +554,7 @@ body {
   align-items: center;
   gap: 8px;
   font-size: 14px;
-  color: #6b7280;
+  color: #ffffff;
 }
 
 .dark .radio-label {
@@ -578,7 +578,7 @@ body {
 
 .cancel-button {
   padding: 8px 16px;
-  color: #6b7280;
+  color: #ffffff;
   background-color: #f3f4f6;
   border: none;
   border-radius: 6px;
