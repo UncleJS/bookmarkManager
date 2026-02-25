@@ -1591,6 +1591,103 @@ const app = new Elysia()
     }
   )
 
+  // ── Backup ─────────────────────────────────────────────────────────────────
+  // GET /backup?token=<BACKUP_TOKEN>
+  // Streams a gzip-compressed mariadb-dump of the bookmarks database.
+  // The BACKUP_TOKEN env var must be set to a non-default value.
+  .get(
+    "/backup",
+    async ({ query, set }) => {
+      const configuredToken = process.env.BACKUP_TOKEN ?? "";
+
+      // Refuse if the token is unset or still the placeholder
+      if (!configuredToken || configuredToken === "change_me_please") {
+        set.status = 503;
+        return {
+          error:
+            "Backup is not configured. Set BACKUP_TOKEN to a strong random value in api/.env and restart the service.",
+        };
+      }
+
+      if (!query.token || query.token !== configuredToken) {
+        set.status = 401;
+        return { error: "Invalid or missing backup token." };
+      }
+
+      const dbHost     = process.env.DB_HOST     ?? "127.0.0.1";
+      const dbPort     = process.env.DB_PORT      ?? "3306";
+      const dbUser     = process.env.DB_USER      ?? "bookmark";
+      const dbPassword = process.env.DB_PASSWORD  ?? "";
+      const dbName     = process.env.DB_NAME      ?? "bookmarks";
+
+      const timestamp  = new Date()
+        .toISOString()
+        .replace(/T/, "_")
+        .replace(/:/g, "")
+        .slice(0, 15); // YYYY-MM-DD_HHMMSS
+      const filename   = `bookmark_${timestamp}.sql.gz`;
+
+      // Run mariadb-dump (installed in this container) against the pod-internal DB
+      const dump = Bun.spawn(
+        [
+          "mariadb-dump",
+          `--host=${dbHost}`,
+          `--port=${dbPort}`,
+          `--user=${dbUser}`,
+          `--password=${dbPassword}`,
+          "--single-transaction",
+          "--routines",
+          "--triggers",
+          dbName,
+        ],
+        { stdout: "pipe", stderr: "pipe" }
+      );
+
+      const gz = Bun.spawn(["gzip", "-9"], {
+        stdin: dump.stdout,
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+
+      const exitCode = await dump.exited;
+      if (exitCode !== 0) {
+        const errText = await new Response(dump.stderr).text();
+        set.status = 500;
+        return { error: `mysqldump failed (exit ${exitCode}): ${errText.trim()}` };
+      }
+
+      const gzBuffer = await new Response(gz.stdout).arrayBuffer();
+
+      return new Response(gzBuffer, {
+        headers: {
+          "Content-Type": "application/gzip",
+          "Content-Disposition": `attachment; filename="${filename}"`,
+          "Cache-Control": "no-store",
+        },
+      });
+    },
+    {
+      query: t.Object({
+        token: t.Optional(t.String({ description: "Backup token (must match BACKUP_TOKEN in api/.env)" })),
+      }),
+      detail: {
+        tags: ["backup"],
+        summary: "Download a database backup",
+        description:
+          "Streams a gzip-compressed `mysqldump` of the full bookmarks database.\n\n" +
+          "**Authentication:** pass `?token=<BACKUP_TOKEN>` where `BACKUP_TOKEN` is set in `api/.env`. " +
+          "The endpoint returns `503` if the token is unset or still the default placeholder, " +
+          "and `401` if the token does not match.\n\n" +
+          "The response is a `.sql.gz` file attachment named `bookmark_YYYY-MM-DD_HHMMSS.sql.gz`.",
+        responses: {
+          200: { description: "SQL dump (gzip-compressed) file download" },
+          401: { ...ErrorResp, description: "Missing or invalid token" },
+          503: { ...ErrorResp, description: "Backup not configured — set BACKUP_TOKEN in api/.env" },
+        },
+      },
+    }
+  )
+
   // ── Start ──────────────────────────────────────────────────────────────────
   .listen(PORT);
 

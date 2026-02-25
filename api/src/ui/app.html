@@ -279,6 +279,29 @@
       color: var(--accent);
     }
 
+    .nav-btn {
+      background: var(--surface2);
+      border: 1px solid var(--border2);
+      color: var(--text-muted);
+      font-family: inherit;
+      font-size: 12px;
+      padding: 4px 10px;
+      border-radius: 4px;
+      cursor: pointer;
+      white-space: nowrap;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      transition: border-color 0.1s, color 0.1s, background 0.1s;
+    }
+
+    .nav-btn:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+      text-decoration: none;
+    }
+
     /* ── Content ─────────────────────────────────────────────────────────── */
     #content {
       flex: 1;
@@ -725,7 +748,8 @@
     <div id="topbar">
       <span id="topbar-title">All bookmarks</span>
       <span id="topbar-count"></span>
-      <a href="/categories" style="font-size:12px;color:var(--text-muted);white-space:nowrap;text-decoration:none;" onmouseover="this.style.color='var(--accent)'" onmouseout="this.style.color='var(--text-muted)'">⚙ Categories</a>
+      <a href="/categories" class="nav-btn">⚙ Categories</a>
+      <button class="nav-btn" onclick="triggerBackup()">⬇ Backup</button>
       <div id="archive-toggle">
         <button class="toggle-btn active" id="btn-active"   onclick="setArchived(false)">Active</button>
         <button class="toggle-btn"        id="btn-archived" onclick="setArchived(true)">Archived</button>
@@ -801,6 +825,13 @@
 </div>
 
 <script>
+  // ── Backup ─────────────────────────────────────────────────────────────────
+  function triggerBackup() {
+    const token = window.prompt('Enter backup token:');
+    if (token === null || token.trim() === '') return; // cancelled or empty
+    window.location.href = '/backup?token=' + encodeURIComponent(token.trim());
+  }
+
   // ── State ──────────────────────────────────────────────────────────────────
   const PAGE_SIZE = 20;
   let state = {

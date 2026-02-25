@@ -27,6 +27,7 @@ Every script uses `set -euo pipefail` and colour-coded output:
 | [`logs.sh`](#logssh) | `[api\|db\|pma\|all]` | Tail journalctl logs |
 | [`status.sh`](#statussh) | — | Show systemctl status for all services |
 | [`dev.sh`](#devsh) | — | Run API locally via Bun (no container) |
+| [`backup.sh`](#backupsh) | — | Dump DB to `backups/bookmark_YYYY-MM-DD_HHMMSS.sql.gz` |
 
 ---
 
@@ -245,6 +246,30 @@ Runs the API locally using Bun in watch mode, without any container. Useful for 
 systemctl --user stop bookmark-api.service  # stop only the API container
 ./scripts/dev.sh              # run API locally against the container DB
 ```
+
+---
+
+## backup.sh
+
+Dumps the live MariaDB database to a gzip-compressed SQL file in `backups/`.
+
+```bash
+./scripts/backup.sh
+# → backups/bookmark_2026-02-25_143022.sql.gz (42K)
+```
+
+**What it does:**
+
+1. Reads `DB_USER`, `DB_PASSWORD`, `DB_NAME` from `api/.env`.
+2. Verifies the `bookmark-db` container is running.
+3. Runs `mariadb-dump --single-transaction --routines --triggers` inside the container.
+4. Pipes the output through `gzip -9` and saves to `backups/bookmark_YYYY-MM-DD_HHMMSS.sql.gz`.
+
+**Notes:**
+
+- `backups/` is gitignored — dump files are never committed.
+- A backup is also available via the browser at `GET /backup?token=<BACKUP_TOKEN>` (set `BACKUP_TOKEN` in `api/.env`).
+- To restore: `gunzip -c backups/<file>.sql.gz | podman exec -i bookmark-db mariadb -u<user> -p<pass> <dbname>`
 
 ---
 

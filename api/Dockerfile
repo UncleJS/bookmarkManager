@@ -3,7 +3,7 @@
 # =============================================================================
 FROM docker.io/oven/bun:1
 
-RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends curl mariadb-client && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
