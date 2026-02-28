@@ -593,6 +593,93 @@
     }
     .btn-cancel:hover { border-color: var(--text-muted); color: var(--text); }
 
+    /* ── Create-classification sub-modal ─────────────────────────────────── */
+    #create-class-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.5);
+      z-index: 200;
+      align-items: center;
+      justify-content: center;
+    }
+    #create-class-overlay.open { display: flex; }
+
+    #create-class-modal {
+      background: var(--surface);
+      border: 1px solid var(--border2);
+      border-radius: 8px;
+      width: 400px;
+      max-width: 94vw;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    #create-class-modal h3 {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--text);
+      margin: 0;
+    }
+
+    .create-class-field { display: flex; flex-direction: column; gap: 5px; }
+    .create-class-field label {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+    }
+    .create-class-field input[type="text"],
+    .create-class-field select {
+      width: 100%;
+      background: var(--surface2);
+      border: 1px solid var(--border2);
+      border-radius: 4px;
+      color: var(--text);
+      font-family: inherit;
+      font-size: 13px;
+      padding: 6px 9px;
+      outline: none;
+    }
+    .create-class-field input[type="text"]:focus,
+    .create-class-field select:focus { border-color: var(--accent); }
+    .create-class-field select option { background: var(--surface2); }
+
+    .create-class-radios { display: flex; flex-direction: column; gap: 6px; }
+    .create-class-radio-label {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      font-size: 12px;
+      color: var(--text-muted);
+      cursor: pointer;
+      user-select: none;
+    }
+    .create-class-radio-label input { accent-color: var(--accent); cursor: pointer; }
+
+    #create-class-error {
+      font-size: 11px;
+      color: var(--danger);
+      min-height: 16px;
+    }
+
+    .btn-add-new-class {
+      align-self: flex-start;
+      background: none;
+      border: 1px dashed var(--border2);
+      color: var(--text-muted);
+      font-family: inherit;
+      font-size: 11px;
+      padding: 3px 10px;
+      border-radius: 4px;
+      cursor: pointer;
+      margin-top: 2px;
+    }
+    .btn-add-new-class:hover { border-color: var(--accent); color: var(--accent); }
+
     .flag {
       font-size: 10px;
       font-weight: 700;
@@ -809,6 +896,7 @@
       <label>Classifications</label>
       <input type="text" class="picker-search" id="class-search" placeholder="Filter…" oninput="filterChips('class')" />
       <div class="picker-list" id="class-chips"></div>
+      <button type="button" class="btn-add-new-class" onclick="openCreateClassModal()">+ Add New Classification</button>
     </div>
 
     <div class="modal-field">
@@ -820,6 +908,55 @@
     <div class="modal-actions">
       <button class="btn-cancel" onclick="closeModal()">Cancel</button>
       <button class="btn-primary" id="modal-save" onclick="saveEdit()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Create-classification sub-modal ──────────────────────────────────── -->
+<div id="create-class-overlay" role="dialog" aria-modal="true" aria-labelledby="create-class-title">
+  <div id="create-class-modal">
+    <h3 id="create-class-title">New Classification</h3>
+
+    <div class="create-class-field">
+      <label for="cc-name">Name</label>
+      <input type="text" id="cc-name" placeholder="e.g. TypeScript" autocomplete="off" />
+    </div>
+
+    <div class="create-class-field">
+      <label>Group</label>
+      <div class="create-class-radios">
+        <label class="create-class-radio-label">
+          <input type="radio" name="cc-group-option" value="none" checked onchange="updateCCGroupSections()" />
+          No group
+        </label>
+        <label class="create-class-radio-label" id="cc-existing-radio-label">
+          <input type="radio" name="cc-group-option" value="existing" onchange="updateCCGroupSections()" />
+          Existing group
+        </label>
+        <label class="create-class-radio-label">
+          <input type="radio" name="cc-group-option" value="new" onchange="updateCCGroupSections()" />
+          New group
+        </label>
+      </div>
+    </div>
+
+    <div class="create-class-field" id="cc-existing-section" style="display:none">
+      <label for="cc-existing-select">Select group</label>
+      <select id="cc-existing-select">
+        <option value="">— choose —</option>
+      </select>
+    </div>
+
+    <div class="create-class-field" id="cc-new-section" style="display:none">
+      <label for="cc-new-group-name">New group name</label>
+      <input type="text" id="cc-new-group-name" placeholder="e.g. Languages" autocomplete="off" />
+    </div>
+
+    <div id="create-class-error"></div>
+
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeCreateClassModal()">Cancel</button>
+      <button class="btn-primary" id="cc-create-btn" onclick="handleCreateClassification()">Create</button>
     </div>
   </div>
 </div>
@@ -1334,6 +1471,7 @@
   let modalState = {
     bookmarkId: null,
     allClasses: [],   // [{id, name, groupName}]
+    allGroups:  [],   // [{id, name}]  — for the create-classification sub-modal
     allTags:    [],   // [{id, name}]
     selClassIds: new Set(),
     selTagIds:   new Set(),
@@ -1350,12 +1488,17 @@
 
     // Flatten all active classifications with group info
     const flatClasses = [];
+    const flatGroups = [];
     groups.forEach(g => {
+      if (g.name !== 'Ungrouped') {
+        flatGroups.push({ id: g.id, name: g.name });
+      }
       g.classifications.forEach(c => {
         flatClasses.push({ id: c.id, name: c.name, groupName: g.name !== 'Ungrouped' ? g.name : null });
       });
     });
     modalState.allClasses = flatClasses;
+    modalState.allGroups  = flatGroups;
     modalState.allTags = tagItems;
   }
 
@@ -1435,6 +1578,127 @@
     if (modalState.selClassIds.has(id)) modalState.selClassIds.delete(id);
     else modalState.selClassIds.add(id);
     renderChips('class');
+  });
+
+  // ── Create-classification sub-modal ────────────────────────────────────────
+  function openCreateClassModal() {
+    // Reset form
+    document.getElementById('cc-name').value = '';
+    document.getElementById('cc-new-group-name').value = '';
+    document.getElementById('create-class-error').textContent = '';
+    document.querySelector('input[name="cc-group-option"][value="none"]').checked = true;
+    updateCCGroupSections();
+
+    // Populate existing-groups dropdown
+    const sel = document.getElementById('cc-existing-select');
+    sel.innerHTML = '<option value="">— choose —</option>';
+    const existingRadioLabel = document.getElementById('cc-existing-radio-label');
+    if (modalState.allGroups.length === 0) {
+      existingRadioLabel.style.opacity = '0.4';
+      existingRadioLabel.querySelector('input').disabled = true;
+    } else {
+      existingRadioLabel.style.opacity = '1';
+      existingRadioLabel.querySelector('input').disabled = false;
+      modalState.allGroups.forEach(g => {
+        const opt = document.createElement('option');
+        opt.value = String(g.id);
+        opt.textContent = g.name;
+        sel.appendChild(opt);
+      });
+    }
+
+    document.getElementById('create-class-overlay').classList.add('open');
+    setTimeout(() => document.getElementById('cc-name').focus(), 60);
+  }
+
+  function closeCreateClassModal() {
+    document.getElementById('create-class-overlay').classList.remove('open');
+  }
+
+  function updateCCGroupSections() {
+    const val = document.querySelector('input[name="cc-group-option"]:checked')?.value;
+    document.getElementById('cc-existing-section').style.display = val === 'existing' ? '' : 'none';
+    document.getElementById('cc-new-section').style.display     = val === 'new'      ? '' : 'none';
+  }
+
+  async function handleCreateClassification() {
+    const errEl  = document.getElementById('create-class-error');
+    const btn    = document.getElementById('cc-create-btn');
+    const name   = document.getElementById('cc-name').value.trim();
+
+    errEl.textContent = '';
+    if (!name) { errEl.textContent = 'Classification name is required.'; return; }
+
+    const groupOption = document.querySelector('input[name="cc-group-option"]:checked')?.value;
+    let groupId   = null;
+    let groupName = null;
+
+    if (groupOption === 'existing') {
+      const v = document.getElementById('cc-existing-select').value;
+      groupId = v ? Number(v) : null;
+      if (!groupId) { errEl.textContent = 'Please select an existing group.'; return; }
+    } else if (groupOption === 'new') {
+      groupName = document.getElementById('cc-new-group-name').value.trim() || null;
+      if (!groupName) { errEl.textContent = 'Please enter a name for the new group.'; return; }
+    }
+
+    btn.disabled = true;
+    btn.textContent = 'Creating…';
+
+    try {
+      const payload = { name };
+      if (groupId   != null) payload.groupId   = groupId;
+      if (groupName != null) payload.groupName = groupName;
+
+      const res  = await fetch('/classifications', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify(payload),
+      });
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        errEl.textContent = data.error || 'Failed to create classification.';
+        return;
+      }
+
+      // Resolve the group name for display
+      let resolvedGroupName = null;
+      if (groupOption === 'existing') {
+        resolvedGroupName = modalState.allGroups.find(g => g.id === groupId)?.name ?? null;
+      } else if (groupOption === 'new') {
+        resolvedGroupName = groupName;
+        // If the API returned a new groupId, add it to allGroups so the dropdown stays current
+        if (data.groupId) {
+          const already = modalState.allGroups.some(g => g.id === data.groupId);
+          if (!already) modalState.allGroups.push({ id: data.groupId, name: groupName });
+        }
+      }
+
+      // Add to local state and auto-select
+      const newClass = { id: data.id, name: data.name, groupName: resolvedGroupName };
+      modalState.allClasses.push(newClass);
+      modalState.selClassIds.add(data.id);
+
+      closeCreateClassModal();
+      document.getElementById('class-search').value = '';
+      renderChips('class');
+    } catch (err) {
+      errEl.textContent = 'Failed to create classification: ' + err.message;
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Create';
+    }
+  }
+
+  // Close sub-modal on overlay click
+  document.getElementById('create-class-overlay').addEventListener('click', e => {
+    if (e.target === document.getElementById('create-class-overlay')) closeCreateClassModal();
+  });
+
+  // Enter in cc-name submits the form
+  document.getElementById('cc-name').addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); handleCreateClassification(); }
   });
 
   async function createOrSelectTag(name) {
