@@ -1,5 +1,10 @@
 # scripts/
 
+[![License: CC BY-SA 4.0](https://img.shields.io/badge/License-CC%20BY--SA%204.0-lightgrey.svg)](https://creativecommons.org/licenses/by-sa/4.0/)
+[![Shell](https://img.shields.io/badge/Language-Bash-4EAA25?logo=gnubash&logoColor=white)](https://www.gnu.org/software/bash/)
+[![Podman](https://img.shields.io/badge/Container-Podman-892ca0?logo=podman)](https://podman.io)
+[![systemd](https://img.shields.io/badge/Init-systemd-black?logo=systemd)](https://systemd.io)
+
 Lifecycle scripts for Bookmark Manager. All scripts must be run from the **repo root**.
 
 ```bash
@@ -11,6 +16,22 @@ Every script uses `set -euo pipefail` and colour-coded output:
 - **Green** — success
 - **Yellow** — warning / action required
 - **Red** — error (written to stderr)
+
+---
+
+## Table of Contents
+
+- [Quick reference](#quick-reference)
+- [install.sh](#installsh)
+- [uninstall.sh](#uninstallsh)
+- [rebuild.sh](#rebuildsh)
+- [start.sh](#startsh)
+- [stop.sh](#stopsh)
+- [restart.sh](#restartsh)
+- [logs.sh](#logssh)
+- [status.sh](#statussh)
+- [dev.sh](#devsh)
+- [backup.sh](#backupsh)
 
 ---
 
@@ -74,6 +95,8 @@ Swagger UI  http://localhost:11650/docs
 phpMyAdmin  http://localhost:11651  (login required)
 ```
 
+[↑ Table of Contents](#table-of-contents)
+
 ---
 
 ## uninstall.sh
@@ -94,6 +117,8 @@ Stops and removes all Bookmark Manager services. Interactively asks before remov
 6. **Asks:** delete DB data volume at `~/.local/share/bookmark-manager/prod-db`? (default: **N**, with a prominent warning)
 
 > **Data safety:** The DB volume is never deleted without an explicit `y` confirmation. This preserves all bookmark data across uninstall/reinstall cycles.
+
+[↑ Table of Contents](#table-of-contents)
 
 ---
 
@@ -133,6 +158,8 @@ cd ..
 ./scripts/rebuild.sh   # migrations run automatically on container start
 ```
 
+[↑ Table of Contents](#table-of-contents)
+
 ---
 
 ## start.sh
@@ -145,6 +172,8 @@ Starts the pod and all three containers (MariaDB, phpMyAdmin, API).
 
 Equivalent to `systemctl --user start bookmark-pod.service`. Prints the service URLs on success.
 
+[↑ Table of Contents](#table-of-contents)
+
 ---
 
 ## stop.sh
@@ -156,6 +185,8 @@ Stops the pod and all three containers gracefully.
 ```
 
 Equivalent to `systemctl --user stop bookmark-pod.service`. DB data is preserved.
+
+[↑ Table of Contents](#table-of-contents)
 
 ---
 
@@ -179,6 +210,8 @@ Restarts one specific service or the entire pod.
 
 > Tip: after a `rebuild.sh` the API is already restarted automatically. Use `restart.sh api` only when you need to restart without rebuilding the image.
 
+[↑ Table of Contents](#table-of-contents)
+
 ---
 
 ## logs.sh
@@ -200,6 +233,8 @@ Tails `journalctl --user` logs for one or all services. Exits on Ctrl+C.
 | `pma` | `bookmark-pma` |
 | `all` | `bookmark-api` + `bookmark-db` + `bookmark-pma` |
 
+[↑ Table of Contents](#table-of-contents)
+
 ---
 
 ## status.sh
@@ -220,6 +255,8 @@ systemctl --user status bookmark-pod.service \
 ```
 
 Does not exit non-zero when services are inactive — safe to run at any time.
+
+[↑ Table of Contents](#table-of-contents)
 
 ---
 
@@ -247,6 +284,8 @@ systemctl --user stop bookmark-api.service  # stop only the API container
 ./scripts/dev.sh              # run API locally against the container DB
 ```
 
+[↑ Table of Contents](#table-of-contents)
+
 ---
 
 ## backup.sh
@@ -270,6 +309,8 @@ Dumps the live MariaDB database to a gzip-compressed SQL file in `backups/`.
 - `backups/` is gitignored — dump files are never committed.
 - A backup is also available via the browser at `GET /backup?token=<BACKUP_TOKEN>` (set `BACKUP_TOKEN` in `api/.env`).
 - To restore: `gunzip -c backups/<file>.sql.gz | podman exec -i bookmark-db mariadb -u<user> -p<pass> <dbname>`
+
+[↑ Table of Contents](#table-of-contents)
 
 ---
 

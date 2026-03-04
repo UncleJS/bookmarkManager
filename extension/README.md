@@ -1,27 +1,68 @@
 # Bookmark Manager Chrome Extension
 
+[![License: CC BY-SA 4.0](https://img.shields.io/badge/License-CC%20BY--SA%204.0-lightgrey.svg)](https://creativecommons.org/licenses/by-sa/4.0/)
+[![Chrome Extension](https://img.shields.io/badge/Extension-Manifest%20V3-4285F4?logo=googlechrome&logoColor=white)](https://developer.chrome.com/docs/extensions/mv3/)
+[![JavaScript](https://img.shields.io/badge/Language-JavaScript-f7df1e?logo=javascript&logoColor=black)](https://developer.mozilla.org/en-US/docs/Web/JavaScript)
+[![Bun](https://img.shields.io/badge/API%20Runtime-Bun-black?logo=bun)](https://bun.sh)
+
 A Chrome Manifest V3 extension that captures bookmarks and sends them to a local API for storage and organization.
+
+---
+
+## Table of Contents
+
+- [Features](#features)
+  - [Bookmark Capture](#bookmark-capture)
+  - [Organisation](#organisation)
+  - [User Interface](#user-interface)
+- [Installation](#installation)
+  - [Prerequisites](#prerequisites)
+  - [Load the extension in Chrome](#load-the-extension-in-chrome)
+  - [Configure API URL](#configure-api-url-if-needed)
+- [Architecture](#architecture)
+  - [File/Folder Structure](#filefolder-structure)
+  - [Key Components](#key-components)
+- [Permissions](#permissions)
+- [Data Flow](#data-flow)
+  - [Quick Save](#quick-save)
+  - [Full Save](#full-save-popup)
+  - [Tag Autocomplete](#tag-autocomplete)
+  - [Duplicate Detection](#duplicate-detection)
+- [API Endpoints Used](#api-endpoints-used)
+- [Edge Cases](#edge-cases)
+- [Security Considerations](#security-considerations)
+
+---
 
 ## Features
 
 ### Bookmark Capture
+
 - **Quick Save**: Right-click context menu for instant bookmark saving
 - **Full Save**: Detailed form with tags, classifications, and metadata
 - **Auto-fill**: Automatically captures page title, URL, and favicon
 - **Duplicate Detection**: Highlights existing bookmarks with the same URL and lets you cancel or proceed with saving another copy
 
+[↑ Table of Contents](#table-of-contents)
+
 ### Organisation
+
 - **Classifications**: Hierarchical categorisation system with groups
 - **Tags**: Flexible tagging with autocomplete and search
 - **Flags**: Boolean properties — `readLater`, `hotTopic`, `cheatsheets`, `forReview`
 
+[↑ Table of Contents](#table-of-contents)
+
 ### User Interface
+
 - **Popup**: Main bookmark capture form
 - **Context Menus**: Quick access from right-click menu
 - **Options Page**: API base URL configuration
 - **Notifications**: Success/error feedback
 
 ---
+
+[↑ Table of Contents](#table-of-contents)
 
 ## Installation
 
@@ -42,6 +83,8 @@ curl http://localhost:11650/health
 # → {"status":"ok"}
 ```
 
+[↑ Table of Contents](#table-of-contents)
+
 ### Load the extension in Chrome
 
 1. Open `chrome://extensions`
@@ -49,6 +92,8 @@ curl http://localhost:11650/health
 3. Click **Load unpacked**
 4. Select the `extension/` directory from this repo
 5. The extension icon appears in the toolbar
+
+[↑ Table of Contents](#table-of-contents)
 
 ### Configure API URL (if needed)
 
@@ -59,6 +104,8 @@ The extension defaults to `http://localhost:11650`. To change it:
 3. Click **Save**
 
 ---
+
+[↑ Table of Contents](#table-of-contents)
 
 ## Architecture
 
@@ -84,6 +131,8 @@ extension/
     └── icons/              # Extension icons
 ```
 
+[↑ Table of Contents](#table-of-contents)
+
 ### Key Components
 
 #### Service Worker (`background.js`)
@@ -106,6 +155,8 @@ extension/
 
 ---
 
+[↑ Table of Contents](#table-of-contents)
+
 ## Permissions
 
 | Permission | Purpose |
@@ -119,6 +170,8 @@ extension/
 
 ---
 
+[↑ Table of Contents](#table-of-contents)
+
 ## Data Flow
 
 ### Quick Save
@@ -130,6 +183,8 @@ Right-click page
   → POST /bookmarks with default flags
   → success/error notification
 ```
+
+[↑ Table of Contents](#table-of-contents)
 
 ### Full Save (popup)
 
@@ -143,6 +198,8 @@ Click extension icon
   → success/error shown in popup
 ```
 
+[↑ Table of Contents](#table-of-contents)
+
 ### Tag Autocomplete
 
 ```
@@ -151,6 +208,8 @@ User types in tag field
   → background.js queries GET /tags?query=...
   → results populate dropdown
 ```
+
+[↑ Table of Contents](#table-of-contents)
 
 ### Duplicate Detection
 
@@ -163,6 +222,8 @@ POST /bookmarks → API returns 409 with duplicates array
 
 ---
 
+[↑ Table of Contents](#table-of-contents)
+
 ## API Endpoints Used
 
 | Method | Path | Purpose |
@@ -174,6 +235,8 @@ POST /bookmarks → API returns 409 with duplicates array
 | `POST` | `/bookmarks` | Save a bookmark |
 
 ---
+
+[↑ Table of Contents](#table-of-contents)
 
 ## Edge Cases
 
@@ -188,12 +251,16 @@ POST /bookmarks → API returns 409 with duplicates array
 
 ---
 
+[↑ Table of Contents](#table-of-contents)
+
 ## Security Considerations
 
 - No authentication (single-user local deployment on trusted network)
 - No content scripts — page content is never read beyond URL and title
 - No sensitive data stored in `chrome.storage`
 - Input validation on both popup and API side
+
+[↑ Table of Contents](#table-of-contents)
 
 ---
 

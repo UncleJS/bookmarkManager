@@ -1,6 +1,45 @@
 # Bookmark Manager — Project Reference
 
+[![License: CC BY-SA 4.0](https://img.shields.io/badge/License-CC%20BY--SA%204.0-lightgrey.svg)](https://creativecommons.org/licenses/by-sa/4.0/)
+[![Bun](https://img.shields.io/badge/Runtime-Bun-black?logo=bun)](https://bun.sh)
+[![Elysia](https://img.shields.io/badge/Framework-Elysia-5f67ff)](https://elysiajs.com)
+[![MariaDB](https://img.shields.io/badge/Database-MariaDB%2011-003545?logo=mariadb)](https://mariadb.org)
+[![Drizzle](https://img.shields.io/badge/ORM-Drizzle-c5f74f?logo=drizzle&logoColor=black)](https://orm.drizzle.team)
+[![Podman](https://img.shields.io/badge/Container-Podman-892ca0?logo=podman)](https://podman.io)
+[![Chrome Extension](https://img.shields.io/badge/Extension-Manifest%20V3-4285F4?logo=googlechrome&logoColor=white)](https://developer.chrome.com/docs/extensions/mv3/)
+[![OpenAPI](https://img.shields.io/badge/API-OpenAPI%203.0-85ea2d?logo=openapiinitiative&logoColor=black)](http://localhost:11650/docs)
+
 A precise description of what is built, how it works, and how to extend it.
+
+---
+
+## Table of Contents
+
+- [1) Goals and Non-Goals](#1-goals-and-non-goals)
+- [2) High-Level Architecture](#2-high-level-architecture)
+- [3) Functional Requirements](#3-functional-requirements)
+- [4) Non-Functional Requirements](#4-non-functional-requirements)
+- [5) Chrome Extension (Manifest V3)](#5-chrome-extension-manifest-v3)
+  - [5.1 Tech Choices](#51-tech-choices)
+  - [5.2 File/Folder Structure](#52-filefolder-structure)
+  - [5.3 Manifest](#53-manifest)
+  - [5.4 Popup UI Behavior](#54-popup-ui-behavior)
+  - [5.5 Background Service Worker](#55-background-service-worker)
+  - [5.6 Edge Cases](#56-edge-cases)
+- [6) API (Bun/Elysia + MariaDB)](#6-api-bunelysia--mariadb)
+  - [6.1 Tech Choices](#61-tech-choices)
+  - [6.2 Project Structure](#62-project-structure)
+  - [6.3 Environment Variables](#63-environment-variables)
+  - [6.4 Authentication](#64-authentication)
+  - [6.5 Endpoints](#65-endpoints)
+  - [6.6 Database Schema](#66-database-schema)
+  - [6.7 Migrations](#67-migrations)
+  - [6.8 Validation and Error Handling](#68-validation-and-error-handling)
+  - [6.9 Duplicate Handling](#69-duplicate-handling)
+- [7) Infrastructure (Rootless Podman + Quadlet)](#7-infrastructure-rootless-podman--quadlet)
+- [8) Contracts and Example Payloads](#8-contracts-and-example-payloads)
+- [9) Security and Privacy Considerations](#9-security-and-privacy-considerations)
+- [10) Glossary](#10-glossary)
 
 ---
 
@@ -20,6 +59,8 @@ A precise description of what is built, how it works, and how to extend it.
 
 ---
 
+[↑ Table of Contents](#table-of-contents)
+
 ## 2) High-Level Architecture
 
 - Chrome Extension (Manifest V3)
@@ -37,6 +78,8 @@ A precise description of what is built, how it works, and how to extend it.
   4) Context menu "Full Save" ➜ background opens the popup, pre-filled with url/title.
 
 ---
+
+[↑ Table of Contents](#table-of-contents)
 
 ## 3) Functional Requirements
 
@@ -61,6 +104,8 @@ A precise description of what is built, how it works, and how to extend it.
 
 ---
 
+[↑ Table of Contents](#table-of-contents)
+
 ## 4) Non-Functional Requirements
 
 - Simplicity: vanilla JS for the extension.
@@ -72,11 +117,15 @@ A precise description of what is built, how it works, and how to extend it.
 
 ---
 
+[↑ Table of Contents](#table-of-contents)
+
 ## 5) Chrome Extension (Manifest V3)
 
 ### 5.1 Tech Choices
 - HTML, CSS, JS (ES modules).
 - No frameworks for popup UI.
+
+[↑ Table of Contents](#table-of-contents)
 
 ### 5.2 File/Folder Structure
 
@@ -100,10 +149,14 @@ extension/
     └── icons/
 ```
 
+[↑ Table of Contents](#table-of-contents)
+
 ### 5.3 Manifest
 - `permissions`: `["tabs", "activeTab", "contextMenus", "storage", "notifications"]`
 - `host_permissions`: `["http://localhost:11650/*"]`
 - Configurable via Options page (stored in `chrome.storage.sync`)
+
+[↑ Table of Contents](#table-of-contents)
 
 ### 5.4 Popup UI Behavior
 - On load: read active tab, fetch classifications and tag suggestions, populate form.
@@ -111,12 +164,16 @@ extension/
 - Classification creation: inline affordance → POST /classifications → refresh dropdown.
 - Submission: validate, construct payload, send via background message, disable button + loader, show success/error.
 
+[↑ Table of Contents](#table-of-contents)
+
 ### 5.5 Background Service Worker
 - Registers context menus on install/activate.
 - Quick Save: captures active tab → POST /bookmarks → notification.
 - Full Save: opens popup programmatically (fallback to window if blocked).
 - Centralises all API calls (reads base URL from storage, fetch with timeouts, error mapping).
 - Message types: `getInitialData`, `createTag`, `createClassification`, `saveBookmark`, `searchTags`.
+
+[↑ Table of Contents](#table-of-contents)
 
 ### 5.6 Edge Cases
 - Very long titles/URLs: truncate in UI display; send full to API.
@@ -127,12 +184,16 @@ extension/
 
 ---
 
+[↑ Table of Contents](#table-of-contents)
+
 ## 6) API (Bun/Elysia + MariaDB)
 
 ### 6.1 Tech Choices
 - Bun runtime, Elysia framework, Drizzle ORM, mysql2 driver, TypeScript.
 - Swagger UI at `/docs`; OpenAPI spec at `/openapi.json`.
 - Environment loaded automatically by Bun from `api/.env`.
+
+[↑ Table of Contents](#table-of-contents)
 
 ### 6.2 Project Structure
 
@@ -158,6 +219,8 @@ api/
 └── .env.example                # Template — copy to .env
 ```
 
+[↑ Table of Contents](#table-of-contents)
+
 ### 6.3 Environment Variables
 
 | Variable | Default | Description |
@@ -177,8 +240,12 @@ api/
 | `PMA_PORT` | `3306` | phpMyAdmin DB port |
 | `PMA_ABSOLUTE_URI` | `http://localhost:11651/` | phpMyAdmin canonical URL |
 
+[↑ Table of Contents](#table-of-contents)
+
 ### 6.4 Authentication
 - None. API runs in a trusted local environment.
+
+[↑ Table of Contents](#table-of-contents)
 
 ### 6.5 Endpoints
 
@@ -241,6 +308,8 @@ Interactive docs always available at **`http://localhost:11650/docs`**.
 - Returns `409` with a `duplicates` array if an active bookmark with the same URL already exists.
 - Send with `allowDuplicate: true` to create a copy after user confirmation.
 
+[↑ Table of Contents](#table-of-contents)
+
 ### 6.6 Database Schema
 
 All tables include `archived_at DATETIME NULL`. `NULL` = active. "Delete" sets `archived_at = NOW()`.
@@ -256,16 +325,22 @@ All tables include `archived_at DATETIME NULL`. `NULL` = active. "Delete" sets `
 
 **Uniqueness among active rows** — `tags` and `classifications` use a generated column (`name_active`) that is `NULL` when archived, with a unique index. Archived rows may share names with active rows.
 
+[↑ Table of Contents](#table-of-contents)
+
 ### 6.7 Migrations
 - Managed by Drizzle Kit. Schema defined in `src/db/schema.ts`.
 - Generate: `bun run db:generate` → Apply: `bun run db:migrate`
 - Migration files: `src/db/migrations/`
 - Migrations run automatically at container start (Dockerfile CMD).
 
+[↑ Table of Contents](#table-of-contents)
+
 ### 6.8 Validation and Error Handling
 - Frontend validates before calling the API.
 - API validates with Elysia's type system and DB constraints.
 - Error response shape: `{ error: string, details?: any }`.
+
+[↑ Table of Contents](#table-of-contents)
 
 ### 6.9 Duplicate Handling
 - Before inserting, query for existing bookmarks with the same URL.
@@ -273,6 +348,8 @@ All tables include `archived_at DATETIME NULL`. `NULL` = active. "Delete" sets `
 - Client resends with `allowDuplicate: true` after user confirmation.
 
 ---
+
+[↑ Table of Contents](#table-of-contents)
 
 ## 7) Infrastructure (Rootless Podman + Quadlet)
 
@@ -355,6 +432,8 @@ loginctl enable-linger $USER
 
 ---
 
+[↑ Table of Contents](#table-of-contents)
+
 ## 8) Contracts and Example Payloads
 
 POST /bookmarks request:
@@ -392,6 +471,8 @@ GET /tags response:
 
 ---
 
+[↑ Table of Contents](#table-of-contents)
+
 ## 9) Security and Privacy Considerations
 
 - No authentication or CORS; operate in a trusted local network only.
@@ -401,6 +482,8 @@ GET /tags response:
 
 ---
 
+[↑ Table of Contents](#table-of-contents)
+
 ## 10) Glossary
 
 - **Quick Save**: one-click save of url/title with default flags; no description, tags, or classification.
@@ -408,6 +491,8 @@ GET /tags response:
 - **Classification**: a single category; grouped under a Classification Group for UI optgroup display.
 - **Tags**: multiple labels that can be attached to bookmarks.
 - **Archive**: soft-delete — sets `archived_at = NOW()`; row remains in DB and can be restored.
+
+[↑ Table of Contents](#table-of-contents)
 
 ---
 

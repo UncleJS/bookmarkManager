@@ -1,6 +1,36 @@
 # Bookmark Manager API
 
+[![License: CC BY-SA 4.0](https://img.shields.io/badge/License-CC%20BY--SA%204.0-lightgrey.svg)](https://creativecommons.org/licenses/by-sa/4.0/)
+[![Bun](https://img.shields.io/badge/Runtime-Bun-black?logo=bun)](https://bun.sh)
+[![Elysia](https://img.shields.io/badge/Framework-Elysia-5f67ff)](https://elysiajs.com)
+[![MariaDB](https://img.shields.io/badge/Database-MariaDB%2011-003545?logo=mariadb)](https://mariadb.org)
+[![Drizzle](https://img.shields.io/badge/ORM-Drizzle-c5f74f?logo=drizzle&logoColor=black)](https://orm.drizzle.team)
+[![OpenAPI](https://img.shields.io/badge/API-OpenAPI%203.0-85ea2d?logo=openapiinitiative&logoColor=black)](http://localhost:11650/docs)
+[![Podman](https://img.shields.io/badge/Container-Podman-892ca0?logo=podman)](https://podman.io)
+
 A Bun + Elysia API for managing bookmarks, tags, and classifications. Backed by MariaDB with Drizzle ORM. Data is never hard-deleted — all "delete" actions archive rows (`archived_at`).
+
+---
+
+## Table of Contents
+
+- [Quick Start](#quick-start)
+  - [1. Configure environment](#1-configure-environment)
+  - [2. Install and start](#2-install-and-start-from-repo-root)
+  - [3. Health check](#3-health-check)
+  - [4. Boot persistence](#4-boot-persistence)
+- [Scripts](#scripts-from-repo-root)
+- [Bun scripts](#bun-scripts-in-api)
+- [API Endpoints](#api-endpoints)
+  - [Health & UI](#health--ui)
+  - [Bookmarks](#bookmarks)
+  - [Tags](#tags)
+  - [Classifications](#classifications)
+  - [Classification Groups](#classification-groups)
+- [Database Schema](#database-schema)
+- [Environment Variables](#environment-variables)
+- [Infrastructure](#infrastructure)
+- [phpMyAdmin](#phpmyadmin)
 
 ---
 
@@ -63,6 +93,8 @@ loginctl enable-linger $USER
 
 ---
 
+[↑ Table of Contents](#table-of-contents)
+
 ## Scripts (from repo root)
 
 | Script | Description |
@@ -78,6 +110,8 @@ loginctl enable-linger $USER
 | `./scripts/dev.sh` | Run API locally via `bun run dev` (no container, watch mode) |
 
 ---
+
+[↑ Table of Contents](#table-of-contents)
 
 ## Bun scripts (in `api/`)
 
@@ -102,6 +136,8 @@ cd api && bun run db:generate
 
 ---
 
+[↑ Table of Contents](#table-of-contents)
+
 ## API Endpoints
 
 Interactive docs always available at **`http://localhost:11650/docs`**.
@@ -118,6 +154,8 @@ Interactive docs always available at **`http://localhost:11650/docs`**.
 | `GET` | `/categories` | Category management UI |
 | `GET` | `/flag-counts` | Count of active bookmarks per flag |
 
+[↑ Table of Contents](#table-of-contents)
+
 ### Bookmarks
 
 | Method | Path | Description |
@@ -128,6 +166,8 @@ Interactive docs always available at **`http://localhost:11650/docs`**.
 | `PATCH` | `/bookmarks/:id/archive` | Soft-delete (sets `archivedAt`) |
 | `PATCH` | `/bookmarks/:id/restore` | Restore archived bookmark |
 
+[↑ Table of Contents](#table-of-contents)
+
 ### Tags
 
 | Method | Path | Description |
@@ -136,6 +176,8 @@ Interactive docs always available at **`http://localhost:11650/docs`**.
 | `POST` | `/tags` | Create tag |
 | `PATCH` | `/tags/:id/archive` | Archive tag |
 | `PATCH` | `/tags/:id/restore` | Restore archived tag |
+
+[↑ Table of Contents](#table-of-contents)
 
 ### Classifications
 
@@ -147,6 +189,8 @@ Interactive docs always available at **`http://localhost:11650/docs`**.
 | `PATCH` | `/classifications/:id/reorder` | Set display order |
 | `PATCH` | `/classifications/:id/archive` | Archive classification |
 | `PATCH` | `/classifications/:id/restore` | Restore archived classification |
+
+[↑ Table of Contents](#table-of-contents)
 
 ### Classification Groups
 
@@ -167,6 +211,8 @@ Interactive docs always available at **`http://localhost:11650/docs`**.
 
 ---
 
+[↑ Table of Contents](#table-of-contents)
+
 ## Database Schema
 
 All tables include `archived_at DATETIME NULL`. A `NULL` value means the row is active. "Deleting" a row sets `archived_at = NOW()`. All queries filter on `archived_at IS NULL`.
@@ -183,6 +229,8 @@ All tables include `archived_at DATETIME NULL`. A `NULL` value means the row is 
 **Uniqueness among active rows** — `tags` and `classifications` use a generated column (`name_active`) that is `NULL` when archived, with a unique index on that column. This allows archived rows to share names with active rows.
 
 ---
+
+[↑ Table of Contents](#table-of-contents)
 
 ## Environment Variables
 
@@ -206,6 +254,8 @@ All vars live in `api/.env` (gitignored). Copy from `api/.env.example` to get st
 | `PMA_ABSOLUTE_URI` | `http://localhost:11651/` | phpMyAdmin canonical URL |
 
 ---
+
+[↑ Table of Contents](#table-of-contents)
 
 ## Infrastructure
 
@@ -240,12 +290,16 @@ Created automatically by `scripts/install.sh`. **Not removed by `uninstall.sh` u
 
 ---
 
+[↑ Table of Contents](#table-of-contents)
+
 ## phpMyAdmin
 
 Available at `http://localhost:11651`.
 
 - Auto-login is **disabled** — credentials required on every login.
 - Connect with the `bookmark` user (or `root` if needed).
+
+[↑ Table of Contents](#table-of-contents)
 
 ---
 

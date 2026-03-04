@@ -1,26 +1,50 @@
-Creative Commons Attribution-ShareAlike 4.0 International
+# License
+
+[![License: CC BY-SA 4.0](https://img.shields.io/badge/License-CC%20BY--SA%204.0-lightgrey.svg)](https://creativecommons.org/licenses/by-sa/4.0/)
+
+## Table of Contents
+
+- [Creative Commons Attribution-ShareAlike 4.0 International](#creative-commons-attribution-sharealike-40-international)
+- [You are free to](#you-are-free-to)
+- [Under the following terms](#under-the-following-terms)
+- [Full license text](#full-license-text)
+
+---
+
+## Creative Commons Attribution-ShareAlike 4.0 International
 
 Copyright (c) 2026 Jaco Steyn
 
 This work is licensed under the Creative Commons Attribution-ShareAlike 4.0
 International License.
 
-You are free to:
+---
 
-• Share — copy and redistribute the material in any medium or format
-• Adapt — remix, transform, and build upon the material for any purpose,
-  even commercially.
+[↑ Table of Contents](#table-of-contents)
 
-Under the following terms:
+## You are free to
 
-• Attribution — You must give appropriate credit, provide a link to the
-  license, and indicate if changes were made.
+- **Share** — copy and redistribute the material in any medium or format
+- **Adapt** — remix, transform, and build upon the material for any purpose, even commercially.
 
-• ShareAlike — If you remix, transform, or build upon the material, you must
-  distribute your contributions under the same license.
+---
 
-Full license text:
+[↑ Table of Contents](#table-of-contents)
+
+## Under the following terms
+
+- **Attribution** — You must give appropriate credit, provide a link to the license, and indicate if changes were made.
+- **ShareAlike** — If you remix, transform, or build upon the material, you must distribute your contributions under the same license.
+
+---
+
+[↑ Table of Contents](#table-of-contents)
+
+## Full license text
+
 https://creativecommons.org/licenses/by-sa/4.0/
+
+[↑ Table of Contents](#table-of-contents)
 
 ---
 

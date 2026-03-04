@@ -1,36 +1,46 @@
 # Bookmark Manager
 
+[![License: CC BY-SA 4.0](https://img.shields.io/badge/License-CC%20BY--SA%204.0-lightgrey.svg)](https://creativecommons.org/licenses/by-sa/4.0/)
+[![Bun](https://img.shields.io/badge/Runtime-Bun-black?logo=bun)](https://bun.sh)
+[![Elysia](https://img.shields.io/badge/Framework-Elysia-5f67ff)](https://elysiajs.com)
+[![MariaDB](https://img.shields.io/badge/Database-MariaDB%2011-003545?logo=mariadb)](https://mariadb.org)
+[![Podman](https://img.shields.io/badge/Container-Podman-892ca0?logo=podman)](https://podman.io)
+[![Chrome Extension](https://img.shields.io/badge/Extension-Manifest%20V3-4285F4?logo=googlechrome&logoColor=white)](https://developer.chrome.com/docs/extensions/mv3/)
+[![OpenAPI](https://img.shields.io/badge/API-OpenAPI%203.0-85ea2d?logo=openapiinitiative&logoColor=black)](http://localhost:11650/docs)
+
 A Chrome extension (MV3) that captures bookmarks and sends them to a local Bun/Elysia API backed by MariaDB.
 
 Everything is implemented in JavaScript (no TypeScript) for the extension; the API uses TypeScript with Bun.
 
+---
+
 ## Table of Contents
 
-- [Bookmark Manager](#bookmark-manager)
-  - [Table of Contents](#table-of-contents)
-  - [Stack](#stack)
-  - [Quick Start](#quick-start)
-    - [1. Configure environment](#1-configure-environment)
-    - [2. Install (build image + deploy Quadlet + start pod)](#2-install-build-image--deploy-quadlet--start-pod)
-    - [3. Health check](#3-health-check)
-    - [4. Load the Chrome extension](#4-load-the-chrome-extension)
-  - [Scripts](#scripts)
-  - [Repository Structure](#repository-structure)
-  - [API Overview](#api-overview)
-    - [Health \& UI](#health--ui)
-    - [Bookmarks](#bookmarks)
-    - [Tags](#tags)
-    - [Classifications](#classifications)
-    - [Classification Groups](#classification-groups)
-  - [Chrome Extension](#chrome-extension)
-  - [Backup](#backup)
-  - [Troubleshooting](#troubleshooting)
-  - [License](#license)
+- [Stack](#stack)
+- [Quick Start](#quick-start)
+  - [1. Configure environment](#1-configure-environment)
+  - [2. Install](#2-install-build-image--deploy-quadlet--start-pod)
+  - [3. Health check](#3-health-check)
+  - [4. Load the Chrome extension](#4-load-the-chrome-extension)
+- [Scripts](#scripts)
+- [Repository Structure](#repository-structure)
+- [API Overview](#api-overview)
+  - [Health & UI](#health--ui)
+  - [Bookmarks](#bookmarks)
+  - [Tags](#tags)
+  - [Classifications](#classifications)
+  - [Classification Groups](#classification-groups)
+- [Chrome Extension](#chrome-extension)
+- [Backup](#backup)
+- [Troubleshooting](#troubleshooting)
+- [License](#license)
+
+---
 
 </br></br>
 ![Homepage](screenshotMain.png)
 </br></br>
-![Edit Bookamrk](screenshotEditBookmark.png)
+![Edit Bookmark](screenshotEditBookmark.png)
 
 ---
 
@@ -115,6 +125,8 @@ All scripts live in `scripts/` and are run from the repo root.
 | `./scripts/dev.sh` | Run API locally via `bun run dev` (no container) |
 | `./scripts/backup.sh` | Dump MariaDB to `backups/bookmark_YYYY-MM-DD_HHMMSS.sql.gz` |
 
+See [`scripts/README.md`](scripts/README.md) for full per-script documentation.
+
 ---
 
 [↑ Table of Contents](#table-of-contents)
@@ -183,6 +195,8 @@ Interactive docs always available at **`http://localhost:11650/docs`**.
 | `GET` | `/flag-counts` | Count of active bookmarks per flag |
 | `GET` | `/backup` | Download a gzipped MariaDB dump (requires `?token=`) |
 
+[↑ Table of Contents](#table-of-contents)
+
 ### Bookmarks
 
 | Method | Path | Description |
@@ -193,6 +207,8 @@ Interactive docs always available at **`http://localhost:11650/docs`**.
 | `PATCH` | `/bookmarks/:id/archive` | Soft-delete (sets `archivedAt`) |
 | `PATCH` | `/bookmarks/:id/restore` | Restore archived bookmark |
 
+[↑ Table of Contents](#table-of-contents)
+
 ### Tags
 
 | Method | Path | Description |
@@ -201,6 +217,8 @@ Interactive docs always available at **`http://localhost:11650/docs`**.
 | `POST` | `/tags` | Create tag |
 | `PATCH` | `/tags/:id/archive` | Archive tag |
 | `PATCH` | `/tags/:id/restore` | Restore archived tag |
+
+[↑ Table of Contents](#table-of-contents)
 
 ### Classifications
 
@@ -212,6 +230,8 @@ Interactive docs always available at **`http://localhost:11650/docs`**.
 | `PATCH` | `/classifications/:id/reorder` | Set display order |
 | `PATCH` | `/classifications/:id/archive` | Archive classification |
 | `PATCH` | `/classifications/:id/restore` | Restore archived classification |
+
+[↑ Table of Contents](#table-of-contents)
 
 ### Classification Groups
 
@@ -237,8 +257,8 @@ Interactive docs always available at **`http://localhost:11650/docs`**.
 - Click the action icon for the popup (full save with form)
 - Right-click a page for context menus: **Quick Save** / **Full Save**
 
-See `extension/README.md` for full extension documentation.
-See `api/README.md` for full API documentation.
+See [`extension/README.md`](extension/README.md) for full extension documentation.
+See [`api/README.md`](api/README.md) for full API documentation.
 
 ---
 
