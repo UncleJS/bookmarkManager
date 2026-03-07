@@ -14,7 +14,7 @@
 set -euo pipefail
 
 QUADLET_DEST="${HOME}/.config/containers/systemd"
-DB_VOLUME_DIR="${HOME}/.local/share/bookmark-manager/prod-db"
+DB_VOLUME_NAME="bookmark-db-data"
 
 # ---- colours -----------------------------------------------------------------
 RED='\033[0;31m'; YELLOW='\033[1;33m'; GREEN='\033[0;32m'; CYAN='\033[0;36m'; NC='\033[0m'
@@ -35,7 +35,7 @@ success "Disabled."
 # ---- 3. remove Quadlet files -------------------------------------------------
 info "Removing Quadlet unit files..."
 REMOVED=0
-for f in bookmark.pod bookmark-api.container bookmark-db.container bookmark-pma.container; do
+for f in bookmark.pod bookmark-db.volume bookmark-api.container bookmark-db.container bookmark-pma.container; do
   TARGET="${QUADLET_DEST}/${f}"
   if [[ -f "${TARGET}" ]]; then
     rm -f "${TARGET}"
@@ -75,19 +75,19 @@ warn "================================================================"
 warn "  WARNING: Removing the DB data volume will PERMANENTLY DELETE"
 warn "  all bookmark data stored in MariaDB."
 warn ""
-warn "  Volume path: ${DB_VOLUME_DIR}"
+warn "  Podman volume: ${DB_VOLUME_NAME}"
 warn "================================================================"
 read -r -p "  Delete DB data volume? [y/N] " REMOVE_DATA
 REMOVE_DATA="${REMOVE_DATA:-N}"
 if [[ "${REMOVE_DATA,,}" == "y" ]]; then
-  if [[ -d "${DB_VOLUME_DIR}" ]]; then
-    rm -rf "${DB_VOLUME_DIR}"
+  if podman volume exists "${DB_VOLUME_NAME}" 2>/dev/null; then
+    podman volume rm "${DB_VOLUME_NAME}"
     success "DB data volume removed."
   else
-    warn "Volume directory not found — nothing to remove."
+    warn "Volume not found — nothing to remove."
   fi
 else
-  info "Keeping DB data (skipped). Data remains at: ${DB_VOLUME_DIR}"
+  info "Keeping DB data (skipped). Data remains in Podman volume: ${DB_VOLUME_NAME}"
 fi
 
 echo ""

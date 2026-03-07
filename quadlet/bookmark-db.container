@@ -8,6 +8,7 @@
 Description=Bookmark Manager production MariaDB
 PartOf=bookmark-pod.service
 After=bookmark-pod.service
+After=bookmark-db-volume.service
 
 [Container]
 Image=docker.io/mariadb:11
@@ -16,8 +17,8 @@ ContainerName=bookmark-db
 # Load all env vars (includes MARIADB_* for container init and DB_* for app)
 EnvironmentFile=%h/0_opencode/bookmarkManager/api/.env
 
-# Persistent data volume
-Volume=/home/jacos/.local/share/bookmark-manager/prod-db:/var/lib/mysql:Z
+# Persistent data volume (named Podman volume)
+Volume=bookmark-db.volume:/var/lib/mysql:Z
 
 # Join the pod
 Pod=bookmark.pod
