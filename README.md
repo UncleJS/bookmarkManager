@@ -1,6 +1,6 @@
 # Bookmark Manager
 
-[![License: CC BY-SA 4.0](https://img.shields.io/badge/License-CC%20BY--SA%204.0-lightgrey.svg)](https://creativecommons.org/licenses/by-sa/4.0/)
+[![License: CC BY-NC-SA 4.0](https://img.shields.io/badge/License-CC%20BY--NC--SA%204.0-lightgrey.svg)](https://creativecommons.org/licenses/by-nc-sa/4.0/)
 [![Bun](https://img.shields.io/badge/Runtime-Bun-black?logo=bun)](https://bun.sh)
 [![Elysia](https://img.shields.io/badge/Framework-Elysia-5f67ff)](https://elysiajs.com)
 [![MariaDB](https://img.shields.io/badge/Database-MariaDB%2011-003545?logo=mariadb)](https://mariadb.org)
@@ -318,12 +318,12 @@ gunzip -c backups/bookmark_YYYY-MM-DD_HHMMSS.sql.gz \
 ## License
 
 This project is licensed under the
-Creative Commons Attribution-ShareAlike 4.0 International (CC BY-SA 4.0).
+Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA 4.0).
 
-https://creativecommons.org/licenses/by-sa/4.0/
+https://creativecommons.org/licenses/by-nc-sa/4.0/
 
 [↑ Table of Contents](#table-of-contents)
 
 ---
 
-© 2026 Jaco Steyn — Licensed under CC BY-SA 4.0
+© 2026 Jaco Steyn — Licensed under CC BY-NC-SA 4.0

@@ -1,3 +1,20 @@
 **/node_modules/
+
+# Environment and secrets
+.env
+.env.*
+.env.example
+*.env
+*.env.*
+
+# Credentials and local secret configs
+**/*credentials*
+**/*secret*
+**/*password*
+**/secrets.*
+**/credentials.*
+**/config.local.*
+
+# Project-specific paths
 api/.env
 backups/
