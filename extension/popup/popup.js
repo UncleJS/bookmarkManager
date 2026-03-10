@@ -480,6 +480,13 @@ function setStatus(text, success = false) {
   s.className = `status-text ${success ? 'success' : (text ? 'error' : '')}`;
 }
 
+function showSaveToast(msg, ok) {
+  var t = document.getElementById('save-toast');
+  if (!t) return;
+  t.textContent = msg;
+  t.className = 'save-toast ' + (ok ? 'ok' : 'err');
+}
+
 /**
  * Render duplicate warning list
  *
@@ -622,18 +629,22 @@ async function onDuplicateConfirm() {
     if (res?.ok) {
       hideDuplicateWarning();
       setStatus('Bookmark saved!', true);
-      setTimeout(() => window.close(), 1200);
+      showSaveToast('✓ Bookmark saved!', true);
+      setTimeout(() => window.close(), 2500);
       return;
     }
 
     if (res?.status === 409 && res?.data?.duplicates?.length) {
       showDuplicateWarning(res.data.duplicates);
       setStatus('Bookmark already exists. Review duplicates below.', false);
+      showSaveToast('✕ Bookmark already exists', false);
     } else {
       setStatus(res?.error || 'Failed to save bookmark', false);
+      showSaveToast('✕ ' + (res?.error || 'Failed to save bookmark'), false);
     }
   } catch (error) {
     setStatus('Failed to save bookmark', false);
+    showSaveToast('✕ Failed to save bookmark', false);
   } finally {
     const pending = !!state.pendingDuplicate;
     if (pending && confirmBtn) {
@@ -969,18 +980,22 @@ async function onSubmit(e) {
   try {
     const res = await send('saveBookmark', payload);
     if (res?.ok) {
+      showSaveToast('✓ Bookmark saved!', true);
       setStatus('Bookmark saved!', true);
-      setTimeout(() => window.close(), 1200);
+      setTimeout(() => window.close(), 2500);
     } else if (res?.status === 409 && res?.data?.duplicates?.length) {
       saveBtn.disabled = false;
       showDuplicateWarning(res.data.duplicates);
+      showSaveToast('✕ Bookmark already exists', false);
       setStatus('Bookmark already exists. Review duplicates below.', false);
     } else {
       saveBtn.disabled = false;
+      showSaveToast('✕ ' + (res?.error || 'Failed to save bookmark'), false);
       setStatus(res?.error || 'Failed to save bookmark', false);
     }
   } catch (error) {
     saveBtn.disabled = false;
+    showSaveToast('✕ Failed to save bookmark', false);
     setStatus('Failed to save bookmark', false);
   }
 }

@@ -682,3 +682,17 @@ body {
 .dark .dropdown-suggestions::-webkit-scrollbar-thumb:hover {
   background-color: #6b7280;
 }
+
+/* Save toast */
+#save-toast {
+  display: none;
+  align-items: center;
+  gap: 10px;
+  margin: -16px -16px 16px -16px;
+  padding: 14px 16px;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+}
+#save-toast.ok  { display: flex; background: #059669; }
+#save-toast.err { display: flex; background: #dc2626; }

@@ -91,9 +91,40 @@ async function handleQuickSave(tab) {
 
     // Send bookmark to API with timeout
     await apiPost('/bookmarks', payload, { timeoutMs: 8000 });
-    await notify('Bookmark saved', t.title || t.url, 'success');
+    await showPageToast(t.id, '✓ Bookmark saved!', true);
   } catch (e) {
-    await notify('Quick save failed', e.message || String(e), 'error');
+    const t = tab || (await getActiveTab().catch(() => null));
+    if (t?.id) {
+      await showPageToast(t.id, '✕ ' + (e.message || 'Quick save failed'), false);
+    } else {
+      await notify('Quick save failed', e.message || String(e), 'error');
+    }
+  }
+}
+
+/**
+ * Show Page Toast
+ *
+ * Sends a message to the content script in the given tab to display
+ * a floating toast notification on the webpage.
+ * Falls back to chrome.notifications if the content script is unreachable.
+ *
+ * @param {number} tabId - Tab to show the toast in
+ * @param {string} message - Toast message text
+ * @param {boolean} ok - true for success (green), false for error (red)
+ */
+async function showPageToast(tabId, message, ok) {
+  try {
+    // Inject content script on-demand (idempotent — re-injection just re-runs the IIFE,
+    // which re-registers the listener but the old one still works fine)
+    await chrome.scripting.executeScript({
+      target: { tabId },
+      files: ['content/toast-inject.js'],
+    });
+    await chrome.tabs.sendMessage(tabId, { type: 'showToast', message, ok });
+  } catch {
+    // Content script can't run (e.g. chrome:// pages) — fall back to OS notification
+    await notify(ok ? 'Bookmark saved' : 'Save failed', message, ok ? 'success' : 'error');
   }
 }
 
@@ -141,14 +172,17 @@ async function getActiveTab() {
  * @param {'info'|'success'|'warning'|'error'} type - Notification type (for styling or icons)
  */
 async function notify(title, message, type) {
-  // 48x48 blue square PNG base64
-  const iconUrl = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAQAAABz0wA9AAAAM0lEQVR4Ae3OIQEAMAgAsE/4/5lQw3Dg2wQ8f3gK2kJAAACg2bqUoQAAACg2bqUoQAAACg2bqUoQAA0c0D7o3kC0T2fQAAAABJRU5ErkJggg==';
-  await chrome.notifications.create({
-    type: 'basic',
-    iconUrl,
-    title,
-    message,
-  });
+  try {
+    const iconUrl = chrome.runtime.getURL('assets/icons/icon48.png');
+    await chrome.notifications.create({
+      type: 'basic',
+      iconUrl,
+      title,
+      message,
+    });
+  } catch (err) {
+    console.warn('Notification failed:', err);
+  }
 }
 
 /**
