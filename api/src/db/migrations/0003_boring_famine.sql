@@ -1,0 +1,4 @@
+ALTER TABLE `bookmark_classifications` ADD CONSTRAINT `bookmark_classifications_bookmark_id_bookmarks_id_fk` FOREIGN KEY (`bookmark_id`) REFERENCES `bookmarks`(`id`) ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE `bookmark_classifications` ADD CONSTRAINT `bookmark_classifications_classification_id_classifications_id_fk` FOREIGN KEY (`classification_id`) REFERENCES `classifications`(`id`) ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE `bookmark_tags` ADD CONSTRAINT `bookmark_tags_bookmark_id_bookmarks_id_fk` FOREIGN KEY (`bookmark_id`) REFERENCES `bookmarks`(`id`) ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE `bookmark_tags` ADD CONSTRAINT `bookmark_tags_tag_id_tags_id_fk` FOREIGN KEY (`tag_id`) REFERENCES `tags`(`id`) ON DELETE no action ON UPDATE no action;

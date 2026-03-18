@@ -95,8 +95,8 @@ export const bookmarkTags = mysqlTable(
   "bookmark_tags",
   {
     id: int("id").autoincrement().primaryKey(),
-    bookmarkId: int("bookmark_id").notNull(),
-    tagId: int("tag_id").notNull(),
+    bookmarkId: int("bookmark_id").notNull().references(() => bookmarks.id),
+    tagId: int("tag_id").notNull().references(() => tags.id),
     createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`),
     archivedAt: datetime("archived_at"),
     bookmarkIdActive: int("bookmark_id_active").generatedAlwaysAs(
@@ -122,8 +122,8 @@ export const bookmarkClassifications = mysqlTable(
   "bookmark_classifications",
   {
     id: int("id").autoincrement().primaryKey(),
-    bookmarkId: int("bookmark_id").notNull(),
-    classificationId: int("classification_id").notNull(),
+    bookmarkId: int("bookmark_id").notNull().references(() => bookmarks.id),
+    classificationId: int("classification_id").notNull().references(() => classifications.id),
     createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`),
     archivedAt: datetime("archived_at"),
     bookmarkIdActive: int("bookmark_id_active").generatedAlwaysAs(

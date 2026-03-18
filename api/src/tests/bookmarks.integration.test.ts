@@ -120,6 +120,42 @@ describe("create endpoint status codes", () => {
 });
 
 describe("bookmark write transactions", () => {
+  it("rejects bookmark-tag links that reference missing tags", async () => {
+    const [{ id: bookmarkId }] = await db
+      .insert(schema.bookmarks)
+      .values({ url: uniqueUrl("fk-tag"), title: "FK tag" })
+      .$returningId();
+
+    await expect(
+      db.insert(schema.bookmarkTags).values({ bookmarkId, tagId: 999999 })
+    ).rejects.toMatchObject({ code: "ER_NO_REFERENCED_ROW_2" });
+
+    const links = await db
+      .select()
+      .from(schema.bookmarkTags)
+      .where(eq(schema.bookmarkTags.bookmarkId, bookmarkId));
+
+    expect(links).toHaveLength(0);
+  });
+
+  it("rejects bookmark-classification links that reference missing classifications", async () => {
+    const [{ id: bookmarkId }] = await db
+      .insert(schema.bookmarks)
+      .values({ url: uniqueUrl("fk-classification"), title: "FK classification" })
+      .$returningId();
+
+    await expect(
+      db.insert(schema.bookmarkClassifications).values({ bookmarkId, classificationId: 999999 })
+    ).rejects.toMatchObject({ code: "ER_NO_REFERENCED_ROW_2" });
+
+    const links = await db
+      .select()
+      .from(schema.bookmarkClassifications)
+      .where(eq(schema.bookmarkClassifications.bookmarkId, bookmarkId));
+
+    expect(links).toHaveLength(0);
+  });
+
   it("creates bookmark, tags, and classifications atomically on success", async () => {
     const [{ id: tagId }] = await db.insert(schema.tags).values({ name: uniqueName("tag") }).$returningId();
     const [{ id: classificationId }] = await db
