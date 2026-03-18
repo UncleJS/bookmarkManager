@@ -323,7 +323,7 @@ Dumps the live MariaDB database to a gzip-compressed SQL file in `backups/`.
 
 **What it does:**
 
-1. Reads `DB_USER`, `DB_PASSWORD`, `DB_NAME` from `api/.env.api`.
+1. Reads `DB_USER`, `DB_PASSWORD`, `DB_NAME` from `api/.env.api` (or falls back to `api/.env`).
 2. Verifies the `bookmark-db` container is running.
 3. Runs `mariadb-dump --single-transaction --routines --triggers` inside the container.
 4. Pipes the output through `gzip -9` and saves to `backups/bookmark_YYYY-MM-DD_HHMMSS.sql.gz`.
@@ -333,6 +333,29 @@ Dumps the live MariaDB database to a gzip-compressed SQL file in `backups/`.
 - `backups/` is gitignored — dump files are never committed.
 - A backup is also available via the browser at `GET /backup` — send `Authorization: Bearer <BACKUP_TOKEN>` (set `BACKUP_TOKEN` in `api/.env`, then run `./scripts/install.sh` to regenerate `api/.env.api`).
 - To restore: `gunzip -c backups/<file>.sql.gz | podman exec -i bookmark-db mariadb -u<user> -p<pass> <dbname>`
+
+## verify-backup.sh
+
+Validates that a backup is intact and can be restored successfully.
+
+```bash
+./scripts/verify-backup.sh --source script
+./scripts/verify-backup.sh --source api
+./scripts/verify-backup.sh --file backups/bookmark_2026-02-25_143022.sql.gz
+```
+
+**What it does:**
+
+1. Generates or loads a `.sql.gz` backup.
+2. Runs `gzip -t` to verify archive integrity.
+3. Restores the dump into a temporary MariaDB database.
+4. Verifies the core bookmark tables exist after restore.
+
+**Notes:**
+
+- `--source script` verifies the `./scripts/backup.sh` path.
+- `--source api` verifies the authenticated `GET /backup` path using `BACKUP_TOKEN` from `api/.env.api` (or `api/.env` if the split env file has not been generated yet).
+- `./scripts/test-integration.sh` runs the API backup route test plus the script-based restore verification automatically.
 
 [↑ Table of Contents](#table-of-contents)
 
