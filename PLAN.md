@@ -152,7 +152,7 @@ extension/
 [↑ Table of Contents](#table-of-contents)
 
 ### 5.3 Manifest
-- `permissions`: `["tabs", "activeTab", "contextMenus", "storage", "notifications"]`
+- `permissions`: `["tabs", "activeTab", "contextMenus", "storage", "notifications", "scripting"]`
 - `host_permissions`: `["http://localhost:11650/*"]`
 - Configurable via Options page (stored in `chrome.storage.sync`)
 

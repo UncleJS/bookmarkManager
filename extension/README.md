@@ -166,6 +166,7 @@ extension/
 | `contextMenus` | Add right-click menu items |
 | `storage` | Save extension settings |
 | `notifications` | Show success/error messages |
+| `scripting` | Inject toast UI on demand in the active page |
 | `host_permissions` | Access API at `http://localhost:11650/*` |
 
 ---
@@ -256,7 +257,7 @@ POST /bookmarks → API returns 409 with duplicates array
 ## Security Considerations
 
 - No authentication (single-user local deployment on trusted network)
-- No content scripts — page content is never read beyond URL and title
+- No always-on content scripts — toast UI is injected on demand only when needed
 - No sensitive data stored in `chrome.storage`
 - Input validation on both popup and API side
 
