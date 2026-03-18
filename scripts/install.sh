@@ -5,14 +5,15 @@
 # Steps:
 #   1. Verify we're at repo root
 #   2. Check / bootstrap api/.env
-#   3. Verify podman is available
-#   4. Pull base images
-#   5. Build localhost/bookmark-api:latest
-#   6. Create DB data volume directory
-#   7. Copy Quadlet unit files into ~/.config/containers/systemd/
-#   8. systemctl --user daemon-reload
-#   9. Enable + start bookmark-pod.service
-#  10. Print service URLs
+#   3. Generate split env files per service
+#   4. Verify podman is available
+#   5. Pull base images
+#   6. Build localhost/bookmark-api:latest
+#   7. Create DB data volume directory
+#   8. Copy Quadlet unit files into ~/.config/containers/systemd/
+#   9. systemctl --user daemon-reload
+#  10. Enable + start bookmark-pod.service
+#  11. Print service URLs
 # =============================================================================
 set -euo pipefail
 
@@ -21,6 +22,9 @@ QUADLET_SRC="${REPO_ROOT}/quadlet"
 QUADLET_DEST="${HOME}/.config/containers/systemd"
 ENV_FILE="${REPO_ROOT}/api/.env"
 ENV_EXAMPLE="${REPO_ROOT}/api/.env.example"
+API_ENV_FILE="${REPO_ROOT}/api/.env.api"
+DB_ENV_FILE="${REPO_ROOT}/api/.env.db"
+PMA_ENV_FILE="${REPO_ROOT}/api/.env.pma"
 DB_VOLUME_NAME="bookmark-db-data"
 OLD_DB_VOLUME_DIR="${HOME}/.local/share/bookmark-manager/prod-db"
 
@@ -30,6 +34,23 @@ info()    { echo -e "${CYAN}[install]${NC} $*"; }
 success() { echo -e "${GREEN}[install]${NC} $*"; }
 warn()    { echo -e "${YELLOW}[install]${NC} $*"; }
 error()   { echo -e "${RED}[install]${NC} $*" >&2; }
+
+write_env_file() {
+  local source_file="$1"
+  local target_file="$2"
+  shift 2
+  : > "${target_file}"
+
+  for key in "$@"; do
+    local line
+    line="$(grep -E "^${key}=" "${source_file}" || true)"
+    if [[ -z "${line}" ]]; then
+      error "Required key '${key}' missing from ${source_file}."
+      exit 1
+    fi
+    printf '%s\n' "${line}" >> "${target_file}"
+  done
+}
 
 # ---- 1. repo root check ------------------------------------------------------
 if [[ ! -d "${REPO_ROOT}/api" || ! -d "${REPO_ROOT}/quadlet" ]]; then
@@ -61,24 +82,34 @@ fi
 
 info "api/.env found."
 
-# ---- 3. podman check ---------------------------------------------------------
+# ---- 3. split env generation -------------------------------------------------
+info "Generating per-service env files..."
+write_env_file "${ENV_FILE}" "${API_ENV_FILE}" \
+  API_PORT LOG_LEVEL DB_HOST DB_PORT DB_USER DB_PASSWORD DB_NAME BACKUP_TOKEN
+write_env_file "${ENV_FILE}" "${DB_ENV_FILE}" \
+  MARIADB_DATABASE MARIADB_USER MARIADB_PASSWORD MARIADB_ROOT_PASSWORD
+write_env_file "${ENV_FILE}" "${PMA_ENV_FILE}" \
+  PMA_HOST PMA_PORT PMA_ABSOLUTE_URI
+success "Generated api/.env.api, api/.env.db, and api/.env.pma"
+
+# ---- 4. podman check ---------------------------------------------------------
 if ! command -v podman &>/dev/null; then
   error "podman not found on PATH. Install Podman before continuing."
   exit 1
 fi
 info "podman: $(podman --version)"
 
-# ---- 4. pull base images -----------------------------------------------------
+# ---- 5. pull base images -----------------------------------------------------
 info "Pulling base images..."
 podman pull docker.io/mariadb:11
 podman pull docker.io/phpmyadmin:5
 
-# ---- 5. build API image ------------------------------------------------------
+# ---- 6. build API image ------------------------------------------------------
 info "Building localhost/bookmark-api:latest ..."
 podman build -t localhost/bookmark-api:latest "${REPO_ROOT}/api"
 success "API image built."
 
-# ---- 6. DB named volume + optional data migration ----------------------------
+# ---- 7. DB named volume + optional data migration ----------------------------
 if ! podman volume exists "${DB_VOLUME_NAME}" 2>/dev/null; then
   info "Creating Podman volume: ${DB_VOLUME_NAME}"
   podman volume create "${DB_VOLUME_NAME}"
@@ -104,7 +135,7 @@ if [[ -d "${OLD_DB_VOLUME_DIR}" ]] && [[ -n "$(ls -A "${OLD_DB_VOLUME_DIR}" 2>/d
   fi
 fi
 
-# ---- 7. copy Quadlet files ---------------------------------------------------
+# ---- 8. copy Quadlet files ---------------------------------------------------
 info "Copying Quadlet unit files to ${QUADLET_DEST}/"
 mkdir -p "${QUADLET_DEST}"
 cp "${QUADLET_SRC}/bookmark.pod"            "${QUADLET_DEST}/bookmark.pod"
@@ -114,17 +145,17 @@ cp "${QUADLET_SRC}/bookmark-db.container"   "${QUADLET_DEST}/bookmark-db.contain
 cp "${QUADLET_SRC}/bookmark-pma.container"  "${QUADLET_DEST}/bookmark-pma.container"
 success "Quadlet files copied."
 
-# ---- 8. daemon-reload --------------------------------------------------------
+# ---- 9. daemon-reload --------------------------------------------------------
 info "Reloading systemd user daemon..."
 systemctl --user daemon-reload
 success "Daemon reloaded."
 
-# ---- 9. enable + start -------------------------------------------------------
+# ---- 10. enable + start ------------------------------------------------------
 info "Enabling and starting bookmark-pod.service..."
 systemctl --user enable --now bookmark-pod.service
 success "bookmark-pod.service started."
 
-# ---- 10. URLs ----------------------------------------------------------------
+# ---- 11. URLs ----------------------------------------------------------------
 echo ""
 success "================================================================"
 success "  Bookmark Manager is running!"

@@ -17,4 +17,10 @@
 
 # Project-specific paths
 api/.env
+api/.env.api
+api/.env.db
+api/.env.pma
+!api/.env.api.example
+!api/.env.db.example
+!api/.env.pma.example
 backups/

@@ -13,8 +13,8 @@ After=bookmark-pod.service bookmark-db.service
 Image=localhost/bookmark-api:latest
 ContainerName=bookmark-api
 
-# Load env vars from prod env file
-EnvironmentFile=%h/0_opencode/bookmarkManager/api/.env
+# Load only API env vars from generated prod env file
+EnvironmentFile=%h/0_opencode/bookmarkManager/api/.env.api
 
 # Join the pod
 Pod=bookmark.pod

@@ -46,13 +46,15 @@ nano api/.env
 
 > **Important:** `MARIADB_USER`/`MARIADB_PASSWORD` and `DB_USER`/`DB_PASSWORD` must match.
 
+`./scripts/install.sh` generates `api/.env.api`, `api/.env.db`, and `api/.env.pma` from `api/.env` so each container only receives the variables it needs.
+
 ### 2. Install and start (from repo root)
 
 ```bash
 ./scripts/install.sh
 ```
 
-This will build the API image, copy Quadlet unit files, reload systemd, and start the pod.
+This will generate split env files, build the API image, copy Quadlet unit files, reload systemd, and start the pod.
 
 Alternatively, run individual steps manually:
 
@@ -241,7 +243,7 @@ All tables include `archived_at DATETIME NULL`. A `NULL` value means the row is 
 
 ## Environment Variables
 
-All vars live in `api/.env` (gitignored). Copy from `api/.env.example` to get started.
+Set values in `api/.env` (gitignored). `./scripts/install.sh` splits that file into `api/.env.api`, `api/.env.db`, and `api/.env.pma` so each service only receives the variables it needs.
 
 | Variable | Default | Description |
 |---|---|---|

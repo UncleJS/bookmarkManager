@@ -3,8 +3,8 @@
 # scripts/backup.sh — Dump the bookmark MariaDB database to a gzipped SQL file.
 #
 # Steps:
-#   1. Verify we're at repo root and api/.env exists
-#   2. Load DB credentials from api/.env
+#   1. Verify we're at repo root and api/.env.api exists
+#   2. Load DB credentials from api/.env.api
 #   3. Verify the bookmark-db container is running
 #   4. Run mariadb-dump inside the container, pipe through gzip
 #   5. Save to backups/bookmark_YYYY-MM-DD_HHMMSS.sql.gz
@@ -12,7 +12,7 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-ENV_FILE="${REPO_ROOT}/api/.env"
+ENV_FILE="${REPO_ROOT}/api/.env.api"
 BACKUP_DIR="${REPO_ROOT}/backups"
 
 # ── colours ──────────────────────────────────────────────────────────────────
@@ -24,7 +24,7 @@ error()   { echo -e "${RED}[backup]${NC} $*" >&2; }
 
 # ── 1. env file ───────────────────────────────────────────────────────────────
 if [[ ! -f "${ENV_FILE}" ]]; then
-  error "api/.env not found. Run ./scripts/install.sh first."
+  error "api/.env.api not found. Run ./scripts/install.sh first."
   exit 1
 fi
 
@@ -35,7 +35,7 @@ DB_PASSWORD="$( grep -E '^DB_PASSWORD=' "${ENV_FILE}" | cut -d= -f2- | tr -d "'\
 DB_NAME="$(     grep -E '^DB_NAME='     "${ENV_FILE}" | cut -d= -f2- | tr -d "'\"")"
 
 if [[ -z "${DB_USER}" || -z "${DB_PASSWORD}" || -z "${DB_NAME}" ]]; then
-  error "Could not read DB_USER, DB_PASSWORD, or DB_NAME from api/.env."
+  error "Could not read DB_USER, DB_PASSWORD, or DB_NAME from api/.env.api."
   exit 1
 fi
 
