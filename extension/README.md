@@ -103,6 +103,8 @@ The extension defaults to `http://localhost:11650`. To change it:
 2. Update the **API Base URL** field
 3. Click **Save**
 
+The configured API base URL is stored in `chrome.storage.local`, so it stays on the current machine instead of syncing across Chrome profiles or devices. Existing synced values are migrated the next time the extension reads the setting.
+
 ---
 
 [↑ Table of Contents](#table-of-contents)
@@ -126,7 +128,7 @@ extension/
 ├── lib/
 │   ├── api.js              # fetch wrapper + error mapping
 │   ├── dom.js              # DOM helpers
-│   └── storage.js          # chrome.storage.sync wrapper
+│   └── storage.js          # chrome.storage.local wrapper + migration
 └── assets/
     └── icons/              # Extension icons
 ```
@@ -151,7 +153,7 @@ extension/
 #### API Library (`api.js`)
 - HTTP request handling
 - Error management and timeout handling
-- Base URL configuration via `chrome.storage.sync`
+- Base URL configuration via `chrome.storage.local` with one-time migration from `chrome.storage.sync`
 
 ---
 
