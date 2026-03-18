@@ -436,6 +436,96 @@ describe("bookmark write transactions", () => {
   });
 });
 
+describe("classification group listing", () => {
+  it("returns only active classifications for active groups by default", async () => {
+    const archivedAt = new Date();
+    const [{ id: activeGroupId }] = await db
+      .insert(schema.classificationGroups)
+      .values({ name: uniqueName("group-active-default"), order: 10 })
+      .$returningId();
+    const [{ id: otherGroupId }] = await db
+      .insert(schema.classificationGroups)
+      .values({ name: uniqueName("group-other-default"), order: 20 })
+      .$returningId();
+    const [{ id: archivedGroupId }] = await db
+      .insert(schema.classificationGroups)
+      .values({ name: uniqueName("group-archived-default"), order: 30, archivedAt })
+      .$returningId();
+
+    const activeClassificationName = uniqueName("classification-active-default");
+    const archivedClassificationName = uniqueName("classification-archived-default");
+    const otherClassificationName = uniqueName("classification-other-default");
+    const archivedGroupClassificationName = uniqueName("classification-archived-group-default");
+
+    await db.insert(schema.classifications).values([
+      { name: activeClassificationName, groupId: activeGroupId, order: 1 },
+      { name: archivedClassificationName, groupId: activeGroupId, order: 2, archivedAt },
+      { name: otherClassificationName, groupId: otherGroupId, order: 1 },
+      { name: archivedGroupClassificationName, groupId: archivedGroupId, order: 1 },
+    ]);
+
+    const res = await app.handle(request("/classifications/groups"));
+
+    expect(res.status).toBe(200);
+    const body = await res.json() as {
+      items: Array<{
+        id: number;
+        classifications: Array<{ name: string }>;
+      }>;
+    };
+
+    const activeGroup = body.items.find((group) => group.id === activeGroupId);
+    const otherGroup = body.items.find((group) => group.id === otherGroupId);
+
+    expect(body.items.some((group) => group.id === archivedGroupId)).toBe(false);
+    expect(activeGroup?.classifications.map((classification) => classification.name)).toEqual([activeClassificationName]);
+    expect(otherGroup?.classifications.map((classification) => classification.name)).toEqual([otherClassificationName]);
+  });
+
+  it("includes archived groups and classifications when archived=true", async () => {
+    const archivedAt = new Date();
+    const [{ id: activeGroupId }] = await db
+      .insert(schema.classificationGroups)
+      .values({ name: uniqueName("group-active-archived-view"), order: 40 })
+      .$returningId();
+    const [{ id: archivedGroupId }] = await db
+      .insert(schema.classificationGroups)
+      .values({ name: uniqueName("group-archived-archived-view"), order: 50, archivedAt })
+      .$returningId();
+
+    const activeClassificationName = uniqueName("classification-active-archived-view");
+    const archivedClassificationName = uniqueName("classification-archived-archived-view");
+    const archivedGroupClassificationName = uniqueName("classification-archived-group-archived-view");
+
+    await db.insert(schema.classifications).values([
+      { name: activeClassificationName, groupId: activeGroupId, order: 1 },
+      { name: archivedClassificationName, groupId: activeGroupId, order: 2, archivedAt },
+      { name: archivedGroupClassificationName, groupId: archivedGroupId, order: 1, archivedAt },
+    ]);
+
+    const res = await app.handle(request("/classifications/groups?archived=true"));
+
+    expect(res.status).toBe(200);
+    const body = await res.json() as {
+      items: Array<{
+        id: number;
+        classifications: Array<{ name: string }>;
+      }>;
+    };
+
+    const activeGroup = body.items.find((group) => group.id === activeGroupId);
+    const archivedGroup = body.items.find((group) => group.id === archivedGroupId);
+
+    expect(activeGroup?.classifications.map((classification) => classification.name)).toEqual([
+      activeClassificationName,
+      archivedClassificationName,
+    ]);
+    expect(archivedGroup?.classifications.map((classification) => classification.name)).toEqual([
+      archivedGroupClassificationName,
+    ]);
+  });
+});
+
 describe("bookmark request validation", () => {
   it.each([
     ["/bookmarks?limit=0", "limit must be an integer between 1 and 100"],

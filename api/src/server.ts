@@ -1424,8 +1424,9 @@ export function buildApp() {
     async ({ query }) => {
       const includeArchived = query.archived === "true";
       const groupWhere = includeArchived ? undefined : isNull(classificationGroups.archivedAt);
+      const classificationArchivedWhere = includeArchived ? undefined : isNull(classifications.archivedAt);
 
-      const [rows, classRows, countRows] = await Promise.all([
+      const [rows, countRows] = await Promise.all([
         db
           .select({
             id: classificationGroups.id,
@@ -1436,17 +1437,6 @@ export function buildApp() {
           .from(classificationGroups)
           .where(groupWhere)
           .orderBy(classificationGroups.order, classificationGroups.name),
-        // All classifications (active + archived) for these groups
-        db
-          .select({
-            id: classifications.id,
-            name: classifications.name,
-            order: classifications.order,
-            groupId: classifications.groupId,
-            archivedAt: classifications.archivedAt,
-          })
-          .from(classifications)
-          .orderBy(classifications.order, classifications.name),
         // Active bookmark counts per classification
         db
           .select({
@@ -1462,14 +1452,43 @@ export function buildApp() {
           .groupBy(bookmarkClassifications.classificationId),
       ]);
 
+      const groupIds = rows.map((group) => group.id);
+      const classRows = groupIds.length === 0
+        ? []
+        : await db
+          .select({
+            id: classifications.id,
+            name: classifications.name,
+            order: classifications.order,
+            groupId: classifications.groupId,
+            archivedAt: classifications.archivedAt,
+          })
+          .from(classifications)
+          .where(
+            classificationArchivedWhere
+              ? and(inArray(classifications.groupId, groupIds), classificationArchivedWhere)
+              : inArray(classifications.groupId, groupIds)
+          )
+          .orderBy(classifications.order, classifications.name);
+
       const countMap = new Map<number, number>(
         countRows.map((r) => [r.classificationId, Number(r.count)])
       );
 
+      const classificationsByGroup = new Map<number | null, Array<typeof classRows[number]>>();
+      for (const classification of classRows) {
+        const bucket = classificationsByGroup.get(classification.groupId);
+        if (bucket) {
+          bucket.push(classification);
+          continue;
+        }
+
+        classificationsByGroup.set(classification.groupId, [classification]);
+      }
+
       const items = rows.map((g) => ({
         ...g,
-        classifications: classRows
-          .filter((c) => c.groupId === g.id)
+        classifications: (classificationsByGroup.get(g.id) ?? [])
           .map((c) => ({ ...c, bookmarkCount: countMap.get(c.id) ?? 0 })),
       }));
 
@@ -1484,10 +1503,10 @@ export function buildApp() {
         summary: "List classification groups",
         description:
           "Returns groups with their nested classifications. " +
-          "This is the **management view** — unlike `GET /classifications`, it includes both active and " +
-          "archived classifications inside each group, and exposes the `archivedAt` field on both groups " +
-          "and classifications so the UI can show archived state.\n\n" +
-          "**Default:** active groups only. Pass `archived=true` to also include archived groups.\n\n" +
+          "This is the **management view** and exposes the `archivedAt` field on both groups and " +
+          "classifications so the UI can show archived state.\n\n" +
+          "**Default:** active groups with active classifications only. Pass `archived=true` to include archived groups " +
+          "and archived classifications in the response.\n\n" +
           "Each classification includes `bookmarkCount` reflecting only active (non-archived) bookmarks. " +
           "Groups are ordered by `order` then `name`; classifications within each group are ordered the same way.",
         responses: {
@@ -1501,7 +1520,7 @@ export function buildApp() {
                     name:       S.str("Group name"),
                     order:      S.num("Display sort order"),
                     archivedAt: S.nullable(S.any("Archive timestamp (UTC), null when active")),
-                    classifications: S.arr("Classifications in this group (active and archived)", S.obj("Classification", {
+                    classifications: S.arr("Classifications in this group", S.obj("Classification", {
                       id:            S.num("Classification ID"),
                       name:          S.str("Classification name"),
                       order:         S.num("Display sort order"),
