@@ -1044,6 +1044,32 @@
 </div>
 
 <script>
+  // ── API token bootstrap ────────────────────────────────────────────────────
+  // The token is fetched from /config (auth-exempt) once on load and stored in
+  // window.__apiToken. All API calls must use apiFetch() instead of fetch()
+  // so the Authorization header is always included.
+  window.__apiToken = '';
+
+  async function bootstrapToken() {
+    try {
+      const res = await fetch('/config');
+      if (!res.ok) throw new Error('Server returned ' + res.status);
+      const { apiToken } = await res.json();
+      if (!apiToken) throw new Error('apiToken missing in /config response');
+      window.__apiToken = apiToken;
+    } catch (e) {
+      document.getElementById('content').innerHTML =
+        `<div class="state-box"><div class="icon">⚠️</div>` +
+        `Failed to load API configuration.<br><small>${e.message}</small></div>`;
+      throw e; // prevent further boot
+    }
+  }
+
+  function apiFetch(url, opts = {}) {
+    const headers = Object.assign({ 'Authorization': 'Bearer ' + window.__apiToken }, opts.headers || {});
+    return fetch(url, Object.assign({}, opts, { headers }));
+  }
+
   // ── Backup ─────────────────────────────────────────────────────────────────
   function triggerBackup() {
     const token = window.prompt('Enter backup token:');
@@ -1094,16 +1120,18 @@
   };
 
   // ── Boot ───────────────────────────────────────────────────────────────────
-  loadSidebar();
-  fetchBookmarks();
+  bootstrapToken().then(() => {
+    loadSidebar();
+    fetchBookmarks();
+  });
 
   // ── Sidebar ────────────────────────────────────────────────────────────────
   async function loadSidebar() {
     try {
       const [classRes, tagRes, flagRes] = await Promise.all([
-        fetch('/classifications'),
-        fetch('/tags?limit=200'),
-        fetch('/flag-counts'),
+        apiFetch('/classifications'),
+        apiFetch('/tags?limit=200'),
+        apiFetch('/flag-counts'),
       ]);
       if (!classRes.ok) throw new Error(classRes.statusText);
       const { groups } = await classRes.json();
@@ -1293,7 +1321,7 @@
 
     // Fetch sorted tags and re-render
     try {
-      const res = await fetch(`/tags?limit=200&sort=${order}`);
+      const res = await apiFetch(`/tags?limit=200&sort=${order}`);
       if (!res.ok) return;
       const { items } = await res.json();
       renderTagList(items);
@@ -1306,9 +1334,9 @@
   async function refreshCounts() {
     try {
       const [flagRes, tagRes, classRes] = await Promise.all([
-        fetch('/flag-counts'),
-        fetch(`/tags?limit=200&sort=${state.tagSortOrder}`),
-        fetch('/classifications'),
+        apiFetch('/flag-counts'),
+        apiFetch(`/tags?limit=200&sort=${state.tagSortOrder}`),
+        apiFetch('/classifications'),
       ]);
 
       if (flagRes.ok) {
@@ -1468,7 +1496,7 @@
     if (state.showArchived)     params.set('archived', 'true');
 
     try {
-      const res = await fetch('/bookmarks?' + params);
+      const res = await apiFetch('/bookmarks?' + params);
       if (!res.ok) throw new Error(res.statusText);
       const { items, total } = await res.json();
 
@@ -1596,7 +1624,7 @@
     btn.textContent = action === 'archive' ? 'Archiving…' : 'Restoring…';
 
     try {
-      const res = await fetch(`/bookmarks/${id}/${action}`, { method: 'PATCH' });
+      const res = await apiFetch(`/bookmarks/${id}/${action}`, { method: 'PATCH' });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         alert(data.error || `Failed to ${action}`);
@@ -1641,8 +1669,8 @@
   // Pre-load classifications & tags for the modal (shared data, refreshed on open)
   async function loadModalData() {
     const [cRes, tRes] = await Promise.all([
-      fetch('/classifications'),
-      fetch('/tags?limit=200'),
+      apiFetch('/classifications'),
+      apiFetch('/tags?limit=200'),
     ]);
     const { groups } = await cRes.json();
     const { items: tagItems } = await tRes.json();
@@ -1811,7 +1839,7 @@
       if (groupId   != null) payload.groupId   = groupId;
       if (groupName != null) payload.groupName = groupName;
 
-      const res  = await fetch('/classifications', {
+      const res  = await apiFetch('/classifications', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify(payload),
@@ -1877,7 +1905,7 @@
 
     // Otherwise create it
     try {
-      const res = await fetch('/tags', {
+      const res = await apiFetch('/tags', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: trimmed }),
@@ -1933,7 +1961,7 @@
     };
 
     try {
-      const res = await fetch(`/bookmarks/${modalState.bookmarkId}`, {
+      const res = await apiFetch(`/bookmarks/${modalState.bookmarkId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),

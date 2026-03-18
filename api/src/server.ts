@@ -22,6 +22,7 @@ function isAuthExempt(path: string): boolean {
     path === "/ready" ||
     path === "/app" ||
     path === "/categories" ||
+    path === "/config" ||
     path === "/openapi.json" ||
     path === "/backup" ||
     path.startsWith("/docs")

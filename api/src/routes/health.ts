@@ -81,6 +81,47 @@ export function createHealthRoutes({ checkReadiness }: HealthRoutesOptions = {})
       }
     )
     .get(
+      "/config",
+      () => {
+        const apiToken = process.env.API_TOKEN ?? "";
+        if (!apiToken || apiToken === "change_me_please") {
+          return new Response(
+            JSON.stringify({ error: "API_TOKEN is not configured on the server" }),
+            { status: 503, headers: { "Content-Type": "application/json" } }
+          );
+        }
+        return new Response(JSON.stringify({ apiToken }), {
+          headers: { "Content-Type": "application/json" },
+        });
+      },
+      {
+        detail: {
+          tags: ["health"],
+          summary: "Client configuration",
+          description:
+            "Returns the `API_TOKEN` needed by the browser UI to authenticate its requests. " +
+            "This endpoint is auth-exempt so the UI can bootstrap itself on first load. " +
+            "Returns `503` if `API_TOKEN` is not yet configured on the server.",
+          responses: {
+            200: {
+              description: "Configuration for browser UI",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object" as const,
+                    properties: {
+                      apiToken: { type: "string" as const, description: "Bearer token to send with all API requests" },
+                    },
+                  },
+                },
+              },
+            },
+            503: { description: "API_TOKEN is not configured on the server" },
+          },
+        },
+      }
+    )
+    .get(
       "/health",
       () => ({ status: "ok", check: "liveness" }),
       {
