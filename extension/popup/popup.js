@@ -549,7 +549,7 @@ function showDuplicateWarning(duplicates) {
   }
   if (confirmBtn) {
     confirmBtn.disabled = false;
-    confirmBtn.textContent = 'Save Duplicate';
+    confirmBtn.textContent = 'Close';
   }
   if (cancelBtn) {
     cancelBtn.disabled = false;
@@ -573,7 +573,7 @@ function hideDuplicateWarning() {
   }
   if (confirmBtn) {
     confirmBtn.disabled = false;
-    confirmBtn.textContent = 'Save Duplicate';
+    confirmBtn.textContent = 'Close';
   }
   if (cancelBtn) {
     cancelBtn.disabled = false;
@@ -593,71 +593,22 @@ function onDuplicateCancel() {
 }
 
 /**
- * Confirm duplicate save flow
+ * Dismiss duplicate save flow
  */
 async function onDuplicateConfirm() {
   if (!state.pendingDuplicate) return;
 
-  const url = el('url').value.trim();
-  const title = el('title').value.trim();
-  if (!url) {
-    setStatus('Missing URL', false);
-    return;
-  }
-  if (!title) {
-    setStatus('Missing title', false);
-    return;
-  }
-
   const confirmBtn = el('duplicate-confirm');
-  const cancelBtn = el('duplicate-cancel');
   const saveBtn = el('save');
 
   if (confirmBtn) {
     confirmBtn.disabled = true;
-    confirmBtn.textContent = 'Saving…';
+    confirmBtn.textContent = 'Closing…';
   }
-  if (cancelBtn) cancelBtn.disabled = true;
-  if (saveBtn) saveBtn.disabled = true;
 
-  setStatus('Saving duplicate…');
-
-  const payload = { ...buildBookmarkPayload(url, title), allowDuplicate: true };
-
-  try {
-    const res = await send('saveBookmark', payload);
-    if (res?.ok) {
-      hideDuplicateWarning();
-      setStatus('Bookmark saved!', true);
-      showSaveToast('✓ Bookmark saved!', true);
-      setTimeout(() => window.close(), 2500);
-      return;
-    }
-
-    if (res?.status === 409 && res?.data?.duplicates?.length) {
-      showDuplicateWarning(res.data.duplicates);
-      setStatus('Bookmark already exists. Review duplicates below.', false);
-      showSaveToast('✕ Bookmark already exists', false);
-    } else {
-      setStatus(res?.error || 'Failed to save bookmark', false);
-      showSaveToast('✕ ' + (res?.error || 'Failed to save bookmark'), false);
-    }
-  } catch (error) {
-    setStatus('Failed to save bookmark', false);
-    showSaveToast('✕ Failed to save bookmark', false);
-  } finally {
-    const pending = !!state.pendingDuplicate;
-    if (pending && confirmBtn) {
-      confirmBtn.disabled = false;
-      confirmBtn.textContent = 'Save Duplicate';
-    }
-    if (pending && cancelBtn) {
-      cancelBtn.disabled = false;
-    }
-    if (pending && saveBtn) {
-      saveBtn.disabled = false;
-    }
-  }
+  hideDuplicateWarning();
+  if (saveBtn) saveBtn.disabled = false;
+  setStatus('Bookmark already exists', false);
 }
 
 /**

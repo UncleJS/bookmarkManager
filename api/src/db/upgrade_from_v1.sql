@@ -69,6 +69,11 @@ CREATE UNIQUE INDEX IF NOT EXISTS uniq_active_tag_name
 ALTER TABLE bookmarks
   ADD COLUMN IF NOT EXISTS archived_at DATETIME NULL DEFAULT NULL;
 
+ALTER TABLE bookmarks
+  ADD COLUMN IF NOT EXISTS url_hash_active VARCHAR(64) GENERATED ALWAYS AS (
+    CASE WHEN archived_at IS NULL THEN SHA2(url, 256) ELSE NULL END
+  ) STORED;
+
 UPDATE bookmarks
   SET archived_at = created_at
   WHERE archived = 1 AND archived_at IS NULL;
@@ -76,6 +81,9 @@ UPDATE bookmarks
 -- Drop the old archived TINYINT column (now superseded by archived_at)
 ALTER TABLE bookmarks
   DROP COLUMN IF EXISTS archived;
+
+CREATE UNIQUE INDEX IF NOT EXISTS uniq_active_bookmark_url
+  ON bookmarks (url_hash_active);
 
 -- ---------------------------------------------------------------------------
 -- 5. Add archive lifecycle columns to junction tables

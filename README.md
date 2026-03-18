@@ -249,7 +249,7 @@ Interactive docs always available at **`http://localhost:11650/docs`**.
 
 **Data lifecycle:** nothing is hard-deleted. Entity records and bookmark association rows are archived via `archivedAt`, and restoring an entity or re-attaching an archived association preserves prior history.
 
-**Duplicate URL detection:** `POST /bookmarks` returns `409` with existing bookmark metadata. Pass `allowDuplicate: true` to save anyway after explicit user confirmation.
+**Duplicate URL detection:** `POST /bookmarks` returns `409` with existing bookmark metadata when an active bookmark already has that URL. This is enforced by the database, so concurrent creates cannot produce duplicate active URLs, while archived bookmarks can still share the same URL.
 
 ---
 
