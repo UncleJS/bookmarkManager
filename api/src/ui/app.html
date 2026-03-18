@@ -290,6 +290,56 @@
       white-space: nowrap;
     }
 
+    /* ── Search bar ──────────────────────────────────────────────────────────── */
+    #search-wrap {
+      position: relative;
+      display: flex;
+      align-items: center;
+      flex: 1;
+      min-width: 120px;
+      max-width: 340px;
+    }
+
+    #search-q {
+      width: 100%;
+      background: var(--surface2);
+      border: 1px solid var(--border2);
+      border-radius: 4px;
+      color: var(--text);
+      font-family: inherit;
+      font-size: 12px;
+      padding: 4px 26px 4px 9px;
+      outline: none;
+      transition: border-color 0.1s;
+    }
+
+    #search-q:focus {
+      border-color: var(--accent);
+    }
+
+    #search-q::placeholder {
+      color: #555;
+    }
+
+    #search-clear {
+      position: absolute;
+      right: 5px;
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      font-size: 14px;
+      line-height: 1;
+      cursor: pointer;
+      padding: 0 2px;
+      display: none;
+      opacity: 0.6;
+    }
+
+    #search-clear:hover { opacity: 1; }
+
+    #search-q.has-value { border-color: var(--accent); }
+    #search-q.has-value + #search-clear { display: block; }
+
     .sort-btn {
       background: var(--surface2);
       border: 1px solid var(--border2);
@@ -863,6 +913,10 @@
     <div id="topbar">
       <span id="topbar-title">All bookmarks</span>
       <span id="topbar-count"></span>
+      <div id="search-wrap">
+        <input type="text" id="search-q" placeholder="Search title, URL, description…" autocomplete="off" />
+        <button id="search-clear" onclick="clearSearch()" title="Clear search" tabindex="-1">×</button>
+      </div>
       <a href="/categories" class="nav-btn">⚙ Categories</a>
       <button class="nav-btn" onclick="triggerBackup()">⬇ Backup</button>
       <div id="archive-toggle">
@@ -1036,6 +1090,7 @@
     lastItems: [],            // cached for edit modal
     tagSortOrder: 'count',    // 'count' | 'alpha'
     openCatGroups: new Set(), // set of group IDs that are expanded
+    searchQuery: '',          // full-text search term
   };
 
   // ── Boot ───────────────────────────────────────────────────────────────────
@@ -1371,6 +1426,30 @@
     fetchBookmarks();
   }
 
+  // ── Search ─────────────────────────────────────────────────────────────────
+  let searchTimer = null;
+
+  document.getElementById('search-q').addEventListener('input', (e) => {
+    const val = e.target.value;
+    e.target.classList.toggle('has-value', val.length > 0);
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => {
+      state.searchQuery = val.trim();
+      state.page = 0;
+      fetchBookmarks();
+    }, 300);
+  });
+
+  function clearSearch() {
+    const input = document.getElementById('search-q');
+    input.value = '';
+    input.classList.remove('has-value');
+    state.searchQuery = '';
+    state.page = 0;
+    input.focus();
+    fetchBookmarks();
+  }
+
   // ── Fetch & render bookmarks ───────────────────────────────────────────────
   async function fetchBookmarks() {
     const content = document.getElementById('content');
@@ -1382,6 +1461,7 @@
       offset: String(state.page * PAGE_SIZE),
       sortBy: state.sortBy,
     });
+    if (state.searchQuery)      params.set('q', state.searchQuery);
     if (state.classificationId) params.set('classificationId', String(state.classificationId));
     if (state.filterTagId)      params.set('tagId', String(state.filterTagId));
     if (state.filterFlag)       params.set('flag', state.filterFlag);

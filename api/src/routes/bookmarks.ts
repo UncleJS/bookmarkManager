@@ -1,5 +1,5 @@
 import { Elysia, t } from "elysia";
-import { and, asc, desc, eq, inArray, isNotNull, isNull, notInArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, isNull, like, notInArray, or, sql } from "drizzle-orm";
 import { db } from "../db/client.ts";
 import {
   bookmarkClassifications,
@@ -299,11 +299,25 @@ export const bookmarkRoutes = new Elysia()
       }
       const showArchived = rawArchived === "true";
 
+      // --- q (full-text search) ---
+      const q = query.q?.trim() ?? "";
+
       const orderCol = sortBy === "oldest" ? asc(bookmarks.createdAt) : desc(bookmarks.createdAt);
 
       const conditions = [
         showArchived ? isNotNull(bookmarks.archivedAt) : isNull(bookmarks.archivedAt),
       ];
+
+      if (q) {
+        const pattern = `%${q}%`;
+        conditions.push(
+          or(
+            like(bookmarks.title, pattern),
+            like(bookmarks.url, pattern),
+            like(bookmarks.description, pattern),
+          )!
+        );
+      }
 
       const flagColMap: BookmarkFlagColumnMap = {
         readLater: bookmarks.readLater,
@@ -401,6 +415,7 @@ export const bookmarkRoutes = new Elysia()
       query: t.Object({
         limit: t.Optional(t.String({ description: "Maximum number of bookmarks to return. Integer 1–100. Default: 20." })),
         offset: t.Optional(t.String({ description: "Zero-based pagination offset. Non-negative integer. Default: 0." })),
+        q: t.Optional(t.String({ description: "Full-text search query. Matches against title, URL, and description using a case-insensitive LIKE search. Combinable with all other filters." })),
         classificationId: t.Optional(t.String({ description: "Filter to bookmarks assigned to this classification ID. Must be a positive integer." })),
         tagId: t.Optional(t.String({ description: "Filter to bookmarks that have this tag ID attached. Must be a positive integer." })),
         flag: t.Optional(t.String({ description: "Filter to bookmarks with a specific flag set. Allowed values: `readLater`, `hotTopic`, `cheatsheets`, `forReview`." })),
@@ -414,6 +429,7 @@ export const bookmarkRoutes = new Elysia()
           "Returns a paginated list of bookmarks with their full tag and classification associations.\n\n" +
           "**Default behaviour:** returns active (non-archived) bookmarks, newest first, 20 per page.\n\n" +
           "**Filters (all combinable with AND logic):**\n" +
+          "- `q` - full-text search on title, URL, and description (case-insensitive LIKE)\n" +
           "- `classificationId` - bookmarks assigned to that classification\n" +
           "- `tagId` - bookmarks that have that tag\n" +
           "- `flag` - bookmarks with that flag set (`readLater` | `hotTopic` | `cheatsheets` | `forReview`)\n" +
