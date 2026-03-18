@@ -13,7 +13,8 @@ import { tagRoutes } from "./routes/tags.ts";
 const PORT = Number(process.env.API_PORT ?? 11650);
 
 // Returns true for paths that do not require API_TOKEN authentication:
-// infrastructure probes, static HTML pages, and the API docs.
+// infrastructure probes, static HTML pages, the API docs, and the backup
+// endpoint (which uses its own independent BACKUP_TOKEN guard).
 function isAuthExempt(path: string): boolean {
   return (
     path === "/" ||
@@ -22,6 +23,7 @@ function isAuthExempt(path: string): boolean {
     path === "/app" ||
     path === "/categories" ||
     path === "/openapi.json" ||
+    path === "/backup" ||
     path.startsWith("/docs")
   );
 }

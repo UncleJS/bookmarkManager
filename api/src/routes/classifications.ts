@@ -200,7 +200,10 @@ export const classificationRoutes = new Elysia()
           eq(bookmarkClassifications.bookmarkId, bookmarks.id),
           isNull(bookmarks.archivedAt)
         ))
-        .where(eq(bookmarkClassifications.classificationId, id));
+        .where(and(
+          eq(bookmarkClassifications.classificationId, id),
+          isNull(bookmarkClassifications.archivedAt),
+        ));
       const n = Number(count);
       if (n > 0) {
         set.status = 409;

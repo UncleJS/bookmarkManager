@@ -12,7 +12,8 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:studio": "drizzle-kit studio",
-    "smoke": "bun run src/smoke/health.ts"
+    "smoke": "bun run src/smoke/health.ts",
+    "smoke:full": "bun run src/smoke/full.ts"
   },
   "dependencies": {
     "@elysiajs/swagger": "^1.2.2",

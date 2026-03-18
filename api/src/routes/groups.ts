@@ -267,7 +267,8 @@ export const groupRoutes = new Elysia()
           eq(bookmarkClassifications.classificationId, classifications.id),
           isNull(classifications.archivedAt),
           eq(classifications.groupId, id)
-        ));
+        ))
+        .where(isNull(bookmarkClassifications.archivedAt));
       const n = Number(count);
       if (n > 0) {
         set.status = 409;
