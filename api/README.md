@@ -216,7 +216,8 @@ Interactive docs always available at **`http://localhost:11650/docs`**.
 
 **POST /bookmarks — duplicate detection:**
 - Returns `409` with a `duplicates` array if an active bookmark with the same URL already exists.
-- To save anyway after user confirmation, include `allowDuplicate: true` in the body.
+- Enforcement happens in the database, so concurrent requests cannot create duplicate active URLs.
+- Archived bookmarks do not conflict with active saves.
 
 ---
 

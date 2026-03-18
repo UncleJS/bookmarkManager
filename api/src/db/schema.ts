@@ -71,22 +71,32 @@ export const tags = mysqlTable(
 // ---------------------------------------------------------------------------
 // bookmarks
 // ---------------------------------------------------------------------------
-export const bookmarks = mysqlTable("bookmarks", {
-  id: int("id").autoincrement().primaryKey(),
-  url: text("url").notNull(),
-  title: varchar("title", { length: 1024 }).notNull(),
-  description: text("description"),
-  faviconUrl: text("favicon_url"),
-  readLater: tinyint("read_later").default(0),
-  hotTopic: tinyint("hot_topic").default(0),
-  cheatsheets: tinyint("cheatsheets").default(0),
-  forReview: tinyint("for_review").notNull().default(0),
-  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`),
-  updatedAt: timestamp("updated_at")
-    .default(sql`CURRENT_TIMESTAMP`)
-    .onUpdateNow(),
-  archivedAt: datetime("archived_at"),
-});
+export const bookmarks = mysqlTable(
+  "bookmarks",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    url: text("url").notNull(),
+    title: varchar("title", { length: 1024 }).notNull(),
+    description: text("description"),
+    faviconUrl: text("favicon_url"),
+    readLater: tinyint("read_later").default(0),
+    hotTopic: tinyint("hot_topic").default(0),
+    cheatsheets: tinyint("cheatsheets").default(0),
+    forReview: tinyint("for_review").notNull().default(0),
+    createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: timestamp("updated_at")
+      .default(sql`CURRENT_TIMESTAMP`)
+      .onUpdateNow(),
+    archivedAt: datetime("archived_at"),
+    urlHashActive: varchar("url_hash_active", { length: 64 }).generatedAlwaysAs(
+      sql`CASE WHEN archived_at IS NULL THEN SHA2(url, 256) ELSE NULL END`,
+      { mode: "stored" }
+    ),
+  },
+  (t) => [
+    uniqueIndex("uniq_active_bookmark_url").on(t.urlHashActive),
+  ]
+);
 
 // ---------------------------------------------------------------------------
 // bookmark_tags  (many-to-many)

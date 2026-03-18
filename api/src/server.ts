@@ -716,30 +716,11 @@ export function buildApp() {
         return { error: "url and title are required" };
       }
 
-      // Duplicate detection
-      if (!body.allowDuplicate) {
-        const existing = await db
-          .select({
-            id: bookmarks.id,
-            url: bookmarks.url,
-            title: bookmarks.title,
-            createdAt: bookmarks.createdAt,
-          })
-          .from(bookmarks)
-          .where(and(sql`url = ${url}`, isNull(bookmarks.archivedAt)));
+      const existing = await findActiveBookmarksByUrl(url);
 
-        if (existing.length > 0) {
-          set.status = 409;
-          return {
-            error: "Duplicate URL",
-            duplicates: existing.map((b) => ({
-              id: b.id,
-              url: b.url,
-              title: b.title,
-              createdAt: b.createdAt,
-            })),
-          };
-        }
+      if (existing.length > 0) {
+        set.status = 409;
+        return duplicateUrlResponse(existing);
       }
 
       const flags = body.flags ?? {};
@@ -747,51 +728,61 @@ export function buildApp() {
       const classIds = [
         ...new Set(body.classificationIds ?? []),
       ].filter(Boolean);
-      const created = await db.transaction(async (tx) => {
-        const [result] = await tx
-          .insert(bookmarks)
-          .values({
-            url,
-            title,
-            description: body.description ?? null,
-            faviconUrl: body.faviconUrl ?? null,
-            readLater: flags.readLater ? 1 : 0,
-            hotTopic: flags.hotTopic ? 1 : 0,
-            cheatsheets: flags.cheatsheets ? 1 : 0,
-            forReview: flags.forReview ? 1 : 0,
-            archivedAt: flags.archived ? sql`NOW()` : null,
-          })
-          .$returningId();
+      try {
+        const created = await db.transaction(async (tx) => {
+          const [result] = await tx
+            .insert(bookmarks)
+            .values({
+              url,
+              title,
+              description: body.description ?? null,
+              faviconUrl: body.faviconUrl ?? null,
+              readLater: flags.readLater ? 1 : 0,
+              hotTopic: flags.hotTopic ? 1 : 0,
+              cheatsheets: flags.cheatsheets ? 1 : 0,
+              forReview: flags.forReview ? 1 : 0,
+              archivedAt: flags.archived ? sql`NOW()` : null,
+            })
+            .$returningId();
 
-        const bookmarkId = result.id;
+          const bookmarkId = result.id;
 
-        if (tagIds.length > 0) {
-          await tx
-            .insert(bookmarkTags)
-            .values(tagIds.map((tagId) => ({ bookmarkId, tagId })));
+          if (tagIds.length > 0) {
+            await tx
+              .insert(bookmarkTags)
+              .values(tagIds.map((tagId) => ({ bookmarkId, tagId })));
+          }
+
+          if (classIds.length > 0) {
+            await tx
+              .insert(bookmarkClassifications)
+              .values(classIds.map((classificationId) => ({ bookmarkId, classificationId })));
+          }
+
+          const [row] = await tx
+            .select({
+              id: bookmarks.id,
+              url: bookmarks.url,
+              title: bookmarks.title,
+              createdAt: bookmarks.createdAt,
+            })
+            .from(bookmarks)
+            .where(eq(bookmarks.id, bookmarkId));
+
+          return row;
+        });
+
+        set.status = 201;
+        return created;
+      } catch (err) {
+        if (isDupEntry(err)) {
+          const duplicates = await findActiveBookmarksByUrl(url);
+          set.status = 409;
+          return duplicateUrlResponse(duplicates);
         }
 
-        if (classIds.length > 0) {
-          await tx
-            .insert(bookmarkClassifications)
-            .values(classIds.map((classificationId) => ({ bookmarkId, classificationId })));
-        }
-
-        const [row] = await tx
-          .select({
-            id: bookmarks.id,
-            url: bookmarks.url,
-            title: bookmarks.title,
-            createdAt: bookmarks.createdAt,
-          })
-          .from(bookmarks)
-          .where(eq(bookmarks.id, bookmarkId));
-
-        return row;
-      });
-
-      set.status = 201;
-      return created;
+        throw err;
+      }
     },
     {
       body: t.Object({
@@ -810,16 +801,15 @@ export function buildApp() {
           })
         ),
         faviconUrl:     t.Optional(t.String({ description: "URL of the page favicon, typically captured by the extension at save time." })),
-        allowDuplicate: t.Optional(t.Boolean({ description: "Set to true to bypass the duplicate URL check and allow saving the same URL more than once." })),
       }),
       detail: {
         tags: ["bookmarks"],
         summary: "Create a bookmark",
         description:
           "Saves a new bookmark with optional tags, classifications, and flags.\n\n" +
-          "**Duplicate detection:** by default, if an active bookmark with the same URL already exists " +
+          "**Duplicate detection:** if an active bookmark with the same URL already exists " +
           "a `409` is returned with a `duplicates` array listing the existing records. " +
-          "Pass `allowDuplicate: true` to skip this check and save regardless.\n\n" +
+          "Duplicate protection is enforced by the database so concurrent requests cannot create two active bookmarks with the same URL. Archived bookmarks do not conflict with active saves.\n\n" +
           "**Tags and classifications** must already exist; pass their integer IDs in `tags` and " +
           "`classificationIds`. Duplicates in those arrays are silently deduplicated.\n\n" +
           "**Flags** are all `false` by default. The special `flags.archived` field allows the " +
@@ -1896,6 +1886,39 @@ function isDupEntry(err: unknown): boolean {
     "code" in err &&
     err.code === "ER_DUP_ENTRY"
   );
+}
+
+async function findActiveBookmarksByUrl(url: string) {
+  return db
+    .select({
+      id: bookmarks.id,
+      url: bookmarks.url,
+      title: bookmarks.title,
+      createdAt: bookmarks.createdAt,
+    })
+    .from(bookmarks)
+    .where(and(
+      eq(bookmarks.urlHashActive, sql`SHA2(${url}, 256)`),
+      eq(bookmarks.url, url),
+      isNull(bookmarks.archivedAt)
+    ));
+}
+
+function duplicateUrlResponse(duplicates: Array<{
+  id: number;
+  url: string;
+  title: string;
+  createdAt: Date | null;
+}>) {
+  return {
+    error: "Duplicate URL",
+    duplicates: duplicates.map((bookmark) => ({
+      id: bookmark.id,
+      url: bookmark.url,
+      title: bookmark.title,
+      createdAt: bookmark.createdAt,
+    })),
+  };
 }
 
 export type App = typeof app;

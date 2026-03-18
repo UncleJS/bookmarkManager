@@ -1,0 +1,2 @@
+ALTER TABLE `bookmarks` ADD `url_hash_active` varchar(64) GENERATED ALWAYS AS (CASE WHEN archived_at IS NULL THEN SHA2(url, 256) ELSE NULL END) STORED;--> statement-breakpoint
+ALTER TABLE `bookmarks` ADD CONSTRAINT `uniq_active_bookmark_url` UNIQUE(`url_hash_active`);

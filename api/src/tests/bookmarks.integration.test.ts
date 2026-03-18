@@ -373,6 +373,67 @@ describe("bookmark write transactions", () => {
 
     expect(rows).toHaveLength(1);
   });
+
+  it("allows an active bookmark when the matching URL is only archived", async () => {
+    const url = uniqueUrl("archived-duplicate");
+
+    const archived = await app.handle(jsonRequest("/bookmarks", "POST", {
+      url,
+      title: "Archived duplicate",
+      flags: { archived: true },
+    }));
+
+    expect(archived.status).toBe(201);
+
+    const active = await app.handle(jsonRequest("/bookmarks", "POST", {
+      url,
+      title: "Active bookmark",
+    }));
+
+    expect(active.status).toBe(201);
+
+    const rows = await db
+      .select({
+        id: schema.bookmarks.id,
+        archivedAt: schema.bookmarks.archivedAt,
+      })
+      .from(schema.bookmarks)
+      .where(eq(schema.bookmarks.url, url));
+
+    expect(rows).toHaveLength(2);
+    expect(rows.filter((row) => row.archivedAt === null)).toHaveLength(1);
+    expect(rows.filter((row) => row.archivedAt !== null)).toHaveLength(1);
+  });
+
+  it("returns one 201 and one 409 for concurrent duplicate creates", async () => {
+    const url = uniqueUrl("concurrent-duplicate");
+
+    const [first, second] = await Promise.all([
+      app.handle(jsonRequest("/bookmarks", "POST", {
+        url,
+        title: "Concurrent bookmark A",
+      })),
+      app.handle(jsonRequest("/bookmarks", "POST", {
+        url,
+        title: "Concurrent bookmark B",
+      })),
+    ]);
+
+    expect([first.status, second.status].sort()).toEqual([201, 409]);
+
+    const duplicateRes = first.status === 409 ? first : second;
+    await expect(duplicateRes.json()).resolves.toMatchObject({
+      error: "Duplicate URL",
+      duplicates: [expect.objectContaining({ url })],
+    });
+
+    const rows = await db
+      .select({ id: schema.bookmarks.id })
+      .from(schema.bookmarks)
+      .where(eq(schema.bookmarks.url, url));
+
+    expect(rows).toHaveLength(1);
+  });
 });
 
 describe("bookmark request validation", () => {
