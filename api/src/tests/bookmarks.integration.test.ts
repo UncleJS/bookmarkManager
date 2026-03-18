@@ -90,6 +90,35 @@ afterAll(async () => {
   await adminConnection?.end();
 });
 
+describe("create endpoint status codes", () => {
+  it("returns 201 for tag creation", async () => {
+    const name = uniqueName("tag-created");
+
+    const res = await app.handle(jsonRequest("/tags", "POST", { name }));
+
+    expect(res.status).toBe(201);
+    await expect(res.json()).resolves.toMatchObject({ name });
+  });
+
+  it("returns 201 for classification creation", async () => {
+    const name = uniqueName("classification-created");
+
+    const res = await app.handle(jsonRequest("/classifications", "POST", { name }));
+
+    expect(res.status).toBe(201);
+    await expect(res.json()).resolves.toMatchObject({ name, groupId: null });
+  });
+
+  it("returns 201 for classification group creation", async () => {
+    const name = uniqueName("group-created");
+
+    const res = await app.handle(jsonRequest("/classifications/groups", "POST", { name, order: 7 }));
+
+    expect(res.status).toBe(201);
+    await expect(res.json()).resolves.toMatchObject({ name, order: 7 });
+  });
+});
+
 describe("bookmark write transactions", () => {
   it("creates bookmark, tags, and classifications atomically on success", async () => {
     const [{ id: tagId }] = await db.insert(schema.tags).values({ name: uniqueName("tag") }).$returningId();
