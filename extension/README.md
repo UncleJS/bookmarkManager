@@ -41,7 +41,7 @@ A Chrome Manifest V3 extension that captures bookmarks and sends them to a local
 - **Quick Save**: Right-click context menu for instant bookmark saving
 - **Full Save**: Detailed form with tags, classifications, and metadata
 - **Auto-fill**: Automatically captures page title, URL, and favicon
-- **Duplicate Detection**: Highlights existing bookmarks with the same URL and lets you cancel or proceed with saving another copy
+- **Duplicate Detection**: Highlights existing bookmarks with the same URL and prevents saving a second active bookmark with that URL
 
 [↑ Table of Contents](#table-of-contents)
 
@@ -146,6 +146,7 @@ extension/
 
 #### Popup (`popup.js`)
 - On load: reads active tab, fetches classifications + tag suggestions, populates form
+- Classifications multi-select: grouped suggestions, removable chips, create new on the fly
 - Tags multi-select: input + listbox, debounced API calls (250 ms), removable chips, create new on the fly
 - Classification creation: inline affordance → POST `/classifications` → refresh dropdown
 - Submission: validate → send via background message → disable button + loader → show success/error
@@ -219,8 +220,8 @@ User types in tag field
 ```
 POST /bookmarks → API returns 409 with duplicates array
   → popup shows existing bookmarks
-  → user cancels or confirms
-  → UI shows the existing bookmarks and prevents saving a second active bookmark with the same URL
+  → user reviews and closes the warning
+  → UI prevents saving a second active bookmark with the same URL
 ```
 
 ---
@@ -246,7 +247,7 @@ POST /bookmarks → API returns 409 with duplicates array
 | Scenario | Behaviour |
 |---|---|
 | Very long title/URL | Truncated in UI display; full value sent to API |
-| Duplicate URL | `409` response → UI shows existing bookmarks → review and close the warning |
+| Duplicate URL | `409` response → UI shows existing bookmarks → review and close the warning without creating another active bookmark |
 | Large tag set | Top N matches fetched; paginated suggestions |
 | API not configured | User prompted to open Options page |
 | API failure / timeout | Error shown in popup; POST is not retried |

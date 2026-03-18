@@ -87,7 +87,7 @@ A precise description of what is built, how it works, and how to extend it.
   - URL: read-only, pre-filled with current tab URL.
   - Title: editable, pre-filled with current tab title.
   - Description: multiline textarea.
-  - Classification: single-select with grouped options (optgroup). Options loaded from API. Ability to create a new classification on the fly.
+  - Classifications: multi-select with grouped suggestions and removable chips. Options loaded from API. Ability to create a new classification on the fly.
   - Tags: multi-select (vanilla JS). Options loaded from API with search/autocomplete. Ability to create new tags on the fly.
   - Flags (checkboxes): readLater, hotTopic, cheatsheets, forReview.
   - Save button submits to API. Show success/error message.
@@ -95,12 +95,12 @@ A precise description of what is built, how it works, and how to extend it.
   - "Quick Save Bookmark": immediately posts active tab url/title with defaults.
   - "Full Save Bookmark": opens popup with pre-filled url/title.
 - Permissions and behavior
-  - Access to active tab (url/title), context menus, notifications, storage, and API host permissions.
+  - Access to active tab (url/title), context menus, notifications, storage, scripting for on-demand toast injection, and API host permissions.
   - Handle network errors with clear user feedback.
 - API
   - Endpoints to list/create classifications and tags, create/edit/archive bookmarks, and download backups.
   - No auth or CORS for bookmark-management routes; `GET /backup` requires `Authorization: Bearer <BACKUP_TOKEN>`.
-- Detect existing bookmarks with the same URL and require explicit user confirmation before creating a duplicate.
+- Detect existing bookmarks with the same URL, show the existing entries, and avoid creating a second active bookmark with that URL.
 
 ---
 
@@ -144,7 +144,7 @@ extension/
 ├── lib/
 │   ├── api.js              # fetch wrapper
 │   ├── dom.js              # DOM helpers
-│   └── storage.js          # chrome.storage.sync wrapper
+│   └── storage.js          # chrome.storage.local wrapper + sync migration
 └── assets/
     └── icons/
 ```
@@ -154,12 +154,13 @@ extension/
 ### 5.3 Manifest
 - `permissions`: `["tabs", "activeTab", "contextMenus", "storage", "notifications", "scripting"]`
 - `host_permissions`: `["http://localhost:11650/*"]`
-- Configurable via Options page (stored in `chrome.storage.sync`)
+- Configurable via Options page (stored in `chrome.storage.local`, with one-time migration from `chrome.storage.sync`)
 
 [↑ Table of Contents](#table-of-contents)
 
 ### 5.4 Popup UI Behavior
 - On load: read active tab, fetch classifications and tag suggestions, populate form.
+- Classifications multi-select: grouped suggestions, removable chips, create new on the fly.
 - Tags multi-select: input + listbox, debounced API calls (250ms), removable chips, create new on the fly.
 - Classification creation: inline affordance → POST /classifications → refresh dropdown.
 - Submission: validate, construct payload, send via background message, disable button + loader, show success/error.
@@ -177,7 +178,7 @@ extension/
 
 ### 5.6 Edge Cases
 - Very long titles/URLs: truncate in UI display; send full to API.
-- Duplicate URL: API returns 409 with existing metadata; UI presents duplicates and lets user cancel or proceed.
+- Duplicate URL: API returns 409 with existing metadata; UI presents duplicates, allows the user to review them, and does not create a second active bookmark with the same URL.
 - Large tag set: paginate suggestions; fetch top N matches only.
 - Empty API configuration: prompt user to open Options.
 - API failure/timeouts: inform user; do not retry POST.
