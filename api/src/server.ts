@@ -68,7 +68,8 @@ const OkResp = {
 // Elysia App
 // ---------------------------------------------------------------------------
 
-const app = new Elysia()
+export function buildApp() {
+  return new Elysia()
   // ── Swagger / OpenAPI ──────────────────────────────────────────────────────
   .use(
     swagger({
@@ -623,53 +624,53 @@ const app = new Elysia()
         }
       }
 
-      // Insert bookmark
       const flags = body.flags ?? {};
-      const [result] = await db
-        .insert(bookmarks)
-        .values({
-          url,
-          title,
-          description: body.description ?? null,
-          faviconUrl: body.faviconUrl ?? null,
-          readLater: flags.readLater ? 1 : 0,
-          hotTopic: flags.hotTopic ? 1 : 0,
-          cheatsheets: flags.cheatsheets ? 1 : 0,
-          forReview: flags.forReview ? 1 : 0,
-          archivedAt: flags.archived ? sql`NOW()` : null,
-        })
-        .$returningId();
-
-      const bookmarkId = result.id;
-
-      // Insert tag associations
       const tagIds = [...new Set(body.tags ?? [])].filter(Boolean);
-      if (tagIds.length > 0) {
-        await db
-          .insert(bookmarkTags)
-          .values(tagIds.map((tagId) => ({ bookmarkId, tagId })));
-      }
-
-      // Insert classification associations
       const classIds = [
         ...new Set(body.classificationIds ?? []),
       ].filter(Boolean);
-      if (classIds.length > 0) {
-        await db
-          .insert(bookmarkClassifications)
-          .values(classIds.map((classificationId) => ({ bookmarkId, classificationId })));
-      }
+      const created = await db.transaction(async (tx) => {
+        const [result] = await tx
+          .insert(bookmarks)
+          .values({
+            url,
+            title,
+            description: body.description ?? null,
+            faviconUrl: body.faviconUrl ?? null,
+            readLater: flags.readLater ? 1 : 0,
+            hotTopic: flags.hotTopic ? 1 : 0,
+            cheatsheets: flags.cheatsheets ? 1 : 0,
+            forReview: flags.forReview ? 1 : 0,
+            archivedAt: flags.archived ? sql`NOW()` : null,
+          })
+          .$returningId();
 
-      // Return the created bookmark
-      const [created] = await db
-        .select({
-          id: bookmarks.id,
-          url: bookmarks.url,
-          title: bookmarks.title,
-          createdAt: bookmarks.createdAt,
-        })
-        .from(bookmarks)
-        .where(eq(bookmarks.id, bookmarkId));
+        const bookmarkId = result.id;
+
+        if (tagIds.length > 0) {
+          await tx
+            .insert(bookmarkTags)
+            .values(tagIds.map((tagId) => ({ bookmarkId, tagId })));
+        }
+
+        if (classIds.length > 0) {
+          await tx
+            .insert(bookmarkClassifications)
+            .values(classIds.map((classificationId) => ({ bookmarkId, classificationId })));
+        }
+
+        const [row] = await tx
+          .select({
+            id: bookmarks.id,
+            url: bookmarks.url,
+            title: bookmarks.title,
+            createdAt: bookmarks.createdAt,
+          })
+          .from(bookmarks)
+          .where(eq(bookmarks.id, bookmarkId));
+
+        return row;
+      });
 
       set.status = 201;
       return created;
@@ -945,27 +946,27 @@ const app = new Elysia()
         if (f.forReview   !== undefined) updates.forReview   = f.forReview   ? 1 : 0;
       }
 
-      if (Object.keys(updates).length > 0) {
-        await db.update(bookmarks).set(updates).where(eq(bookmarks.id, id));
-      }
-
-      // Replace tags if provided
-      if (body.tagIds !== undefined) {
-        await db.delete(bookmarkTags).where(eq(bookmarkTags.bookmarkId, id));
-        const uniqueTagIds = [...new Set(body.tagIds)].filter(Boolean);
-        if (uniqueTagIds.length > 0) {
-          await db.insert(bookmarkTags).values(uniqueTagIds.map(tagId => ({ bookmarkId: id, tagId })));
+      await db.transaction(async (tx) => {
+        if (Object.keys(updates).length > 0) {
+          await tx.update(bookmarks).set(updates).where(eq(bookmarks.id, id));
         }
-      }
 
-      // Replace classifications if provided
-      if (body.classificationIds !== undefined) {
-        await db.delete(bookmarkClassifications).where(eq(bookmarkClassifications.bookmarkId, id));
-        const uniqueClassIds = [...new Set(body.classificationIds)].filter(Boolean);
-        if (uniqueClassIds.length > 0) {
-          await db.insert(bookmarkClassifications).values(uniqueClassIds.map(classificationId => ({ bookmarkId: id, classificationId })));
+        if (body.tagIds !== undefined) {
+          await tx.delete(bookmarkTags).where(eq(bookmarkTags.bookmarkId, id));
+          const uniqueTagIds = [...new Set(body.tagIds)].filter(Boolean);
+          if (uniqueTagIds.length > 0) {
+            await tx.insert(bookmarkTags).values(uniqueTagIds.map(tagId => ({ bookmarkId: id, tagId })));
+          }
         }
-      }
+
+        if (body.classificationIds !== undefined) {
+          await tx.delete(bookmarkClassifications).where(eq(bookmarkClassifications.bookmarkId, id));
+          const uniqueClassIds = [...new Set(body.classificationIds)].filter(Boolean);
+          if (uniqueClassIds.length > 0) {
+            await tx.insert(bookmarkClassifications).values(uniqueClassIds.map(classificationId => ({ bookmarkId: id, classificationId })));
+          }
+        }
+      });
 
       return { ok: true };
     },
@@ -1693,14 +1694,20 @@ const app = new Elysia()
   )
 
   // ── Start ──────────────────────────────────────────────────────────────────
-  .listen(PORT);
+}
 
-console.log(
-  `🔖 Bookmark Manager API running at http://localhost:${PORT}\n` +
-    `   Viewer UI  → http://localhost:${PORT}/app\n` +
-    `   Swagger UI → http://localhost:${PORT}/docs\n` +
-    `   OpenAPI    → http://localhost:${PORT}/openapi.json`
-);
+export const app = buildApp();
+
+if (import.meta.main) {
+  app.listen(PORT);
+
+  console.log(
+    `🔖 Bookmark Manager API running at http://localhost:${PORT}\n` +
+      `   Viewer UI  → http://localhost:${PORT}/app\n` +
+      `   Swagger UI → http://localhost:${PORT}/docs\n` +
+      `   OpenAPI    → http://localhost:${PORT}/openapi.json`
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Helpers
