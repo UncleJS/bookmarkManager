@@ -37,6 +37,7 @@ let state = {
   hasClassificationsPrefetched: false, // Track if classifications are loaded
   hasTagsPrefetched: false, // Track if initial tags are loaded
   pendingDuplicate: null, // Store duplicate entries requiring confirmation
+  faviconUrl: '', // Active tab favicon for full-save payload
 };
 
 /**
@@ -436,6 +437,7 @@ async function loadInitial() {
     const { tab, classifications, tags } = res.data;
     el('url').value = tab.url || '';
     el('title').value = tab.title || '';
+    state.faviconUrl = tab.faviconUrl || '';
 
     // Process classifications data
     state.allClassifications = [];
@@ -899,7 +901,7 @@ function buildBookmarkPayload(url, title) {
       cheatsheets: el('flag-cheatsheets').checked,
       archived: el('flag-archived').checked,
     },
-    faviconUrl: '',
+    faviconUrl: state.faviconUrl || '',
   };
 }
 

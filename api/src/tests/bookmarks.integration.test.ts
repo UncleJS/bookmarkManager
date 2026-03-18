@@ -126,7 +126,7 @@ describe("tag lifecycle", () => {
     const first = await app.handle(jsonRequest("/tags", "POST", { name }));
     const second = await app.handle(jsonRequest("/tags", "POST", { name }));
 
-    expect(first.status).toBe(200);
+    expect(first.status).toBe(201);
     expect(second.status).toBe(409);
     await expect(second.json()).resolves.toMatchObject({ error: "Tag already exists" });
   });
@@ -171,7 +171,7 @@ describe("classification lifecycle", () => {
     const first = await app.handle(jsonRequest("/classifications", "POST", { name, groupId }));
     const second = await app.handle(jsonRequest("/classifications", "POST", { name, groupId }));
 
-    expect(first.status).toBe(200);
+    expect(first.status).toBe(201);
     expect(second.status).toBe(409);
     await expect(second.json()).resolves.toMatchObject({ error: "Classification already exists in this group" });
   });

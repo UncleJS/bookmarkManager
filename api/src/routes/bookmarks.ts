@@ -1,5 +1,5 @@
 import { Elysia, t } from "elysia";
-import { and, asc, desc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, isNull, notInArray, sql } from "drizzle-orm";
 import { db } from "../db/client.ts";
 import {
   bookmarkClassifications,
@@ -15,7 +15,9 @@ import {
   duplicateUrlResponse,
   ErrorResp,
   findActiveBookmarksByUrl,
+  isDupEntry,
   OkResp,
+  PositiveIdParam,
   S,
   type BookmarkFlagColumnMap,
 } from "./shared.ts";
@@ -43,33 +45,49 @@ export const bookmarkRoutes = new Elysia()
       const flags = body.flags ?? {};
       const tagIds = [...new Set(body.tags ?? [])].filter(Boolean);
       const classIds = [...new Set(body.classificationIds ?? [])].filter(Boolean);
-      const [result] = await db
-        .insert(bookmarks)
-        .values({
-          url,
-          title,
-          description: body.description ?? null,
-          faviconUrl: body.faviconUrl ?? null,
-          readLater: flags.readLater ? 1 : 0,
-          hotTopic: flags.hotTopic ? 1 : 0,
-          cheatsheets: flags.cheatsheets ? 1 : 0,
-          forReview: flags.forReview ? 1 : 0,
-          archivedAt: flags.archived ? sql`NOW()` : null,
-        })
-        .$returningId();
 
-      const bookmarkId = result.id;
+      let bookmarkId: number;
+      try {
+        bookmarkId = await db.transaction(async (tx) => {
+          const [result] = await tx
+            .insert(bookmarks)
+            .values({
+              url,
+              title,
+              description: body.description ?? null,
+              faviconUrl: body.faviconUrl ?? null,
+              readLater: flags.readLater ? 1 : 0,
+              hotTopic: flags.hotTopic ? 1 : 0,
+              cheatsheets: flags.cheatsheets ? 1 : 0,
+              forReview: flags.forReview ? 1 : 0,
+              archivedAt: flags.archived ? sql`NOW()` : null,
+            })
+            .$returningId();
 
-      if (tagIds.length > 0) {
-        await db
-          .insert(bookmarkTags)
-          .values(tagIds.map((tagId) => ({ bookmarkId, tagId })));
-      }
+          const id = result.id;
 
-      if (classIds.length > 0) {
-        await db
-          .insert(bookmarkClassifications)
-          .values(classIds.map((classificationId) => ({ bookmarkId, classificationId })));
+          if (tagIds.length > 0) {
+            await tx
+              .insert(bookmarkTags)
+              .values(tagIds.map((tagId) => ({ bookmarkId: id, tagId })));
+          }
+
+          if (classIds.length > 0) {
+            await tx
+              .insert(bookmarkClassifications)
+              .values(classIds.map((classificationId) => ({ bookmarkId: id, classificationId })));
+          }
+
+          return id;
+        });
+      } catch (err: unknown) {
+        if (isDupEntry(err)) {
+          // Race condition: another request inserted the same URL between our check and INSERT
+          const existing = await findActiveBookmarksByUrl(url);
+          set.status = 409;
+          return duplicateUrlResponse(existing);
+        }
+        throw err;
       }
 
       const [created] = await db
@@ -208,14 +226,77 @@ export const bookmarkRoutes = new Elysia()
   )
   .get(
     "/bookmarks",
-    async ({ query }) => {
-      const limit = Math.min(Number(query.limit ?? 20), 100);
-      const offset = Number(query.offset ?? 0);
-      const classificationId = query.classificationId ? Number(query.classificationId) : null;
-      const tagId = query.tagId ? Number(query.tagId) : null;
+    async ({ query, set }) => {
+      // --- limit ---
+      const rawLimit = query.limit;
+      let limit = 20;
+      if (rawLimit !== undefined) {
+        const n = Number(rawLimit);
+        if (!Number.isInteger(n) || n < 1 || n > 100) {
+          set.status = 400;
+          return { error: "limit must be an integer between 1 and 100" };
+        }
+        limit = n;
+      }
+
+      // --- offset ---
+      const rawOffset = query.offset;
+      let offset = 0;
+      if (rawOffset !== undefined) {
+        const n = Number(rawOffset);
+        if (!Number.isInteger(n) || n < 0) {
+          set.status = 400;
+          return { error: "offset must be a non-negative integer" };
+        }
+        offset = n;
+      }
+
+      // --- classificationId ---
+      const rawClassificationId = query.classificationId;
+      let classificationId: number | null = null;
+      if (rawClassificationId !== undefined) {
+        const n = Number(rawClassificationId);
+        if (!Number.isInteger(n) || n < 1) {
+          set.status = 400;
+          return { error: "classificationId must be a positive integer" };
+        }
+        classificationId = n;
+      }
+
+      // --- tagId ---
+      const rawTagId = query.tagId;
+      let tagId: number | null = null;
+      if (rawTagId !== undefined) {
+        const n = Number(rawTagId);
+        if (!Number.isInteger(n) || n < 1) {
+          set.status = 400;
+          return { error: "tagId must be a positive integer" };
+        }
+        tagId = n;
+      }
+
+      // --- flag ---
       const flag = query.flag ?? null;
-      const sortBy = query.sortBy === "oldest" ? "oldest" : "newest";
-      const showArchived = query.archived === "true";
+      if (flag !== null && !BOOKMARK_FLAG_VALUES.includes(flag as typeof BOOKMARK_FLAG_VALUES[number])) {
+        set.status = 400;
+        return { error: "flag must be one of: readLater, hotTopic, cheatsheets, forReview" };
+      }
+
+      // --- sortBy ---
+      const rawSortBy = query.sortBy;
+      if (rawSortBy !== undefined && !BOOKMARK_SORT_VALUES.includes(rawSortBy as typeof BOOKMARK_SORT_VALUES[number])) {
+        set.status = 400;
+        return { error: "sortBy must be one of: newest, oldest" };
+      }
+      const sortBy = rawSortBy === "oldest" ? "oldest" : "newest";
+
+      // --- archived ---
+      const rawArchived = query.archived;
+      if (rawArchived !== undefined && rawArchived !== "true" && rawArchived !== "false") {
+        set.status = 400;
+        return { error: "archived must be true or false" };
+      }
+      const showArchived = rawArchived === "true";
 
       const orderCol = sortBy === "oldest" ? asc(bookmarks.createdAt) : desc(bookmarks.createdAt);
 
@@ -317,13 +398,13 @@ export const bookmarkRoutes = new Elysia()
     },
     {
       query: t.Object({
-        limit: t.Optional(t.String({ description: "Maximum number of bookmarks to return. Default: 20, max: 100." })),
-        offset: t.Optional(t.String({ description: "Zero-based pagination offset. Default: 0." })),
-        classificationId: t.Optional(t.String({ description: "Filter to bookmarks assigned to this classification ID." })),
-        tagId: t.Optional(t.String({ description: "Filter to bookmarks that have this tag ID attached." })),
+        limit: t.Optional(t.String({ description: "Maximum number of bookmarks to return. Integer 1–100. Default: 20." })),
+        offset: t.Optional(t.String({ description: "Zero-based pagination offset. Non-negative integer. Default: 0." })),
+        classificationId: t.Optional(t.String({ description: "Filter to bookmarks assigned to this classification ID. Must be a positive integer." })),
+        tagId: t.Optional(t.String({ description: "Filter to bookmarks that have this tag ID attached. Must be a positive integer." })),
         flag: t.Optional(t.String({ description: "Filter to bookmarks with a specific flag set. Allowed values: `readLater`, `hotTopic`, `cheatsheets`, `forReview`." })),
-        sortBy: t.Optional(t.String({ description: "Sort order by creation date. `newest` (default) returns most recent first; `oldest` returns oldest first." })),
-        archived: t.Optional(t.String({ description: "Pass `true` to return archived bookmarks instead of active ones. By default only active bookmarks are returned." })),
+        sortBy: t.Optional(t.String({ description: "Sort order by creation date. `newest` (default) or `oldest`." })),
+        archived: t.Optional(t.String({ description: "Pass `true` to return archived bookmarks instead of active ones." })),
       }),
       detail: {
         tags: ["bookmarks"],
@@ -373,6 +454,7 @@ export const bookmarkRoutes = new Elysia()
               },
             },
           },
+          400: { ...ErrorResp, description: "Invalid query parameter value" },
         },
       },
     }
@@ -404,29 +486,109 @@ export const bookmarkRoutes = new Elysia()
         if (flags.forReview !== undefined) updates.forReview = flags.forReview ? 1 : 0;
       }
 
-      if (Object.keys(updates).length > 0) {
-        await db.update(bookmarks).set(updates).where(eq(bookmarks.id, id));
-      }
+      const hasAssociationChanges = body.tagIds !== undefined || body.classificationIds !== undefined;
 
-      if (body.tagIds !== undefined) {
-        await db.delete(bookmarkTags).where(eq(bookmarkTags.bookmarkId, id));
-        const uniqueTagIds = [...new Set(body.tagIds)].filter(Boolean);
-        if (uniqueTagIds.length > 0) {
-          await db.insert(bookmarkTags).values(uniqueTagIds.map((tagId) => ({ bookmarkId: id, tagId })));
+      await db.transaction(async (tx) => {
+        // Always touch updatedAt when anything changes (scalar or associations)
+        if (Object.keys(updates).length > 0 || hasAssociationChanges) {
+          await tx.update(bookmarks)
+            .set({ ...updates, updatedAt: sql`NOW()` })
+            .where(eq(bookmarks.id, id));
         }
-      }
 
-      if (body.classificationIds !== undefined) {
-        await db.delete(bookmarkClassifications).where(eq(bookmarkClassifications.bookmarkId, id));
-        const uniqueClassIds = [...new Set(body.classificationIds)].filter(Boolean);
-        if (uniqueClassIds.length > 0) {
-          await db.insert(bookmarkClassifications).values(uniqueClassIds.map((classificationId) => ({ bookmarkId: id, classificationId })));
+        if (body.tagIds !== undefined) {
+          const uniqueTagIds = [...new Set(body.tagIds)].filter(Boolean);
+
+          // Soft-archive removed associations
+          if (uniqueTagIds.length > 0) {
+            await tx.update(bookmarkTags)
+              .set({ archivedAt: sql`NOW()` })
+              .where(and(
+                eq(bookmarkTags.bookmarkId, id),
+                notInArray(bookmarkTags.tagId, uniqueTagIds),
+                isNull(bookmarkTags.archivedAt),
+              ));
+          } else {
+            // Archiving all
+            await tx.update(bookmarkTags)
+              .set({ archivedAt: sql`NOW()` })
+              .where(and(
+                eq(bookmarkTags.bookmarkId, id),
+                isNull(bookmarkTags.archivedAt),
+              ));
+          }
+
+          if (uniqueTagIds.length > 0) {
+            for (const tagId of uniqueTagIds) {
+              // Try to un-archive an existing row first; if none exists, insert
+              const [existing] = await tx
+                .select({ id: bookmarkTags.id, archivedAt: bookmarkTags.archivedAt })
+                .from(bookmarkTags)
+                .where(and(eq(bookmarkTags.bookmarkId, id), eq(bookmarkTags.tagId, tagId)));
+
+              if (existing) {
+                if (existing.archivedAt !== null) {
+                  await tx.update(bookmarkTags)
+                    .set({ archivedAt: null })
+                    .where(eq(bookmarkTags.id, existing.id));
+                }
+                // already active — nothing to do
+              } else {
+                await tx.insert(bookmarkTags).values({ bookmarkId: id, tagId });
+              }
+            }
+          }
         }
-      }
+
+        if (body.classificationIds !== undefined) {
+          const uniqueClassIds = [...new Set(body.classificationIds)].filter(Boolean);
+
+          // Soft-archive removed associations
+          if (uniqueClassIds.length > 0) {
+            await tx.update(bookmarkClassifications)
+              .set({ archivedAt: sql`NOW()` })
+              .where(and(
+                eq(bookmarkClassifications.bookmarkId, id),
+                notInArray(bookmarkClassifications.classificationId, uniqueClassIds),
+                isNull(bookmarkClassifications.archivedAt),
+              ));
+          } else {
+            await tx.update(bookmarkClassifications)
+              .set({ archivedAt: sql`NOW()` })
+              .where(and(
+                eq(bookmarkClassifications.bookmarkId, id),
+                isNull(bookmarkClassifications.archivedAt),
+              ));
+          }
+
+          if (uniqueClassIds.length > 0) {
+            for (const classificationId of uniqueClassIds) {
+              const [existing] = await tx
+                .select({ id: bookmarkClassifications.id, archivedAt: bookmarkClassifications.archivedAt })
+                .from(bookmarkClassifications)
+                .where(and(
+                  eq(bookmarkClassifications.bookmarkId, id),
+                  eq(bookmarkClassifications.classificationId, classificationId),
+                ));
+
+              if (existing) {
+                if (existing.archivedAt !== null) {
+                  await tx.update(bookmarkClassifications)
+                    .set({ archivedAt: null })
+                    .where(eq(bookmarkClassifications.id, existing.id));
+                }
+              } else {
+                await tx.insert(bookmarkClassifications).values({ bookmarkId: id, classificationId });
+              }
+            }
+          }
+        }
+      });
 
       return { ok: true };
     },
     {
+      params: PositiveIdParam,
       body: t.Object({
         title: t.Optional(t.String({ description: "New title. Whitespace is trimmed. Cannot be set to an empty string." })),
         url: t.Optional(t.String({ description: "New URL. Whitespace is trimmed. Cannot be set to an empty string." })),
@@ -448,14 +610,15 @@ export const bookmarkRoutes = new Elysia()
           "omitting a field leaves its current value untouched.\n\n" +
           "**Tag and classification replacement:** when `tagIds` or `classificationIds` are provided, " +
           "the existing associations are **fully replaced** (not merged). " +
+          "Removed associations are soft-archived; re-adding a previously removed association restores it. " +
           "Send an empty array to detach all tags or classifications.\n\n" +
           "**Flags:** each flag is independent. Omitting a flag key leaves it unchanged. " +
           "Pass `false` to clear a flag that was previously set.\n\n" +
           "**URL:** when provided, whitespace is trimmed and an empty string is rejected with 400.\n\n" +
-          "The `updatedAt` timestamp is set automatically by the database on every update.",
+          "The `updatedAt` timestamp is refreshed whenever any field or association changes.",
         responses: {
           200: { ...OkResp, description: "Bookmark updated successfully" },
-          400: { ...ErrorResp, description: "Validation error - title was provided but is blank after trimming" },
+          400: { ...ErrorResp, description: "Validation error - invalid id, or title/url is blank after trimming" },
           404: { ...ErrorResp, description: "Bookmark not found" },
         },
       },
@@ -473,6 +636,7 @@ export const bookmarkRoutes = new Elysia()
       return { ok: true };
     },
     {
+      params: PositiveIdParam,
       detail: {
         tags: ["bookmarks"],
         summary: "Archive a bookmark",
@@ -483,6 +647,7 @@ export const bookmarkRoutes = new Elysia()
           "Tag and classification associations are retained during archiving.",
         responses: {
           200: { ...OkResp, description: "Bookmark archived" },
+          400: { ...ErrorResp, description: "id must be a positive integer" },
           404: { ...ErrorResp, description: "Bookmark not found" },
           409: { ...ErrorResp, description: "Bookmark is already archived" },
         },
@@ -501,6 +666,7 @@ export const bookmarkRoutes = new Elysia()
       return { ok: true };
     },
     {
+      params: PositiveIdParam,
       detail: {
         tags: ["bookmarks"],
         summary: "Restore an archived bookmark",
@@ -510,6 +676,7 @@ export const bookmarkRoutes = new Elysia()
           "All tag and classification associations that were present at archive time are still intact.",
         responses: {
           200: { ...OkResp, description: "Bookmark restored to active" },
+          400: { ...ErrorResp, description: "id must be a positive integer" },
           404: { ...ErrorResp, description: "Bookmark not found" },
           409: { ...ErrorResp, description: "Bookmark is not archived - cannot restore an active bookmark" },
         },
