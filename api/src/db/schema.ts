@@ -6,7 +6,6 @@ import {
   tinyint,
   timestamp,
   datetime,
-  primaryKey,
   index,
   uniqueIndex,
 } from "drizzle-orm/mysql-core";
@@ -95,11 +94,22 @@ export const bookmarks = mysqlTable("bookmarks", {
 export const bookmarkTags = mysqlTable(
   "bookmark_tags",
   {
+    id: int("id").autoincrement().primaryKey(),
     bookmarkId: int("bookmark_id").notNull(),
     tagId: int("tag_id").notNull(),
+    createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`),
+    archivedAt: datetime("archived_at"),
+    bookmarkIdActive: int("bookmark_id_active").generatedAlwaysAs(
+      sql`CASE WHEN archived_at IS NULL THEN bookmark_id ELSE NULL END`,
+      { mode: "stored" }
+    ),
+    tagIdActive: int("tag_id_active").generatedAlwaysAs(
+      sql`CASE WHEN archived_at IS NULL THEN tag_id ELSE NULL END`,
+      { mode: "stored" }
+    ),
   },
   (t) => [
-    primaryKey({ columns: [t.bookmarkId, t.tagId] }),
+    uniqueIndex("uniq_active_bookmark_tag").on(t.bookmarkIdActive, t.tagIdActive),
     index("idx_bt_bookmark").on(t.bookmarkId),
     index("idx_bt_tag").on(t.tagId),
   ]
@@ -111,12 +121,22 @@ export const bookmarkTags = mysqlTable(
 export const bookmarkClassifications = mysqlTable(
   "bookmark_classifications",
   {
+    id: int("id").autoincrement().primaryKey(),
     bookmarkId: int("bookmark_id").notNull(),
     classificationId: int("classification_id").notNull(),
     createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`),
+    archivedAt: datetime("archived_at"),
+    bookmarkIdActive: int("bookmark_id_active").generatedAlwaysAs(
+      sql`CASE WHEN archived_at IS NULL THEN bookmark_id ELSE NULL END`,
+      { mode: "stored" }
+    ),
+    classificationIdActive: int("classification_id_active").generatedAlwaysAs(
+      sql`CASE WHEN archived_at IS NULL THEN classification_id ELSE NULL END`,
+      { mode: "stored" }
+    ),
   },
   (t) => [
-    primaryKey({ columns: [t.bookmarkId, t.classificationId] }),
+    uniqueIndex("uniq_active_bookmark_classification").on(t.bookmarkIdActive, t.classificationIdActive),
     index("idx_bc_bookmark").on(t.bookmarkId),
     index("idx_bc_classification").on(t.classificationId),
   ]

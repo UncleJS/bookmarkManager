@@ -78,7 +78,39 @@ ALTER TABLE bookmarks
   DROP COLUMN IF EXISTS archived;
 
 -- ---------------------------------------------------------------------------
--- 5. Register the Drizzle 0000 baseline as already applied
+-- 5. Add archive lifecycle columns to junction tables
+-- ---------------------------------------------------------------------------
+ALTER TABLE bookmark_tags
+  DROP PRIMARY KEY,
+  ADD COLUMN IF NOT EXISTS id INT NOT NULL AUTO_INCREMENT PRIMARY KEY FIRST,
+  ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  ADD COLUMN IF NOT EXISTS archived_at DATETIME NULL DEFAULT NULL,
+  ADD COLUMN IF NOT EXISTS bookmark_id_active INT GENERATED ALWAYS AS (
+    CASE WHEN archived_at IS NULL THEN bookmark_id ELSE NULL END
+  ) STORED,
+  ADD COLUMN IF NOT EXISTS tag_id_active INT GENERATED ALWAYS AS (
+    CASE WHEN archived_at IS NULL THEN tag_id ELSE NULL END
+  ) STORED;
+
+CREATE UNIQUE INDEX IF NOT EXISTS uniq_active_bookmark_tag
+  ON bookmark_tags (bookmark_id_active, tag_id_active);
+
+ALTER TABLE bookmark_classifications
+  DROP PRIMARY KEY,
+  ADD COLUMN IF NOT EXISTS id INT NOT NULL AUTO_INCREMENT PRIMARY KEY FIRST,
+  ADD COLUMN IF NOT EXISTS archived_at DATETIME NULL DEFAULT NULL,
+  ADD COLUMN IF NOT EXISTS bookmark_id_active INT GENERATED ALWAYS AS (
+    CASE WHEN archived_at IS NULL THEN bookmark_id ELSE NULL END
+  ) STORED,
+  ADD COLUMN IF NOT EXISTS classification_id_active INT GENERATED ALWAYS AS (
+    CASE WHEN archived_at IS NULL THEN classification_id ELSE NULL END
+  ) STORED;
+
+CREATE UNIQUE INDEX IF NOT EXISTS uniq_active_bookmark_classification
+  ON bookmark_classifications (bookmark_id_active, classification_id_active);
+
+-- ---------------------------------------------------------------------------
+-- 6. Register the Drizzle 0000 baseline as already applied
 --    This prevents drizzle-kit from trying to re-run the fresh-install migration.
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `__drizzle_migrations` (
