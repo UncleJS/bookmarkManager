@@ -31,6 +31,7 @@ Every script uses `set -euo pipefail` and colour-coded output:
 - [logs.sh](#logssh)
 - [status.sh](#statussh)
 - [dev.sh](#devsh)
+- [test-integration.sh](#test-integrationsh)
 - [backup.sh](#backupsh)
 
 ---
@@ -48,6 +49,7 @@ Every script uses `set -euo pipefail` and colour-coded output:
 | [`logs.sh`](#logssh) | `[api\|db\|pma\|all]` | Tail journalctl logs |
 | [`status.sh`](#statussh) | — | Show systemctl status for all services |
 | [`dev.sh`](#devsh) | — | Run API locally via Bun (no container) |
+| [`test-integration.sh`](#test-integrationsh) | — | Run Bun integration tests against the pod DB |
 | [`backup.sh`](#backupsh) | — | Dump DB to `backups/bookmark_YYYY-MM-DD_HHMMSS.sql.gz` |
 
 ---
@@ -287,6 +289,24 @@ Runs the API locally using Bun in watch mode, without any container. Useful for 
 systemctl --user stop bookmark-api.service  # stop only the API container
 ./scripts/dev.sh              # run API locally against the container DB
 ```
+
+[↑ Table of Contents](#table-of-contents)
+
+---
+
+## test-integration.sh
+
+Runs the Bun integration suite from a temporary Bun container joined to the running Bookmark Manager pod, so the tests can reach MariaDB at `127.0.0.1:3306` exactly like the API does.
+
+```bash
+./scripts/test-integration.sh
+```
+
+**Steps executed:**
+
+1. Starts `bookmark-pod.service` if it is not already running.
+2. Launches a temporary `docker.io/oven/bun:1.3.8` container inside the `systemd-bookmark` pod.
+3. Mounts `api/` into that container and runs `bun test src/tests/bookmarks.integration.test.ts`.
 
 [↑ Table of Contents](#table-of-contents)
 
