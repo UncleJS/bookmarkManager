@@ -2,11 +2,11 @@
  * Options Page Controller
  *
  * Handles the extension's options/settings page functionality including:
- * - Loading current API base URL configuration
- * - Saving updated API base URL settings
+ * - Loading current API base URL and API token configuration
+ * - Saving updated settings to Chrome storage
  * - Providing user feedback for configuration changes
  */
-import { getApiBaseUrl, setApiBaseUrl } from '../lib/storage.js';
+import { getApiBaseUrl, setApiBaseUrl, getApiToken, setApiToken } from '../lib/storage.js';
 
 /**
  * Quick DOM element selector helper
@@ -35,29 +35,29 @@ function showStatus(message, { success = true, timeoutMs = 1500 } = {}) {
  * Page Initialization Handler
  *
  * Loads current settings when the options page is opened.
- * Populates the API URL input field with the stored value.
+ * Populates the API URL and API token input fields with stored values.
  */
 window.addEventListener('DOMContentLoaded', async () => {
-  // Load and display current API base URL
   el('apiBaseUrl').value = await getApiBaseUrl();
+  el('apiToken').value = await getApiToken();
 });
 
 /**
  * Settings Save Handler
  *
- * Saves the updated API base URL to Chrome storage and provides
- * visual feedback to the user. Includes basic validation to ensure
- * the URL field is not empty.
+ * Saves the updated API base URL and API token to Chrome storage and provides
+ * visual feedback to the user.
  */
 el('save').addEventListener('click', async () => {
-  const input = el('apiBaseUrl');
-
   try {
-    await setApiBaseUrl(input.value);
-    input.value = await getApiBaseUrl();
+    await setApiBaseUrl(el('apiBaseUrl').value);
+    el('apiBaseUrl').value = await getApiBaseUrl();
+
+    await setApiToken(el('apiToken').value.trim());
+
     showStatus('Saved');
   } catch (error) {
-    showStatus(error?.message || 'Failed to save API Base URL.', {
+    showStatus(error?.message || 'Failed to save settings.', {
       success: false,
       timeoutMs: 4000,
     });

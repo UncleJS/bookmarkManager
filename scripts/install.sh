@@ -88,7 +88,7 @@ info "api/.env found."
 # ---- 3. split env generation -------------------------------------------------
 info "Generating per-service env files..."
 write_env_file "${ENV_FILE}" "${API_ENV_FILE}" \
-  API_PORT LOG_LEVEL DB_HOST DB_PORT DB_USER DB_PASSWORD DB_NAME BACKUP_TOKEN
+  API_PORT LOG_LEVEL DB_HOST DB_PORT DB_USER DB_PASSWORD DB_NAME API_TOKEN BACKUP_TOKEN
 write_env_file "${ENV_FILE}" "${DB_ENV_FILE}" \
   MARIADB_DATABASE MARIADB_USER MARIADB_PASSWORD MARIADB_ROOT_PASSWORD
 write_env_file "${ENV_FILE}" "${PMA_ENV_FILE}" \

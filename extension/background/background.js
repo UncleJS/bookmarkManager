@@ -12,7 +12,7 @@
 // Background service worker (MV3)
 // Responsibilities: context menus, central API calls, messaging, notifications
 
-import { getApiBaseUrl } from '../lib/storage.js';
+import { getApiBaseUrl, getApiToken } from '../lib/storage.js';
 
 /**
  * Context menu item identifiers
@@ -200,9 +200,11 @@ async function apiFetch(path, { method = 'GET', body, headers = {}, timeoutMs = 
   const controller = new AbortController();
   const id = setTimeout(() => controller.abort(), timeoutMs);
   const url = (await apiBase()) + path;
+  const token = await getApiToken();
+  const authHeaders = token ? { 'Authorization': `Bearer ${token}` } : {};
   const res = await fetch(url, {
     method,
-    headers: { 'Content-Type': 'application/json', ...headers },
+    headers: { 'Content-Type': 'application/json', ...authHeaders, ...headers },
     body: body ? JSON.stringify(body) : undefined,
     signal: controller.signal,
   }).catch(err => {

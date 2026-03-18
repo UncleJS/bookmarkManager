@@ -21,6 +21,12 @@
         <p id="apiBaseUrlHint" class="field-hint">Use the full base URL for your local or hosted Bookmark Manager API.</p>
       </div>
 
+      <div class="field-group">
+        <label for="apiToken" class="field-label">API Token</label>
+        <input id="apiToken" class="input-field" type="password" autocomplete="off" placeholder="Paste your API_TOKEN here" aria-describedby="apiTokenHint" />
+        <p id="apiTokenHint" class="field-hint">Required. Set <code>API_TOKEN</code> in <code>api/.env</code> then paste the same value here. Sent as <code>Authorization: Bearer &lt;token&gt;</code> on every API request.</p>
+      </div>
+
       <div class="actions-row">
         <span id="status" class="status-text" role="status" aria-live="polite"></span>
         <button id="save" class="save-button">Save</button>
