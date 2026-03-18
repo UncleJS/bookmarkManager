@@ -1,8 +1,8 @@
 {
   "version": "5",
   "dialect": "mysql",
-  "id": "e2286aea-d343-4601-af82-b296969a04f3",
-  "prevId": "edc529f2-feaf-4481-9ad3-d68f0665cb79",
+  "id": "7e6d840f-5e32-4a93-bdab-ffb2c632d904",
+  "prevId": "e2286aea-d343-4601-af82-b296969a04f3",
   "tables": {
     "bookmark_classifications": {
       "name": "bookmark_classifications",
@@ -284,6 +284,7 @@
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false,
+          "onUpdate": true,
           "default": "CURRENT_TIMESTAMP"
         },
         "archived_at": {

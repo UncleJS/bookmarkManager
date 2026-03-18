@@ -247,7 +247,7 @@ Interactive docs always available at **`http://localhost:11650/docs`**.
 | `PATCH` | `/classifications/groups/:id/archive` | Archive group |
 | `PATCH` | `/classifications/groups/:id/restore` | Restore archived group |
 
-**Data lifecycle:** nothing is hard-deleted. All "delete" actions set `archivedAt` and can be reversed with the corresponding `/restore` endpoint.
+**Data lifecycle:** nothing is hard-deleted. Entity records and bookmark association rows are archived via `archivedAt`, and restoring an entity or re-attaching an archived association preserves prior history.
 
 **Duplicate URL detection:** `POST /bookmarks` returns `409` with existing bookmark metadata. Pass `allowDuplicate: true` to save anyway after explicit user confirmation.
 

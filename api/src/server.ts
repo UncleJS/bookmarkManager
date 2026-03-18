@@ -64,11 +64,104 @@ const OkResp = {
   }}},
 };
 
+async function replaceBookmarkTagLinks(tx: any, bookmarkId: number, tagIds: number[]) {
+  const requestedTagIds = [...new Set(tagIds)].filter(Boolean);
+  const rows = await tx
+    .select({
+      id: bookmarkTags.id,
+      tagId: bookmarkTags.tagId,
+      archivedAt: bookmarkTags.archivedAt,
+    })
+    .from(bookmarkTags)
+    .where(eq(bookmarkTags.bookmarkId, bookmarkId));
+
+  const requestedSet = new Set(requestedTagIds);
+  const activeRows = rows.filter((row: any) => row.archivedAt === null);
+  const archivedRowsByTagId = new Map(
+    rows
+      .filter((row: any) => row.archivedAt !== null)
+      .map((row: any) => [row.tagId, row])
+  );
+
+  const tagLinkIdsToArchive = activeRows
+    .filter((row: any) => !requestedSet.has(row.tagId))
+    .map((row: any) => row.id);
+  if (tagLinkIdsToArchive.length > 0) {
+    await tx
+      .update(bookmarkTags)
+      .set({ archivedAt: sql`NOW()` })
+      .where(inArray(bookmarkTags.id, tagLinkIdsToArchive));
+  }
+
+  for (const tagId of requestedTagIds) {
+    const activeRow = activeRows.find((row: any) => row.tagId === tagId);
+    if (activeRow) continue;
+
+    const archivedRow = archivedRowsByTagId.get(tagId);
+    if (archivedRow) {
+      await tx
+        .update(bookmarkTags)
+        .set({ archivedAt: null })
+        .where(eq(bookmarkTags.id, (archivedRow as any).id));
+      continue;
+    }
+
+    await tx.insert(bookmarkTags).values({ bookmarkId, tagId });
+  }
+}
+
+async function replaceBookmarkClassificationLinks(tx: any, bookmarkId: number, classificationIds: number[]) {
+  const requestedClassificationIds = [...new Set(classificationIds)].filter(Boolean);
+  const rows = await tx
+    .select({
+      id: bookmarkClassifications.id,
+      classificationId: bookmarkClassifications.classificationId,
+      archivedAt: bookmarkClassifications.archivedAt,
+    })
+    .from(bookmarkClassifications)
+    .where(eq(bookmarkClassifications.bookmarkId, bookmarkId));
+
+  const requestedSet = new Set(requestedClassificationIds);
+  const activeRows = rows.filter((row: any) => row.archivedAt === null);
+  const archivedRowsByClassificationId = new Map(
+    rows
+      .filter((row: any) => row.archivedAt !== null)
+      .map((row: any) => [row.classificationId, row])
+  );
+
+  const classificationLinkIdsToArchive = activeRows
+    .filter((row: any) => !requestedSet.has(row.classificationId))
+    .map((row: any) => row.id);
+  if (classificationLinkIdsToArchive.length > 0) {
+    await tx
+      .update(bookmarkClassifications)
+      .set({ archivedAt: sql`NOW()` })
+      .where(inArray(bookmarkClassifications.id, classificationLinkIdsToArchive));
+  }
+
+  for (const classificationId of requestedClassificationIds) {
+    const activeRow = activeRows.find((row: any) => row.classificationId === classificationId);
+    if (activeRow) continue;
+
+    const archivedRow = archivedRowsByClassificationId.get(classificationId);
+    if (archivedRow) {
+      await tx
+        .update(bookmarkClassifications)
+        .set({ archivedAt: null })
+        .where(eq(bookmarkClassifications.id, (archivedRow as any).id));
+      continue;
+    }
+
+    await tx.insert(bookmarkClassifications).values({ bookmarkId, classificationId });
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Elysia App
 // ---------------------------------------------------------------------------
 
-const app = new Elysia()
+export function buildApp() {
+  return new Elysia()
   // ── Swagger / OpenAPI ──────────────────────────────────────────────────────
   .use(
     swagger({
@@ -80,8 +173,8 @@ const app = new Elysia()
           description:
             "REST API for the Bookmark Manager Chrome extension.\n\n" +
             "Manages bookmarks, tags, classifications, and classification groups.\n\n" +
-            "**Data lifecycle:** records are never hard-deleted. All destructive operations " +
-            "set an `archivedAt` timestamp and can be reversed with the corresponding `/restore` endpoint.\n\n" +
+            "**Data lifecycle:** records are never hard-deleted. Entity rows and bookmark association rows " +
+            "use `archivedAt` for archive-only lifecycle, and archived associations are reactivated when re-attached.\n\n" +
             "**Timestamps:** stored and returned as UTC. The `archivedAt` field is `null` " +
             "while a record is active and set to a UTC datetime when archived.",
         },
@@ -225,6 +318,7 @@ const app = new Elysia()
           .leftJoin(
             bookmarkTags,
             and(
+              isNull(bookmarkTags.archivedAt),
               eq(bookmarkTags.tagId, tags.id),
               // only count active (non-archived) bookmarks
               sql`EXISTS (SELECT 1 FROM bookmarks b WHERE b.id = ${bookmarkTags.bookmarkId} AND b.archived_at IS NULL)`
@@ -437,6 +531,7 @@ const app = new Elysia()
           .from(bookmarkClassifications)
           .innerJoin(bookmarks, and(
             eq(bookmarkClassifications.bookmarkId, bookmarks.id),
+            isNull(bookmarkClassifications.archivedAt),
             isNull(bookmarks.archivedAt)
           ))
           .groupBy(bookmarkClassifications.classificationId),
@@ -623,53 +718,53 @@ const app = new Elysia()
         }
       }
 
-      // Insert bookmark
       const flags = body.flags ?? {};
-      const [result] = await db
-        .insert(bookmarks)
-        .values({
-          url,
-          title,
-          description: body.description ?? null,
-          faviconUrl: body.faviconUrl ?? null,
-          readLater: flags.readLater ? 1 : 0,
-          hotTopic: flags.hotTopic ? 1 : 0,
-          cheatsheets: flags.cheatsheets ? 1 : 0,
-          forReview: flags.forReview ? 1 : 0,
-          archivedAt: flags.archived ? sql`NOW()` : null,
-        })
-        .$returningId();
-
-      const bookmarkId = result.id;
-
-      // Insert tag associations
       const tagIds = [...new Set(body.tags ?? [])].filter(Boolean);
-      if (tagIds.length > 0) {
-        await db
-          .insert(bookmarkTags)
-          .values(tagIds.map((tagId) => ({ bookmarkId, tagId })));
-      }
-
-      // Insert classification associations
       const classIds = [
         ...new Set(body.classificationIds ?? []),
       ].filter(Boolean);
-      if (classIds.length > 0) {
-        await db
-          .insert(bookmarkClassifications)
-          .values(classIds.map((classificationId) => ({ bookmarkId, classificationId })));
-      }
+      const created = await db.transaction(async (tx) => {
+        const [result] = await tx
+          .insert(bookmarks)
+          .values({
+            url,
+            title,
+            description: body.description ?? null,
+            faviconUrl: body.faviconUrl ?? null,
+            readLater: flags.readLater ? 1 : 0,
+            hotTopic: flags.hotTopic ? 1 : 0,
+            cheatsheets: flags.cheatsheets ? 1 : 0,
+            forReview: flags.forReview ? 1 : 0,
+            archivedAt: flags.archived ? sql`NOW()` : null,
+          })
+          .$returningId();
 
-      // Return the created bookmark
-      const [created] = await db
-        .select({
-          id: bookmarks.id,
-          url: bookmarks.url,
-          title: bookmarks.title,
-          createdAt: bookmarks.createdAt,
-        })
-        .from(bookmarks)
-        .where(eq(bookmarks.id, bookmarkId));
+        const bookmarkId = result.id;
+
+        if (tagIds.length > 0) {
+          await tx
+            .insert(bookmarkTags)
+            .values(tagIds.map((tagId) => ({ bookmarkId, tagId })));
+        }
+
+        if (classIds.length > 0) {
+          await tx
+            .insert(bookmarkClassifications)
+            .values(classIds.map((classificationId) => ({ bookmarkId, classificationId })));
+        }
+
+        const [row] = await tx
+          .select({
+            id: bookmarks.id,
+            url: bookmarks.url,
+            title: bookmarks.title,
+            createdAt: bookmarks.createdAt,
+          })
+          .from(bookmarks)
+          .where(eq(bookmarks.id, bookmarkId));
+
+        return row;
+      });
 
       set.status = 201;
       return created;
@@ -777,7 +872,10 @@ const app = new Elysia()
         const matchingIds = db
           .select({ bookmarkId: bookmarkClassifications.bookmarkId })
           .from(bookmarkClassifications)
-          .where(eq(bookmarkClassifications.classificationId, classificationId));
+          .where(and(
+            eq(bookmarkClassifications.classificationId, classificationId),
+            isNull(bookmarkClassifications.archivedAt)
+          ));
         conditions.push(inArray(bookmarks.id, matchingIds));
       }
 
@@ -786,7 +884,10 @@ const app = new Elysia()
         const matchingIds = db
           .select({ bookmarkId: bookmarkTags.bookmarkId })
           .from(bookmarkTags)
-          .where(eq(bookmarkTags.tagId, tagId));
+          .where(and(
+            eq(bookmarkTags.tagId, tagId),
+            isNull(bookmarkTags.archivedAt)
+          ));
         conditions.push(inArray(bookmarks.id, matchingIds));
       }
 
@@ -825,7 +926,10 @@ const app = new Elysia()
                 })
                 .from(bookmarkTags)
                 .innerJoin(tags, eq(bookmarkTags.tagId, tags.id))
-                .where(inArray(bookmarkTags.bookmarkId, ids)),
+                .where(and(
+                  inArray(bookmarkTags.bookmarkId, ids),
+                  isNull(bookmarkTags.archivedAt)
+                )),
               db
                 .select({
                   bookmarkId: bookmarkClassifications.bookmarkId,
@@ -837,7 +941,10 @@ const app = new Elysia()
                 .from(bookmarkClassifications)
                 .innerJoin(classifications, eq(bookmarkClassifications.classificationId, classifications.id))
                 .leftJoin(classificationGroups, eq(classifications.groupId, classificationGroups.id))
-                .where(inArray(bookmarkClassifications.bookmarkId, ids)),
+                .where(and(
+                  inArray(bookmarkClassifications.bookmarkId, ids),
+                  isNull(bookmarkClassifications.archivedAt)
+                )),
             ])
           : [[], []];
 
@@ -948,29 +1055,21 @@ const app = new Elysia()
       const changedAssociations =
         body.tagIds !== undefined || body.classificationIds !== undefined;
 
-      if (Object.keys(updates).length > 0) {
-        await db.update(bookmarks).set(updates).where(eq(bookmarks.id, id));
-      } else if (changedAssociations) {
-        await db.update(bookmarks).set({ updatedAt: sql`CURRENT_TIMESTAMP` }).where(eq(bookmarks.id, id));
-      }
-
-      // Replace tags if provided
-      if (body.tagIds !== undefined) {
-        await db.delete(bookmarkTags).where(eq(bookmarkTags.bookmarkId, id));
-        const uniqueTagIds = [...new Set(body.tagIds)].filter(Boolean);
-        if (uniqueTagIds.length > 0) {
-          await db.insert(bookmarkTags).values(uniqueTagIds.map(tagId => ({ bookmarkId: id, tagId })));
+      await db.transaction(async (tx) => {
+        if (Object.keys(updates).length > 0) {
+          await tx.update(bookmarks).set(updates).where(eq(bookmarks.id, id));
+        } else if (changedAssociations) {
+          await tx.update(bookmarks).set({ updatedAt: sql`CURRENT_TIMESTAMP` }).where(eq(bookmarks.id, id));
         }
-      }
 
-      // Replace classifications if provided
-      if (body.classificationIds !== undefined) {
-        await db.delete(bookmarkClassifications).where(eq(bookmarkClassifications.bookmarkId, id));
-        const uniqueClassIds = [...new Set(body.classificationIds)].filter(Boolean);
-        if (uniqueClassIds.length > 0) {
-          await db.insert(bookmarkClassifications).values(uniqueClassIds.map(classificationId => ({ bookmarkId: id, classificationId })));
+        if (body.tagIds !== undefined) {
+          await replaceBookmarkTagLinks(tx, id, body.tagIds);
         }
-      }
+
+        if (body.classificationIds !== undefined) {
+          await replaceBookmarkClassificationLinks(tx, id, body.classificationIds);
+        }
+      });
 
       return { ok: true };
     },
@@ -995,7 +1094,8 @@ const app = new Elysia()
           "Partially updates a bookmark. Only fields present in the request body are changed — " +
           "omitting a field leaves its current value untouched.\n\n" +
           "**Tag and classification replacement:** when `tagIds` or `classificationIds` are provided, " +
-          "the existing associations are **fully replaced** (not merged). " +
+          "the active associations are **fully replaced** (not merged). " +
+          "Removed links are archived rather than hard-deleted, and re-adding the same ID restores the prior link. " +
           "Send an empty array to detach all tags or classifications.\n\n" +
           "**Flags:** each flag is independent. Omitting a flag key leaves it unchanged. " +
           "Pass `false` to clear a flag that was previously set.\n\n" +
@@ -1085,6 +1185,7 @@ const app = new Elysia()
         .from(bookmarkClassifications)
         .innerJoin(bookmarks, and(
           eq(bookmarkClassifications.bookmarkId, bookmarks.id),
+          isNull(bookmarkClassifications.archivedAt),
           isNull(bookmarks.archivedAt)
         ))
         .where(eq(bookmarkClassifications.classificationId, id));
@@ -1296,6 +1397,7 @@ const app = new Elysia()
           .from(bookmarkClassifications)
           .innerJoin(bookmarks, and(
             eq(bookmarkClassifications.bookmarkId, bookmarks.id),
+            isNull(bookmarkClassifications.archivedAt),
             isNull(bookmarks.archivedAt)
           ))
           .groupBy(bookmarkClassifications.classificationId),
@@ -1449,6 +1551,7 @@ const app = new Elysia()
         .from(bookmarkClassifications)
         .innerJoin(bookmarks, and(
           eq(bookmarkClassifications.bookmarkId, bookmarks.id),
+          isNull(bookmarkClassifications.archivedAt),
           isNull(bookmarks.archivedAt)
         ))
         .innerJoin(classifications, and(
@@ -1698,14 +1801,20 @@ const app = new Elysia()
   )
 
   // ── Start ──────────────────────────────────────────────────────────────────
-  .listen(PORT);
+}
 
-console.log(
-  `🔖 Bookmark Manager API running at http://localhost:${PORT}\n` +
-    `   Viewer UI  → http://localhost:${PORT}/app\n` +
-    `   Swagger UI → http://localhost:${PORT}/docs\n` +
-    `   OpenAPI    → http://localhost:${PORT}/openapi.json`
-);
+export const app = buildApp();
+
+if (import.meta.main) {
+  app.listen(PORT);
+
+  console.log(
+    `🔖 Bookmark Manager API running at http://localhost:${PORT}\n` +
+      `   Viewer UI  → http://localhost:${PORT}/app\n` +
+      `   Swagger UI → http://localhost:${PORT}/docs\n` +
+      `   OpenAPI    → http://localhost:${PORT}/openapi.json`
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Helpers
