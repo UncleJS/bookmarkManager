@@ -13,7 +13,8 @@
 #   8. Copy Quadlet unit files into ~/.config/containers/systemd/
 #   9. systemctl --user daemon-reload
 #  10. Enable + start bookmark-pod.service
-#  11. Print service URLs
+#  11. Wait for API readiness
+#  12. Print service URLs
 # =============================================================================
 set -euo pipefail
 
@@ -27,6 +28,8 @@ DB_ENV_FILE="${REPO_ROOT}/api/.env.db"
 PMA_ENV_FILE="${REPO_ROOT}/api/.env.pma"
 DB_VOLUME_NAME="bookmark-db-data"
 OLD_DB_VOLUME_DIR="${HOME}/.local/share/bookmark-manager/prod-db"
+READY_URL="http://localhost:11650/ready"
+MAX_WAIT=30
 
 # ---- colours -----------------------------------------------------------------
 RED='\033[0;31m'; YELLOW='\033[1;33m'; GREEN='\033[0;32m'; CYAN='\033[0;36m'; NC='\033[0m'
@@ -155,7 +158,23 @@ info "Enabling and starting bookmark-pod.service..."
 systemctl --user enable --now bookmark-pod.service
 success "bookmark-pod.service started."
 
-# ---- 11. URLs ----------------------------------------------------------------
+# ---- 11. readiness check -----------------------------------------------------
+info "Waiting for API to become ready (up to ${MAX_WAIT}s)..."
+ELAPSED=0
+until curl -sf "${READY_URL}" &>/dev/null; do
+  if [[ ${ELAPSED} -ge ${MAX_WAIT} ]]; then
+    error "API did not become ready within ${MAX_WAIT}s."
+    error "Check logs: ./scripts/logs.sh api"
+    exit 1
+  fi
+  sleep 2
+  ELAPSED=$((ELAPSED + 2))
+  echo -n "."
+done
+echo ""
+success "API is ready at ${READY_URL} (after ${ELAPSED}s)."
+
+# ---- 12. URLs ----------------------------------------------------------------
 echo ""
 success "================================================================"
 success "  Bookmark Manager is running!"

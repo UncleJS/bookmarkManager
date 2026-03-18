@@ -54,7 +54,7 @@ nano api/.env
 ./scripts/install.sh
 ```
 
-This will generate split env files, build the API image, copy Quadlet unit files, reload systemd, and start the pod.
+This will generate split env files, build the API image, copy Quadlet unit files, reload systemd, start the pod, and wait for `GET /ready` before reporting success.
 
 Alternatively, run individual steps manually:
 
@@ -73,8 +73,13 @@ This starts:
 
 ```bash
 curl http://localhost:11650/health
-# → {"status":"ok"}
+# → {"status":"ok","check":"liveness"}
+
+curl http://localhost:11650/ready
+# → {"status":"ok","check":"readiness"}
 ```
+
+`/health` is a liveness probe for the HTTP process only. `/ready` is the DB-aware readiness probe used by container health checks and rebuild verification.
 
 | Service | URL |
 |---|---|
@@ -101,9 +106,9 @@ loginctl enable-linger $USER
 
 | Script | Description |
 |---|---|
-| `./scripts/install.sh` | Full install: build image, deploy Quadlet files, start pod |
+| `./scripts/install.sh` | Full install: build image, deploy Quadlet files, start pod, wait for readiness |
 | `./scripts/uninstall.sh` | Stop services, remove Quadlet files, optionally remove image + data |
-| `./scripts/rebuild.sh` | Rebuild API image, restart `bookmark-api.service`, wait for health |
+| `./scripts/rebuild.sh` | Rebuild API image, restart `bookmark-api.service`, wait for readiness |
 | `./scripts/start.sh` | Start the pod (all services) |
 | `./scripts/stop.sh` | Stop the pod (all services) |
 | `./scripts/restart.sh [api\|db\|pma]` | Restart one service or whole pod |
@@ -124,7 +129,7 @@ loginctl enable-linger $USER
 | `bun run db:generate` | Generate a new Drizzle migration from schema changes |
 | `bun run db:migrate` | Apply pending Drizzle migrations |
 | `bun run db:studio` | Open Drizzle Studio (visual DB browser) |
-| `bun run smoke` | Smoke test — verifies `/health` (no DB required) |
+| `bun run smoke` | Smoke test — verifies real app `/health` and `/ready` route behavior |
 
 ## Production runtime hardening
 
@@ -156,7 +161,8 @@ Interactive docs always available at **`http://localhost:11650/docs`**.
 | Method | Path | Description |
 |---|---|---|
 | `GET` | `/` | Redirect to `/app` |
-| `GET` | `/health` | Returns `{ status: "ok" }` |
+| `GET` | `/health` | Liveness check for the HTTP process |
+| `GET` | `/ready` | Readiness check that verifies MariaDB connectivity |
 | `GET` | `/docs` | Swagger UI |
 | `GET` | `/openapi.json` | OpenAPI spec |
 | `GET` | `/app` | Bookmark viewer UI |
