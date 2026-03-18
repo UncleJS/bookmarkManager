@@ -14,8 +14,8 @@ After=bookmark-pod.service bookmark-db.service
 Image=docker.io/phpmyadmin:5
 ContainerName=bookmark-pma
 
-# Load env vars from prod env file (provides PMA_HOST, PMA_PORT, PMA_ABSOLUTE_URI)
-EnvironmentFile=%h/0_opencode/bookmarkManager/api/.env
+# Load only phpMyAdmin env vars from generated prod env file
+EnvironmentFile=%h/0_opencode/bookmarkManager/api/.env.pma
 
 # Do NOT set PMA_USER / PMA_PASSWORD — that would enable auto-login (disallowed).
 

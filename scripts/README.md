@@ -65,14 +65,18 @@ Full first-time install. Run this once after cloning the repo.
 1. Verifies `api/` and `quadlet/` directories exist (confirms repo root).
 2. Checks for `api/.env`.
    - If missing: copies `api/.env.example` → `api/.env`, prints a warning, and **exits** so you can fill in real passwords before continuing.
-3. Verifies `podman` is on `PATH`.
-4. Pulls base images: `docker.io/mariadb:11` and `docker.io/phpmyadmin:5`.
-5. Builds `localhost/bookmark-api:latest` from `api/Dockerfile`.
-6. Creates the DB data volume directory: `~/.local/share/bookmark-manager/prod-db`.
-7. Copies `quadlet/*.{pod,container}` → `~/.config/containers/systemd/`.
-8. Runs `systemctl --user daemon-reload`.
-9. Runs `systemctl --user enable --now bookmark-pod.service`.
-10. Prints service URLs.
+3. Generates least-privilege env files from `api/.env`:
+   - `api/.env.api`
+   - `api/.env.db`
+   - `api/.env.pma`
+4. Verifies `podman` is on `PATH`.
+5. Pulls base images: `docker.io/mariadb:11` and `docker.io/phpmyadmin:5`.
+6. Builds `localhost/bookmark-api:latest` from `api/Dockerfile`.
+7. Creates the DB data volume directory: `~/.local/share/bookmark-manager/prod-db`.
+8. Copies `quadlet/*.{pod,container}` → `~/.config/containers/systemd/`.
+9. Runs `systemctl --user daemon-reload`.
+10. Runs `systemctl --user enable --now bookmark-pod.service`.
+11. Prints service URLs.
 
 **First-time flow:**
 
@@ -85,7 +89,7 @@ nano api/.env   # set DB_PASSWORD, MARIADB_PASSWORD, MARIADB_ROOT_PASSWORD
 ./scripts/install.sh
 ```
 
-**Re-running install** is safe — it is idempotent. Existing Quadlet files are overwritten, the image is rebuilt, and the pod is (re)started.
+**Re-running install** is safe — it is idempotent. Existing generated env files and Quadlet files are overwritten, the image is rebuilt, and the pod is (re)started.
 
 **Outputs on success:**
 
@@ -299,7 +303,7 @@ Dumps the live MariaDB database to a gzip-compressed SQL file in `backups/`.
 
 **What it does:**
 
-1. Reads `DB_USER`, `DB_PASSWORD`, `DB_NAME` from `api/.env`.
+1. Reads `DB_USER`, `DB_PASSWORD`, `DB_NAME` from `api/.env.api`.
 2. Verifies the `bookmark-db` container is running.
 3. Runs `mariadb-dump --single-transaction --routines --triggers` inside the container.
 4. Pipes the output through `gzip -9` and saves to `backups/bookmark_YYYY-MM-DD_HHMMSS.sql.gz`.
@@ -307,7 +311,7 @@ Dumps the live MariaDB database to a gzip-compressed SQL file in `backups/`.
 **Notes:**
 
 - `backups/` is gitignored — dump files are never committed.
-- A backup is also available via the browser at `GET /backup` — send `Authorization: Bearer <BACKUP_TOKEN>` (set `BACKUP_TOKEN` in `api/.env`).
+- A backup is also available via the browser at `GET /backup` — send `Authorization: Bearer <BACKUP_TOKEN>` (set `BACKUP_TOKEN` in `api/.env`, then run `./scripts/install.sh` to regenerate `api/.env.api`).
 - To restore: `gunzip -c backups/<file>.sql.gz | podman exec -i bookmark-db mariadb -u<user> -p<pass> <dbname>`
 
 [↑ Table of Contents](#table-of-contents)

@@ -366,9 +366,10 @@ All tables include `archived_at DATETIME NULL`. `NULL` = active. "Delete" sets `
 | `bookmark-pma.container` | `docker.io/phpmyadmin:5` | phpMyAdmin |
 
 ### Environment
-- Single file: `api/.env` (gitignored)
-- Loaded by all three containers via `EnvironmentFile=%h/0_opencode/bookmarkManager/api/.env`
-- Template: `api/.env.example`
+- Source file: `api/.env` (gitignored)
+- Generated files: `api/.env.api`, `api/.env.db`, `api/.env.pma` (gitignored)
+- `scripts/install.sh` regenerates those split files from `api/.env`
+- Templates: `api/.env.example`, `api/.env.api.example`, `api/.env.db.example`, `api/.env.pma.example`
 
 ### Quadlet unit files
 Canonical copies live in `quadlet/` (version-controlled). `scripts/install.sh` deploys them to `~/.config/containers/systemd/`.
