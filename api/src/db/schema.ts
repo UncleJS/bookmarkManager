@@ -85,7 +85,7 @@ export const bookmarks = mysqlTable("bookmarks", {
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`),
   updatedAt: timestamp("updated_at")
     .default(sql`CURRENT_TIMESTAMP`)
-    .$onUpdateFn(() => new Date()),
+    .onUpdateNow(),
   archivedAt: datetime("archived_at"),
 });
 

@@ -8,6 +8,13 @@
       "when": 1771584840301,
       "tag": "0000_fluffy_scarlet_witch",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "5",
+      "when": 1773814893604,
+      "tag": "0001_stiff_thor",
+      "breakpoints": true
     }
   ]
 }
