@@ -6,10 +6,26 @@
  * local storage and avoids syncing localhost-specific values across devices.
  */
 
+import { normalizeStoredApiBaseUrl, validateApiBaseUrl } from './validate.js';
+
 /**
  * Storage key for API base URL configuration
  */
 const KEY = 'apiBaseUrl';
+const DEFAULT_API_BASE_URL = 'http://localhost:11650';
+
+function setLocalValue(value) {
+  return new Promise((resolve) => chrome.storage.local.set({ [KEY]: value }, resolve));
+}
+
+function removeSyncValue() {
+  return new Promise((resolve) => chrome.storage.sync.remove(KEY, resolve));
+}
+
+async function persistLocalValue(value) {
+  await setLocalValue(value);
+  await removeSyncValue();
+}
 
 /**
  * Get API Base URL from Storage
@@ -21,23 +37,28 @@ const KEY = 'apiBaseUrl';
  */
 export async function getApiBaseUrl() {
   return new Promise((resolve) => {
-    chrome.storage.local.get([KEY], (localItems) => {
-      if (localItems[KEY]) {
-        resolve(localItems[KEY]);
+    chrome.storage.local.get([KEY], async (localItems) => {
+      const localUrl = normalizeStoredApiBaseUrl(localItems[KEY]);
+
+      if (localUrl) {
+        if (localItems[KEY] !== localUrl) {
+          await persistLocalValue(localUrl);
+        }
+        resolve(localUrl);
         return;
       }
 
-      chrome.storage.sync.get([KEY], (syncItems) => {
-        const syncedUrl = syncItems[KEY];
+      chrome.storage.sync.get([KEY], async (syncItems) => {
+        const syncedUrl = normalizeStoredApiBaseUrl(syncItems[KEY]);
 
-        if (!syncedUrl) {
-          resolve('http://localhost:11650');
+        if (syncedUrl) {
+          await persistLocalValue(syncedUrl);
+          resolve(syncedUrl);
           return;
         }
 
-        chrome.storage.local.set({ [KEY]: syncedUrl }, () => {
-          chrome.storage.sync.remove(KEY, () => resolve(syncedUrl));
-        });
+        await persistLocalValue(DEFAULT_API_BASE_URL);
+        resolve(DEFAULT_API_BASE_URL);
       });
     });
   });
@@ -53,11 +74,13 @@ export async function getApiBaseUrl() {
  * @returns {Promise<void>} Promise that resolves when the URL is saved
  */
 export async function setApiBaseUrl(url) {
-  return new Promise((resolve) => {
-    chrome.storage.local.set({ [KEY]: url }, () => {
-      chrome.storage.sync.remove(KEY, () => resolve());
-    });
-  });
+  const result = validateApiBaseUrl(url);
+
+  if (!result.ok) {
+    throw new Error(result.error);
+  }
+
+  await persistLocalValue(result.value);
 }
 
 /**
