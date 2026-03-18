@@ -255,7 +255,7 @@ Interactive docs always available at **`http://localhost:11650/docs`**.
 | `PATCH` | `/classifications/groups/:id/archive` | Archive group |
 | `PATCH` | `/classifications/groups/:id/restore` | Restore archived group |
 
-**Data lifecycle:** nothing is hard-deleted. Entity records and bookmark association rows are archived via `archivedAt`, and restoring an entity or re-attaching an archived association preserves prior history.
+**Data lifecycle:** nothing is hard-deleted. Entity records and bookmark association rows are archived via `archivedAt`, and replacing bookmark tags/classifications archives removed links instead of deleting them.
 
 **Duplicate URL detection:** `POST /bookmarks` returns `409` with existing bookmark metadata when an active bookmark already has that URL. This is enforced by the database, so concurrent creates cannot produce duplicate active URLs, while archived bookmarks can still share the same URL.
 
@@ -302,6 +302,7 @@ curl -H "Authorization: Bearer <BACKUP_TOKEN>" \
 - Returns a `bookmark_YYYY-MM-DD_HHMMSS.sql.gz` download
 - Requires `BACKUP_TOKEN` to be set in `api/.env` (a strong random value — the default `change_me_please` is refused with `503`)
 - Returns `401` on missing or invalid `Authorization` header, `503` if token is unconfigured
+- All other bookmark-management routes remain unauthenticated for trusted local-network use
 - The **⬇ Backup** button in the `http://localhost:11650/app` topbar calls this endpoint — it will prompt for your token and send it securely in the request header
 
 ### Restore
