@@ -5,12 +5,12 @@
 # Steps:
 #   1. Build localhost/bookmark-api:latest from api/Dockerfile
 #   2. systemctl --user restart bookmark-api.service
-#   3. Wait for health check to pass
+#   3. Wait for readiness check to pass
 # =============================================================================
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-HEALTH_URL="http://localhost:11650/health"
+HEALTH_URL="http://localhost:11650/ready"
 MAX_WAIT=30   # seconds
 
 # ---- colours -----------------------------------------------------------------
@@ -31,11 +31,11 @@ systemctl --user restart bookmark-api.service
 success "Service restarted."
 
 # ---- 3. health check ---------------------------------------------------------
-info "Waiting for API to become healthy (up to ${MAX_WAIT}s)..."
+info "Waiting for API to become ready (up to ${MAX_WAIT}s)..."
 ELAPSED=0
 until curl -sf "${HEALTH_URL}" &>/dev/null; do
   if [[ ${ELAPSED} -ge ${MAX_WAIT} ]]; then
-    error "API did not become healthy within ${MAX_WAIT}s."
+    error "API did not become ready within ${MAX_WAIT}s."
     error "Check logs: ./scripts/logs.sh api"
     exit 1
   fi
@@ -44,4 +44,4 @@ until curl -sf "${HEALTH_URL}" &>/dev/null; do
   echo -n "."
 done
 echo ""
-success "API is healthy at ${HEALTH_URL} (after ${ELAPSED}s)."
+success "API is ready at ${HEALTH_URL} (after ${ELAPSED}s)."

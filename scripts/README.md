@@ -138,8 +138,8 @@ Rebuilds the API container image from source and restarts only the API service. 
 
 1. Builds `localhost/bookmark-api:latest` from `api/Dockerfile`.
 2. Restarts `bookmark-api.service` (DB and phpMyAdmin are unaffected).
-3. Polls `GET /health` every 2 seconds for up to 30 seconds.
-   - Exits 0 when healthy, exits 1 with instructions if the timeout is exceeded.
+3. Polls `GET /ready` every 2 seconds for up to 30 seconds.
+   - Exits 0 when ready, exits 1 with instructions if the timeout is exceeded.
 
 **Workflow for source changes:**
 

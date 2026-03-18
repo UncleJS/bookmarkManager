@@ -83,13 +83,19 @@ nano api/.env
 - Build `localhost/bookmark-api:latest`
 - Copy `quadlet/` unit files into `~/.config/containers/systemd/`
 - Run `systemctl --user daemon-reload` and start the pod
+- Wait for `GET /ready` before reporting success
 
 ### 3. Health check
 
 ```bash
 curl http://localhost:11650/health
-# → {"status":"ok"}
+# → {"status":"ok","check":"liveness"}
+
+curl http://localhost:11650/ready
+# → {"status":"ok","check":"readiness"}
 ```
+
+`/health` shows that the HTTP process is alive. `/ready` shows that the API can reach MariaDB and is ready for DB-backed requests.
 
 | Service | URL |
 |---|---|
@@ -117,7 +123,7 @@ All scripts live in `scripts/` and are run from the repo root.
 
 | Script | Description |
 |---|---|
-| `./scripts/install.sh` | Full install: build image, deploy Quadlet files, start pod |
+| `./scripts/install.sh` | Full install: build image, deploy Quadlet files, start pod, wait for readiness |
 | `./scripts/uninstall.sh` | Stop services, remove Quadlet files, optionally remove image + data |
 | `./scripts/rebuild.sh` | Rebuild API image and restart `bookmark-api.service` |
 | `./scripts/start.sh` | Start the pod (all services) |
@@ -190,7 +196,8 @@ Interactive docs always available at **`http://localhost:11650/docs`**.
 | Method | Path | Description |
 |---|---|---|
 | `GET` | `/` | Redirect to `/app` |
-| `GET` | `/health` | Returns `{ status: "ok" }` |
+| `GET` | `/health` | Liveness check for the HTTP process |
+| `GET` | `/ready` | Readiness check that verifies MariaDB connectivity |
 | `GET` | `/docs` | Swagger UI |
 | `GET` | `/openapi.json` | OpenAPI spec |
 | `GET` | `/app` | Bookmark viewer UI |

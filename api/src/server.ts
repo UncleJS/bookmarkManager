@@ -1,17 +1,22 @@
 import { Elysia } from "elysia";
 import { swagger } from "@elysiajs/swagger";
 
+import { pool } from "./db/client.ts";
 import { backupRoutes } from "./routes/backup.ts";
 import { bookmarkRoutes } from "./routes/bookmarks.ts";
 import { classificationRoutes } from "./routes/classifications.ts";
 import { groupRoutes } from "./routes/groups.ts";
-import { healthRoutes } from "./routes/health.ts";
+import { createHealthRoutes } from "./routes/health.ts";
 import { getValidationErrorMessage } from "./routes/shared.ts";
 import { tagRoutes } from "./routes/tags.ts";
 
 const PORT = Number(process.env.API_PORT ?? 11650);
 
-export function buildApp() {
+type BuildAppOptions = {
+  checkReadiness?: () => Promise<void>;
+};
+
+export function buildApp({ checkReadiness }: BuildAppOptions = {}) {
   return new Elysia()
     .onError(({ code, error, set }) => {
       if (code === "VALIDATION") {
@@ -44,7 +49,13 @@ export function buildApp() {
         },
       })
     )
-    .use(healthRoutes)
+    .use(
+      createHealthRoutes({
+        checkReadiness: checkReadiness ?? (async () => {
+          await pool.query("select 1");
+        }),
+      })
+    )
     .use(tagRoutes)
     .use(classificationRoutes)
     .use(bookmarkRoutes)
