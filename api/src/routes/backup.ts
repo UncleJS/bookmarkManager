@@ -2,8 +2,22 @@ import { Elysia } from "elysia";
 
 import { ErrorResp } from "./shared.ts";
 
-export const backupRoutes = new Elysia()
-  .get(
+type SpawnedProcess = {
+  stdout: ReadableStream | null;
+  stderr: ReadableStream | null;
+  exited: Promise<number>;
+};
+
+type SpawnProcess = (cmd: string[], options: {
+  stdin?: ReadableStream;
+  stdout: "pipe";
+  stderr: "pipe";
+}) => SpawnedProcess;
+
+const bunSpawn: SpawnProcess = (cmd, options) => Bun.spawn({ cmd, ...options }) as SpawnedProcess;
+
+export function createBackupRoutes({ spawn = bunSpawn }: { spawn?: SpawnProcess } = {}) {
+  return new Elysia().get(
     "/backup",
     async ({ headers, set }) => {
       const configuredToken = process.env.BACKUP_TOKEN ?? "";
@@ -37,7 +51,7 @@ export const backupRoutes = new Elysia()
         .slice(0, 15);
       const filename = `bookmark_${timestamp}.sql.gz`;
 
-      const dump = Bun.spawn(
+      const dump = spawn(
         [
           "mariadb-dump",
           `--host=${dbHost}`,
@@ -52,7 +66,12 @@ export const backupRoutes = new Elysia()
         { stdout: "pipe", stderr: "pipe" }
       );
 
-      const gz = Bun.spawn(["gzip", "-9"], {
+      if (!dump.stdout) {
+        set.status = 500;
+        return { error: "mysqldump failed: stdout pipe was not available" };
+      }
+
+      const gz = spawn(["gzip", "-9"], {
         stdin: dump.stdout,
         stdout: "pipe",
         stderr: "pipe",
@@ -95,3 +114,6 @@ export const backupRoutes = new Elysia()
       },
     }
   );
+}
+
+export const backupRoutes = createBackupRoutes();

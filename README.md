@@ -311,6 +311,18 @@ gunzip -c backups/bookmark_YYYY-MM-DD_HHMMSS.sql.gz \
   | podman exec -i bookmark-db mariadb -u bookmarks -p bookmarks
 ```
 
+### Verify backup + restore
+
+```bash
+./scripts/verify-backup.sh --source script
+./scripts/verify-backup.sh --source api
+./scripts/verify-backup.sh --file backups/bookmark_YYYY-MM-DD_HHMMSS.sql.gz
+```
+
+- Validates the `.sql.gz` file with `gzip -t`
+- Restores the dump into a temporary MariaDB database and checks the core tables exist
+- `./scripts/test-integration.sh` now covers the API backup route and the script restore workflow automatically
+
 ---
 
 [↑ Table of Contents](#table-of-contents)
