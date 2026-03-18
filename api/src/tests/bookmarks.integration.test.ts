@@ -131,6 +131,22 @@ describe("tag lifecycle", () => {
     await expect(second.json()).resolves.toMatchObject({ error: "Tag already exists" });
   });
 
+  it("supports case-insensitive exact tag lookup", async () => {
+    const name = uniqueName("tag-exact-match");
+
+    const createRes = await app.handle(jsonRequest("/tags", "POST", { name }));
+    expect(createRes.status).toBe(201);
+
+    const lookupRes = await app.handle(
+      request(`/tags?query=${encodeURIComponent(name.toUpperCase())}&exact=true&limit=1`)
+    );
+    const lookupBody = await lookupRes.json() as { items: Array<{ name: string }> };
+
+    expect(lookupRes.status).toBe(200);
+    expect(lookupBody.items).toHaveLength(1);
+    expect(lookupBody.items[0]).toMatchObject({ name });
+  });
+
   it("archives and restores tags through the API", async () => {
     const name = uniqueName("tag-lifecycle");
     const createRes = await app.handle(jsonRequest("/tags", "POST", { name }));
