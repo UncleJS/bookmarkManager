@@ -137,6 +137,7 @@ export const classificationRoutes = new Elysia()
           .insert(classifications)
           .values({ name, groupId })
           .$returningId();
+        set.status = 201;
         return { id: result.id, name, groupId };
       } catch (err: unknown) {
         if (isDupEntry(err)) {

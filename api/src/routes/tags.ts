@@ -111,6 +111,7 @@ export const tagRoutes = new Elysia()
           .insert(tags)
           .values({ name })
           .$returningId();
+        set.status = 201;
         return { id: result.id, name };
       } catch (err: unknown) {
         if (isDupEntry(err)) {
