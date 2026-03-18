@@ -20,11 +20,15 @@ EnvironmentFile=%h/0_opencode/bookmarkManager/api/.env
 Pod=bookmark.pod
 
 # Health check (prod port 11650, driven by API_PORT env var)
-HealthCmd=curl -sf http://localhost:11650/health
+HealthCmd=bun run /app/healthcheck.mjs
 HealthInterval=15s
 HealthTimeout=5s
 HealthRetries=3
 HealthStartPeriod=20s
+
+ReadOnly=true
+Tmpfs=/tmp
+NoNewPrivileges=true
 
 [Service]
 Restart=on-failure
