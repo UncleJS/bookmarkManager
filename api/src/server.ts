@@ -456,6 +456,7 @@ export function buildApp() {
           .insert(tags)
           .values({ name })
           .$returningId();
+        set.status = 201;
         return { id: result.id, name };
       } catch (err: unknown) {
         if (isDupEntry(err)) {
@@ -633,6 +634,7 @@ export function buildApp() {
           .insert(classifications)
           .values({ name, groupId })
           .$returningId();
+        set.status = 201;
         return { id: result.id, name, groupId };
       } catch (err: unknown) {
         if (isDupEntry(err)) {
@@ -1319,6 +1321,7 @@ export function buildApp() {
           .insert(classificationGroups)
           .values({ name, order: body.order ?? 0 })
           .$returningId();
+        set.status = 201;
         return { id: result.id, name, order: body.order ?? 0 };
       } catch (err: unknown) {
         if (isDupEntry(err)) { set.status = 409; return { error: "Group already exists" }; }
