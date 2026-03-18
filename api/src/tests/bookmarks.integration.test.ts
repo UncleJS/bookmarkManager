@@ -26,15 +26,12 @@ beforeAll(async () => {
     multipleStatements: true,
   });
 
-  const migration = await readFile(
-    new URL("../db/migrations/0000_fluffy_scarlet_witch.sql", import.meta.url),
+  const journal = JSON.parse(await readFile(
+    new URL("../db/migrations/meta/_journal.json", import.meta.url),
     "utf-8"
-  );
-
-  const statements = migration
-    .split("--> statement-breakpoint")
-    .map((statement) => statement.trim())
-    .filter(Boolean);
+  )) as {
+    entries: Array<{ tag: string }>;
+  };
 
   await adminConnection.query("DROP TRIGGER IF EXISTS fail_bookmark_tags_insert");
   await adminConnection.query("DROP TRIGGER IF EXISTS fail_bookmark_classifications_insert");
@@ -45,8 +42,20 @@ beforeAll(async () => {
   await adminConnection.query("DROP TABLE IF EXISTS classification_groups");
   await adminConnection.query("DROP TABLE IF EXISTS tags");
 
-  for (const statement of statements) {
-    await adminConnection.query(statement);
+  for (const entry of journal.entries) {
+    const migration = await readFile(
+      new URL(`../db/migrations/${entry.tag}.sql`, import.meta.url),
+      "utf-8"
+    );
+
+    const statements = migration
+      .split("--> statement-breakpoint")
+      .map((statement) => statement.trim())
+      .filter(Boolean);
+
+    for (const statement of statements) {
+      await adminConnection.query(statement);
+    }
   }
 
   await adminConnection.query(`
@@ -173,6 +182,73 @@ describe("bookmark write transactions", () => {
     expect(bookmark?.title).toBe("Before rollback");
     expect(bookmarkTags.map((row) => row.tagId)).toEqual([originalTagId]);
     expect(bookmarkClassifications.map((row) => row.classificationId)).toEqual([originalClassificationId]);
+  });
+
+  it("archives removed associations and restores them when re-added", async () => {
+    const [{ id: originalTagId }] = await db.insert(schema.tags).values({ name: uniqueName("tag-archive-old") }).$returningId();
+    const [{ id: replacementTagId }] = await db.insert(schema.tags).values({ name: uniqueName("tag-archive-new") }).$returningId();
+    const [{ id: originalClassificationId }] = await db
+      .insert(schema.classifications)
+      .values({ name: uniqueName("classification-archive-old"), groupId: null })
+      .$returningId();
+    const [{ id: replacementClassificationId }] = await db
+      .insert(schema.classifications)
+      .values({ name: uniqueName("classification-archive-new"), groupId: null })
+      .$returningId();
+    const [{ id: bookmarkId }] = await db
+      .insert(schema.bookmarks)
+      .values({ url: uniqueUrl("archive-links"), title: "Archive links" })
+      .$returningId();
+
+    await db.insert(schema.bookmarkTags).values({ bookmarkId, tagId: originalTagId });
+    await db.insert(schema.bookmarkClassifications).values({
+      bookmarkId,
+      classificationId: originalClassificationId,
+    });
+
+    const replaceRes = await app.handle(jsonRequest(`/bookmarks/${bookmarkId}`, "PATCH", {
+      tagIds: [replacementTagId],
+      classificationIds: [replacementClassificationId],
+    }));
+
+    expect(replaceRes.status).toBe(200);
+
+    const tagLinksAfterReplace = await db
+      .select()
+      .from(schema.bookmarkTags)
+      .where(eq(schema.bookmarkTags.bookmarkId, bookmarkId));
+    const classificationLinksAfterReplace = await db
+      .select()
+      .from(schema.bookmarkClassifications)
+      .where(eq(schema.bookmarkClassifications.bookmarkId, bookmarkId));
+
+    expect(tagLinksAfterReplace).toHaveLength(2);
+    expect(tagLinksAfterReplace.find((row) => row.tagId === originalTagId)?.archivedAt).not.toBeNull();
+    expect(tagLinksAfterReplace.find((row) => row.tagId === replacementTagId)?.archivedAt).toBeNull();
+    expect(classificationLinksAfterReplace).toHaveLength(2);
+    expect(classificationLinksAfterReplace.find((row) => row.classificationId === originalClassificationId)?.archivedAt).not.toBeNull();
+    expect(classificationLinksAfterReplace.find((row) => row.classificationId === replacementClassificationId)?.archivedAt).toBeNull();
+
+    const restoreRes = await app.handle(jsonRequest(`/bookmarks/${bookmarkId}`, "PATCH", {
+      tagIds: [originalTagId, replacementTagId],
+      classificationIds: [originalClassificationId, replacementClassificationId],
+    }));
+
+    expect(restoreRes.status).toBe(200);
+
+    const tagLinksAfterRestore = await db
+      .select()
+      .from(schema.bookmarkTags)
+      .where(eq(schema.bookmarkTags.bookmarkId, bookmarkId));
+    const classificationLinksAfterRestore = await db
+      .select()
+      .from(schema.bookmarkClassifications)
+      .where(eq(schema.bookmarkClassifications.bookmarkId, bookmarkId));
+
+    expect(tagLinksAfterRestore).toHaveLength(2);
+    expect(tagLinksAfterRestore.every((row) => row.archivedAt === null)).toBe(true);
+    expect(classificationLinksAfterRestore).toHaveLength(2);
+    expect(classificationLinksAfterRestore.every((row) => row.archivedAt === null)).toBe(true);
   });
 
   it("preserves duplicate detection after transactional create", async () => {

@@ -203,7 +203,7 @@ Interactive docs always available at **`http://localhost:11650/docs`**.
 | `PATCH` | `/classifications/groups/:id/archive` | Archive group |
 | `PATCH` | `/classifications/groups/:id/restore` | Restore archived group |
 
-**Data lifecycle:** nothing is hard-deleted. All "delete" actions set `archivedAt` and can be reversed with the corresponding `/restore` endpoint.
+**Data lifecycle:** nothing is hard-deleted. Entity records and bookmark association rows are archived via `archivedAt`, and restoring an entity or re-attaching an archived association preserves prior history.
 
 **POST /bookmarks — duplicate detection:**
 - Returns `409` with a `duplicates` array if an active bookmark with the same URL already exists.
@@ -215,7 +215,7 @@ Interactive docs always available at **`http://localhost:11650/docs`**.
 
 ## Database Schema
 
-All tables include `archived_at DATETIME NULL`. A `NULL` value means the row is active. "Deleting" a row sets `archived_at = NOW()`. All queries filter on `archived_at IS NULL`.
+All tables include `archived_at DATETIME NULL`. A `NULL` value means the row is active. "Deleting" a row sets `archived_at = NOW()`. Bookmark association replacement archives removed junction rows and reactivates them if the same link is added later. Active queries filter on `archived_at IS NULL`.
 
 | Table | Purpose |
 |---|---|
@@ -223,8 +223,8 @@ All tables include `archived_at DATETIME NULL`. A `NULL` value means the row is 
 | `classification_groups` | Groups for organizing classifications |
 | `classifications` | Individual categories; many-to-many with bookmarks |
 | `tags` | Flexible labels; many-to-many with bookmarks |
-| `bookmark_tags` | Junction table |
-| `bookmark_classifications` | Junction table |
+| `bookmark_tags` | Junction table with archive/restore semantics |
+| `bookmark_classifications` | Junction table with archive/restore semantics |
 
 **Uniqueness among active rows** — `tags` and `classifications` use a generated column (`name_active`) that is `NULL` when archived, with a unique index on that column. This allows archived rows to share names with active rows.
 
