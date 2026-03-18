@@ -115,6 +115,7 @@ loginctl enable-linger $USER
 | `./scripts/logs.sh [api\|db\|pma\|all]` | Tail logs — defaults to `api` |
 | `./scripts/status.sh` | Show `systemctl --user status` for all services |
 | `./scripts/dev.sh` | Run API locally via `bun run dev` (no container, watch mode) |
+| `./scripts/test-integration.sh` | Run the Bun integration suite against the running pod DB |
 
 ---
 
@@ -126,6 +127,7 @@ loginctl enable-linger $USER
 |---|---|
 | `bun run dev` | Watch mode (`bun --watch src/server.ts`) |
 | `bun run start` | Production start |
+| `bun run test:integration` | Run the integration suite directly from `api/` when MariaDB is reachable from your shell |
 | `bun run db:generate` | Generate a new Drizzle migration from schema changes |
 | `bun run db:migrate` | Apply pending Drizzle migrations |
 | `bun run db:studio` | Open Drizzle Studio (visual DB browser) |

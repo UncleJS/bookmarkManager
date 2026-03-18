@@ -133,6 +133,7 @@ All scripts live in `scripts/` and are run from the repo root.
 | `./scripts/status.sh` | Show `systemctl --user status` for all services |
 | `./scripts/dev.sh` | Run API locally via `bun run dev` (no container) |
 | `./scripts/backup.sh` | Dump MariaDB to `backups/bookmark_YYYY-MM-DD_HHMMSS.sql.gz` |
+| `./scripts/test-integration.sh` | Run the Bun integration suite against the running pod DB |
 
 See [`scripts/README.md`](scripts/README.md) for full per-script documentation.
 

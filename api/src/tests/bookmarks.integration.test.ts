@@ -119,6 +119,170 @@ describe("create endpoint status codes", () => {
   });
 });
 
+describe("tag lifecycle", () => {
+  it("rejects duplicate active tag names", async () => {
+    const name = uniqueName("tag-duplicate");
+
+    const first = await app.handle(jsonRequest("/tags", "POST", { name }));
+    const second = await app.handle(jsonRequest("/tags", "POST", { name }));
+
+    expect(first.status).toBe(200);
+    expect(second.status).toBe(409);
+    await expect(second.json()).resolves.toMatchObject({ error: "Tag already exists" });
+  });
+
+  it("archives and restores tags through the API", async () => {
+    const name = uniqueName("tag-lifecycle");
+    const createRes = await app.handle(jsonRequest("/tags", "POST", { name }));
+    const created = await createRes.json() as { id: number };
+
+    const archiveRes = await app.handle(request(`/tags/${created.id}/archive`, "PATCH"));
+    expect(archiveRes.status).toBe(200);
+
+    const hiddenRes = await app.handle(request(`/tags?query=${encodeURIComponent(name)}`));
+    const hiddenBody = await hiddenRes.json() as { items: Array<{ name: string }> };
+    expect(hiddenBody.items).toHaveLength(0);
+
+    const duplicateArchiveRes = await app.handle(request(`/tags/${created.id}/archive`, "PATCH"));
+    expect(duplicateArchiveRes.status).toBe(409);
+    await expect(duplicateArchiveRes.json()).resolves.toMatchObject({ error: "Already archived" });
+
+    const restoreRes = await app.handle(request(`/tags/${created.id}/restore`, "PATCH"));
+    expect(restoreRes.status).toBe(200);
+
+    const visibleRes = await app.handle(request(`/tags?query=${encodeURIComponent(name)}`));
+    const visibleBody = await visibleRes.json() as { items: Array<{ name: string }> };
+    expect(visibleBody.items).toEqual([expect.objectContaining({ name })]);
+
+    const duplicateRestoreRes = await app.handle(request(`/tags/${created.id}/restore`, "PATCH"));
+    expect(duplicateRestoreRes.status).toBe(409);
+    await expect(duplicateRestoreRes.json()).resolves.toMatchObject({ error: "Not archived" });
+  });
+});
+
+describe("classification lifecycle", () => {
+  it("rejects duplicate active classification names within the same group", async () => {
+    const [{ id: groupId }] = await db
+      .insert(schema.classificationGroups)
+      .values({ name: uniqueName("classification-duplicate-group") })
+      .$returningId();
+    const name = uniqueName("classification-duplicate");
+
+    const first = await app.handle(jsonRequest("/classifications", "POST", { name, groupId }));
+    const second = await app.handle(jsonRequest("/classifications", "POST", { name, groupId }));
+
+    expect(first.status).toBe(200);
+    expect(second.status).toBe(409);
+    await expect(second.json()).resolves.toMatchObject({ error: "Classification already exists in this group" });
+  });
+
+  it("blocks archiving classifications that still have active bookmarks", async () => {
+    const [{ id: classificationId }] = await db
+      .insert(schema.classifications)
+      .values({ name: uniqueName("classification-archive-blocked"), groupId: null })
+      .$returningId();
+    const [{ id: bookmarkId }] = await db
+      .insert(schema.bookmarks)
+      .values({ url: uniqueUrl("classification-archive-blocked"), title: "Classification archive blocked" })
+      .$returningId();
+
+    await db.insert(schema.bookmarkClassifications).values({ bookmarkId, classificationId });
+
+    const res = await app.handle(request(`/classifications/${classificationId}/archive`, "PATCH"));
+
+    expect(res.status).toBe(409);
+    await expect(res.json()).resolves.toMatchObject({
+      error: "Cannot archive: 1 active bookmark linked to this classification",
+    });
+  });
+
+  it("archives and restores classifications through the API", async () => {
+    const name = uniqueName("classification-lifecycle");
+    const createRes = await app.handle(jsonRequest("/classifications", "POST", { name }));
+    const created = await createRes.json() as { id: number };
+
+    const archiveRes = await app.handle(request(`/classifications/${created.id}/archive`, "PATCH"));
+    expect(archiveRes.status).toBe(200);
+
+    const hiddenRes = await app.handle(request("/classifications"));
+    const hiddenBody = await hiddenRes.json() as {
+      groups: Array<{ classifications: Array<{ id: number }> }>;
+    };
+    expect(hiddenBody.groups.flatMap((group) => group.classifications).some((item) => item.id === created.id)).toBe(false);
+
+    const duplicateArchiveRes = await app.handle(request(`/classifications/${created.id}/archive`, "PATCH"));
+    expect(duplicateArchiveRes.status).toBe(409);
+    await expect(duplicateArchiveRes.json()).resolves.toMatchObject({ error: "Already archived" });
+
+    const restoreRes = await app.handle(request(`/classifications/${created.id}/restore`, "PATCH"));
+    expect(restoreRes.status).toBe(200);
+
+    const visibleRes = await app.handle(request("/classifications"));
+    const visibleBody = await visibleRes.json() as {
+      groups: Array<{ classifications: Array<{ id: number }> }>;
+    };
+    expect(visibleBody.groups.flatMap((group) => group.classifications).some((item) => item.id === created.id)).toBe(true);
+
+    const duplicateRestoreRes = await app.handle(request(`/classifications/${created.id}/restore`, "PATCH"));
+    expect(duplicateRestoreRes.status).toBe(409);
+    await expect(duplicateRestoreRes.json()).resolves.toMatchObject({ error: "Not archived" });
+  });
+});
+
+describe("classification group lifecycle", () => {
+  it("blocks archiving groups that still have active bookmarked classifications", async () => {
+    const [{ id: groupId }] = await db
+      .insert(schema.classificationGroups)
+      .values({ name: uniqueName("group-archive-blocked") })
+      .$returningId();
+    const [{ id: classificationId }] = await db
+      .insert(schema.classifications)
+      .values({ name: uniqueName("group-archive-blocked-classification"), groupId })
+      .$returningId();
+    const [{ id: bookmarkId }] = await db
+      .insert(schema.bookmarks)
+      .values({ url: uniqueUrl("group-archive-blocked"), title: "Group archive blocked" })
+      .$returningId();
+
+    await db.insert(schema.bookmarkClassifications).values({ bookmarkId, classificationId });
+
+    const res = await app.handle(request(`/classifications/groups/${groupId}/archive`, "PATCH"));
+
+    expect(res.status).toBe(409);
+    await expect(res.json()).resolves.toMatchObject({
+      error: "Cannot archive: 1 active bookmark linked to classifications in this group",
+    });
+  });
+
+  it("archives and restores groups through the API", async () => {
+    const name = uniqueName("group-lifecycle");
+    const createRes = await app.handle(jsonRequest("/classifications/groups", "POST", { name, order: 11 }));
+    const created = await createRes.json() as { id: number };
+
+    const archiveRes = await app.handle(request(`/classifications/groups/${created.id}/archive`, "PATCH"));
+    expect(archiveRes.status).toBe(200);
+
+    const hiddenRes = await app.handle(request("/classifications/groups"));
+    const hiddenBody = await hiddenRes.json() as { items: Array<{ id: number }> };
+    expect(hiddenBody.items.some((item) => item.id === created.id)).toBe(false);
+
+    const duplicateArchiveRes = await app.handle(request(`/classifications/groups/${created.id}/archive`, "PATCH"));
+    expect(duplicateArchiveRes.status).toBe(409);
+    await expect(duplicateArchiveRes.json()).resolves.toMatchObject({ error: "Already archived" });
+
+    const restoreRes = await app.handle(request(`/classifications/groups/${created.id}/restore`, "PATCH"));
+    expect(restoreRes.status).toBe(200);
+
+    const visibleRes = await app.handle(request("/classifications/groups"));
+    const visibleBody = await visibleRes.json() as { items: Array<{ id: number }> };
+    expect(visibleBody.items.some((item) => item.id === created.id)).toBe(true);
+
+    const duplicateRestoreRes = await app.handle(request(`/classifications/groups/${created.id}/restore`, "PATCH"));
+    expect(duplicateRestoreRes.status).toBe(409);
+    await expect(duplicateRestoreRes.json()).resolves.toMatchObject({ error: "Not archived" });
+  });
+});
+
 describe("bookmark write transactions", () => {
   it("rejects bookmark-tag links that reference missing tags", async () => {
     const [{ id: bookmarkId }] = await db
@@ -279,11 +443,14 @@ describe("bookmark write transactions", () => {
     expect(replaceRes.status).toBe(200);
 
     const tagLinksAfterReplace = await db
-      .select()
+      .select({ tagId: schema.bookmarkTags.tagId, archivedAt: schema.bookmarkTags.archivedAt })
       .from(schema.bookmarkTags)
       .where(eq(schema.bookmarkTags.bookmarkId, bookmarkId));
     const classificationLinksAfterReplace = await db
-      .select()
+      .select({
+        classificationId: schema.bookmarkClassifications.classificationId,
+        archivedAt: schema.bookmarkClassifications.archivedAt,
+      })
       .from(schema.bookmarkClassifications)
       .where(eq(schema.bookmarkClassifications.bookmarkId, bookmarkId));
 
@@ -302,11 +469,11 @@ describe("bookmark write transactions", () => {
     expect(restoreRes.status).toBe(200);
 
     const tagLinksAfterRestore = await db
-      .select()
+      .select({ archivedAt: schema.bookmarkTags.archivedAt })
       .from(schema.bookmarkTags)
       .where(eq(schema.bookmarkTags.bookmarkId, bookmarkId));
     const classificationLinksAfterRestore = await db
-      .select()
+      .select({ archivedAt: schema.bookmarkClassifications.archivedAt })
       .from(schema.bookmarkClassifications)
       .where(eq(schema.bookmarkClassifications.bookmarkId, bookmarkId));
 
@@ -526,6 +693,48 @@ describe("classification group listing", () => {
   });
 });
 
+describe("backup auth", () => {
+  it("returns 503 when backup token is not configured", async () => {
+    await withBackupToken("", async () => {
+      const res = await app.handle(request("/backup"));
+
+      expect(res.status).toBe(503);
+      await expect(res.json()).resolves.toMatchObject({
+        error: "Backup is not configured. Set BACKUP_TOKEN to a strong random value in api/.env and restart the service.",
+      });
+    });
+  });
+
+  it("returns 503 when backup token is still the placeholder value", async () => {
+    await withBackupToken("change_me_please", async () => {
+      const res = await app.handle(request("/backup"));
+
+      expect(res.status).toBe(503);
+      await expect(res.json()).resolves.toMatchObject({
+        error: "Backup is not configured. Set BACKUP_TOKEN to a strong random value in api/.env and restart the service.",
+      });
+    });
+  });
+
+  it("returns 401 when the backup token is missing or invalid", async () => {
+    await withBackupToken("test-backup-token", async () => {
+      const missingRes = await app.handle(request("/backup"));
+      expect(missingRes.status).toBe(401);
+      await expect(missingRes.json()).resolves.toMatchObject({
+        error: "Invalid or missing backup token. Send header: Authorization: Bearer <BACKUP_TOKEN>",
+      });
+
+      const invalidRes = await app.handle(new Request("http://localhost/backup", {
+        headers: { authorization: "Bearer wrong-token" },
+      }));
+      expect(invalidRes.status).toBe(401);
+      await expect(invalidRes.json()).resolves.toMatchObject({
+        error: "Invalid or missing backup token. Send header: Authorization: Bearer <BACKUP_TOKEN>",
+      });
+    });
+  });
+});
+
 describe("bookmark request validation", () => {
   it.each([
     ["/bookmarks?limit=0", "limit must be an integer between 1 and 100"],
@@ -590,4 +799,24 @@ function uniqueName(prefix: string): string {
 
 function uniqueUrl(prefix: string): string {
   return `https://example.com/${uniqueName(prefix)}`;
+}
+
+async function withBackupToken(token: string | undefined, run: () => Promise<void>): Promise<void> {
+  const previousToken = process.env.BACKUP_TOKEN;
+
+  if (token === undefined) {
+    delete process.env.BACKUP_TOKEN;
+  } else {
+    process.env.BACKUP_TOKEN = token;
+  }
+
+  try {
+    await run();
+  } finally {
+    if (previousToken === undefined) {
+      delete process.env.BACKUP_TOKEN;
+    } else {
+      process.env.BACKUP_TOKEN = previousToken;
+    }
+  }
 }
