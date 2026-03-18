@@ -76,8 +76,15 @@ const PositiveIdParam = t.Object({
   }),
 });
 
-function getValidationErrorMessage(error: { all?: Array<{ message?: string }> ; message: string }) {
-  return error.all?.find((entry) => entry.message)?.message ?? error.message;
+function getValidationErrorMessage(error: {
+  all?: Array<{ message?: string }>;
+  customError?: unknown;
+  message: string;
+}) {
+  return (typeof error.customError === "string" ? error.customError : undefined)
+    ?? error.message
+    ?? error.all?.find((entry) => entry.message)?.message
+    ?? "Validation error";
 }
 
 async function replaceBookmarkTagLinks(tx: any, bookmarkId: number, tagIds: number[]) {
@@ -1899,11 +1906,15 @@ if (import.meta.main) {
 // ---------------------------------------------------------------------------
 
 function isDupEntry(err: unknown): boolean {
+  const code =
+    typeof err === "object" && err !== null && "code" in err
+      ? err.code
+      : typeof err === "object" && err !== null && "cause" in err && typeof err.cause === "object" && err.cause !== null && "code" in err.cause
+        ? err.cause.code
+        : undefined;
+
   return (
-    typeof err === "object" &&
-    err !== null &&
-    "code" in err &&
-    err.code === "ER_DUP_ENTRY"
+    code === "ER_DUP_ENTRY"
   );
 }
 

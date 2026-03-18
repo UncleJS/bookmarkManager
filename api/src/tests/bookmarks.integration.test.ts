@@ -126,9 +126,9 @@ describe("bookmark write transactions", () => {
       .values({ url: uniqueUrl("fk-tag"), title: "FK tag" })
       .$returningId();
 
-    await expect(
-      db.insert(schema.bookmarkTags).values({ bookmarkId, tagId: 999999 })
-    ).rejects.toMatchObject({ code: "ER_NO_REFERENCED_ROW_2" });
+    await expect((async () => {
+      await db.insert(schema.bookmarkTags).values({ bookmarkId, tagId: 999999 });
+    })()).rejects.toMatchObject({ cause: { code: "ER_NO_REFERENCED_ROW_2" } });
 
     const links = await db
       .select()
@@ -144,9 +144,9 @@ describe("bookmark write transactions", () => {
       .values({ url: uniqueUrl("fk-classification"), title: "FK classification" })
       .$returningId();
 
-    await expect(
-      db.insert(schema.bookmarkClassifications).values({ bookmarkId, classificationId: 999999 })
-    ).rejects.toMatchObject({ code: "ER_NO_REFERENCED_ROW_2" });
+    await expect((async () => {
+      await db.insert(schema.bookmarkClassifications).values({ bookmarkId, classificationId: 999999 });
+    })()).rejects.toMatchObject({ cause: { code: "ER_NO_REFERENCED_ROW_2" } });
 
     const links = await db
       .select()
