@@ -251,6 +251,39 @@ describe("bookmark write transactions", () => {
     expect(classificationLinksAfterRestore.every((row) => row.archivedAt === null)).toBe(true);
   });
 
+  it("refreshes updatedAt when only associations change", async () => {
+    const [{ id: originalTagId }] = await db.insert(schema.tags).values({ name: uniqueName("tag-updated-at-old") }).$returningId();
+    const [{ id: replacementTagId }] = await db.insert(schema.tags).values({ name: uniqueName("tag-updated-at-new") }).$returningId();
+    const [{ id: bookmarkId }] = await db
+      .insert(schema.bookmarks)
+      .values({ url: uniqueUrl("updated-at-association"), title: "UpdatedAt association" })
+      .$returningId();
+
+    await db.insert(schema.bookmarkTags).values({ bookmarkId, tagId: originalTagId });
+
+    const [before] = await db
+      .select({ updatedAt: schema.bookmarks.updatedAt })
+      .from(schema.bookmarks)
+      .where(eq(schema.bookmarks.id, bookmarkId));
+
+    await Bun.sleep(1100);
+
+    const res = await app.handle(jsonRequest(`/bookmarks/${bookmarkId}`, "PATCH", {
+      tagIds: [replacementTagId],
+    }));
+
+    expect(res.status).toBe(200);
+
+    const [after] = await db
+      .select({ updatedAt: schema.bookmarks.updatedAt })
+      .from(schema.bookmarks)
+      .where(eq(schema.bookmarks.id, bookmarkId));
+
+    expect(after?.updatedAt).not.toBeNull();
+    expect(before?.updatedAt).not.toBeNull();
+    expect(new Date(after!.updatedAt as Date).getTime()).toBeGreaterThan(new Date(before!.updatedAt as Date).getTime());
+  });
+
   it("preserves duplicate detection after transactional create", async () => {
     const url = uniqueUrl("duplicate");
 

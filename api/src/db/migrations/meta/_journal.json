@@ -15,6 +15,13 @@
       "when": 1773811075782,
       "tag": "0001_third_red_ghost",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1773815671522,
+      "tag": "0002_greedy_clea",
+      "breakpoints": true
     }
   ]
 }

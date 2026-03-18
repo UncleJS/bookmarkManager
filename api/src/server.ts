@@ -1052,9 +1052,14 @@ export function buildApp() {
         if (f.forReview   !== undefined) updates.forReview   = f.forReview   ? 1 : 0;
       }
 
+      const changedAssociations =
+        body.tagIds !== undefined || body.classificationIds !== undefined;
+
       await db.transaction(async (tx) => {
         if (Object.keys(updates).length > 0) {
           await tx.update(bookmarks).set(updates).where(eq(bookmarks.id, id));
+        } else if (changedAssociations) {
+          await tx.update(bookmarks).set({ updatedAt: sql`CURRENT_TIMESTAMP` }).where(eq(bookmarks.id, id));
         }
 
         if (body.tagIds !== undefined) {
@@ -1095,7 +1100,7 @@ export function buildApp() {
           "**Flags:** each flag is independent. Omitting a flag key leaves it unchanged. " +
           "Pass `false` to clear a flag that was previously set.\n\n" +
           "**URL:** when provided, whitespace is trimmed and an empty string is rejected with 400.\n\n" +
-          "The `updatedAt` timestamp is set automatically by the database on every update.",
+          "The `updatedAt` timestamp is maintained automatically. Any bookmark edit, including tag/classification replacement, refreshes it.",
         responses: {
           200: { ...OkResp, description: "Bookmark updated successfully" },
           400: { ...ErrorResp, description: "Validation error — title was provided but is blank after trimming" },
