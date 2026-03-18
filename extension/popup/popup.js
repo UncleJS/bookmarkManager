@@ -37,6 +37,7 @@ let state = {
   hasClassificationsPrefetched: false, // Track if classifications are loaded
   hasTagsPrefetched: false, // Track if initial tags are loaded
   pendingDuplicate: null, // Store duplicate entries requiring confirmation
+  faviconUrl: '', // Active tab favicon for full-save payload
 };
 
 /**
@@ -255,6 +256,7 @@ function addTag(tag) {
  */
 function renderTagSuggestions(tags) {
   const container = el('tag-suggestions');
+  state.tagSuggestions = tags;
   container.innerHTML = '';
 
   if (tags.length === 0) {
@@ -436,6 +438,7 @@ async function loadInitial() {
     const { tab, classifications, tags } = res.data;
     el('url').value = tab.url || '';
     el('title').value = tab.title || '';
+    state.faviconUrl = tab.faviconUrl || '';
 
     // Process classifications data
     state.allClassifications = [];
@@ -485,6 +488,13 @@ function showSaveToast(msg, ok) {
   if (!t) return;
   t.textContent = msg;
   t.className = 'save-toast ' + (ok ? 'ok' : 'err');
+}
+
+function setSubmitPending(isPending) {
+  const saveBtn = el('save');
+  if (saveBtn) {
+    saveBtn.disabled = isPending;
+  }
 }
 
 /**
@@ -586,8 +596,7 @@ function hideDuplicateWarning() {
  */
 function onDuplicateCancel() {
   hideDuplicateWarning();
-  const saveBtn = el('save');
-  if (saveBtn) saveBtn.disabled = false;
+  setSubmitPending(false);
   setStatus('Duplicate save cancelled');
   setTimeout(() => setStatus(''), 2000);
 }
@@ -599,7 +608,6 @@ async function onDuplicateConfirm() {
   if (!state.pendingDuplicate) return;
 
   const confirmBtn = el('duplicate-confirm');
-  const saveBtn = el('save');
 
   if (confirmBtn) {
     confirmBtn.disabled = true;
@@ -607,7 +615,7 @@ async function onDuplicateConfirm() {
   }
 
   hideDuplicateWarning();
-  if (saveBtn) saveBtn.disabled = false;
+  setSubmitPending(false);
   setStatus('Bookmark already exists', false);
 }
 
@@ -854,14 +862,20 @@ async function onTagEnterCreateIfNeeded(e) {
   const name = el('tag-input').value.trim();
   if (!name) return;
 
-  // Check if tag exists in current suggestions
-  const suggestions = el('tag-suggestions');
-  if (!suggestions.classList.contains('hidden')) {
-    const firstSuggestion = suggestions.querySelector('.suggestion');
-    if (firstSuggestion && firstSuggestion.textContent.toLowerCase() === name.toLowerCase()) {
-      firstSuggestion.click();
+  const exactLocalMatch = findExactExistingTag(name);
+  if (exactLocalMatch) {
+    addTag(exactLocalMatch);
+    return;
+  }
+
+  try {
+    const existingRes = await send('searchTags', { query: name, limit: 1, exact: true });
+    if (existingRes?.ok && existingRes.data?.items?.length) {
+      addTag(existingRes.data.items[0]);
       return;
     }
+  } catch (error) {
+    console.error('Exact tag lookup failed:', error);
   }
 
   try {
@@ -870,12 +884,29 @@ async function onTagEnterCreateIfNeeded(e) {
       addTag(res.data);
       setStatus('Tag created!', true);
       setTimeout(() => setStatus(''), 2000);
+    } else if (res?.status === 409) {
+      const existingRes = await send('searchTags', { query: name, limit: 1, exact: true });
+      if (existingRes?.ok && existingRes.data?.items?.length) {
+        addTag(existingRes.data.items[0]);
+        return;
+      }
+      setStatus(res?.error || 'Failed to create tag', false);
     } else {
       setStatus(res?.error || 'Failed to create tag', false);
     }
   } catch (error) {
     setStatus('Failed to create tag', false);
   }
+}
+
+function findExactExistingTag(name) {
+  const normalizedName = name.trim().toLowerCase();
+  const candidates = [...state.tagSuggestions, ...state.prefetchedTags];
+
+  return candidates.find(tag =>
+    tag.name.trim().toLowerCase() === normalizedName &&
+    !state.selectedTags.some(selected => selected.id === tag.id)
+  ) || null;
 }
 
 /**
@@ -899,7 +930,7 @@ function buildBookmarkPayload(url, title) {
       cheatsheets: el('flag-cheatsheets').checked,
       archived: el('flag-archived').checked,
     },
-    faviconUrl: '',
+    faviconUrl: state.faviconUrl || '',
   };
 }
 
@@ -924,29 +955,31 @@ async function onSubmit(e) {
 
   const payload = buildBookmarkPayload(url, title);
 
-  const saveBtn = el('save');
-  saveBtn.disabled = true;
+  let shouldRestoreSubmitState = true;
+  setSubmitPending(true);
   setStatus('Saving…');
 
   try {
     const res = await send('saveBookmark', payload);
     if (res?.ok) {
+      shouldRestoreSubmitState = false;
       showSaveToast('✓ Bookmark saved!', true);
       setStatus('Bookmark saved!', true);
       setTimeout(() => window.close(), 2500);
     } else if (res?.status === 409 && res?.data?.duplicates?.length) {
-      saveBtn.disabled = false;
       showDuplicateWarning(res.data.duplicates);
       showSaveToast('✕ Bookmark already exists', false);
       setStatus('Bookmark already exists. Review duplicates below.', false);
     } else {
-      saveBtn.disabled = false;
       showSaveToast('✕ ' + (res?.error || 'Failed to save bookmark'), false);
       setStatus(res?.error || 'Failed to save bookmark', false);
     }
   } catch (error) {
-    saveBtn.disabled = false;
     showSaveToast('✕ Failed to save bookmark', false);
     setStatus('Failed to save bookmark', false);
+  } finally {
+    if (shouldRestoreSubmitState) {
+      setSubmitPending(false);
+    }
   }
 }

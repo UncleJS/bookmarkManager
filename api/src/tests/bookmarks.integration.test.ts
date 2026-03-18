@@ -126,9 +126,25 @@ describe("tag lifecycle", () => {
     const first = await app.handle(jsonRequest("/tags", "POST", { name }));
     const second = await app.handle(jsonRequest("/tags", "POST", { name }));
 
-    expect(first.status).toBe(200);
+    expect(first.status).toBe(201);
     expect(second.status).toBe(409);
     await expect(second.json()).resolves.toMatchObject({ error: "Tag already exists" });
+  });
+
+  it("supports case-insensitive exact tag lookup", async () => {
+    const name = uniqueName("tag-exact-match");
+
+    const createRes = await app.handle(jsonRequest("/tags", "POST", { name }));
+    expect(createRes.status).toBe(201);
+
+    const lookupRes = await app.handle(
+      request(`/tags?query=${encodeURIComponent(name.toUpperCase())}&exact=true&limit=1`)
+    );
+    const lookupBody = await lookupRes.json() as { items: Array<{ name: string }> };
+
+    expect(lookupRes.status).toBe(200);
+    expect(lookupBody.items).toHaveLength(1);
+    expect(lookupBody.items[0]).toMatchObject({ name });
   });
 
   it("archives and restores tags through the API", async () => {
@@ -171,7 +187,7 @@ describe("classification lifecycle", () => {
     const first = await app.handle(jsonRequest("/classifications", "POST", { name, groupId }));
     const second = await app.handle(jsonRequest("/classifications", "POST", { name, groupId }));
 
-    expect(first.status).toBe(200);
+    expect(first.status).toBe(201);
     expect(second.status).toBe(409);
     await expect(second.json()).resolves.toMatchObject({ error: "Classification already exists in this group" });
   });

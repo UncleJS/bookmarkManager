@@ -20,6 +20,7 @@ export const groupRoutes = new Elysia()
           .insert(classificationGroups)
           .values({ name, order: body.order ?? 0 })
           .$returningId();
+        set.status = 201;
         return { id: result.id, name, order: body.order ?? 0 };
       } catch (err: unknown) {
         if (isDupEntry(err)) { set.status = 409; return { error: "Group already exists" }; }

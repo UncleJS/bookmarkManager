@@ -270,7 +270,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         case 'searchTags': {
           const q = encodeURIComponent(message.payload.query || '');
           const limit = Math.min(50, Math.max(1, message.payload.limit || 20));
-          const res = await apiGet(`/tags?query=${q}&limit=${limit}`, { timeoutMs: 5000 });
+          const exact = message.payload.exact ? '&exact=true' : '';
+          const res = await apiGet(`/tags?query=${q}&limit=${limit}${exact}`, { timeoutMs: 5000 });
           sendResponse({ ok: true, data: res });
           break;
         }
