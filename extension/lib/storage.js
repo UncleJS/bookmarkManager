@@ -14,6 +14,11 @@ import { normalizeStoredApiBaseUrl, validateApiBaseUrl } from './validate.js';
 const KEY = 'apiBaseUrl';
 const DEFAULT_API_BASE_URL = 'http://localhost:11650';
 
+/**
+ * Storage key for API authentication token
+ */
+const TOKEN_KEY = 'apiToken';
+
 function setLocalValue(value) {
   return new Promise((resolve) => chrome.storage.local.set({ [KEY]: value }, resolve));
 }
@@ -120,4 +125,32 @@ export async function getSync(keys) {
  */
 export async function setSync(obj) {
   return new Promise((resolve) => chrome.storage.local.set(obj, resolve));
+}
+
+/**
+ * Get API Token from Storage
+ *
+ * Retrieves the API authentication token from Chrome local storage.
+ * Returns an empty string if no token has been configured.
+ *
+ * @returns {Promise<string>} Promise resolving to the API token (may be empty)
+ */
+export async function getApiToken() {
+  return new Promise((resolve) => {
+    chrome.storage.local.get([TOKEN_KEY], (items) => {
+      resolve(typeof items[TOKEN_KEY] === 'string' ? items[TOKEN_KEY] : '');
+    });
+  });
+}
+
+/**
+ * Set API Token in Storage
+ *
+ * Saves the API authentication token to Chrome local storage.
+ *
+ * @param {string} token - The token to save
+ * @returns {Promise<void>} Promise that resolves when the token is saved
+ */
+export async function setApiToken(token) {
+  return new Promise((resolve) => chrome.storage.local.set({ [TOKEN_KEY]: token }, resolve));
 }

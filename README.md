@@ -64,7 +64,9 @@ Everything is implemented in JavaScript (no TypeScript) for the extension; the A
 
 ```bash
 cp api/.env.example api/.env
-# Edit api/.env — set DB_PASSWORD, MARIADB_PASSWORD, MARIADB_ROOT_PASSWORD
+# Edit api/.env — set DB_PASSWORD, MARIADB_PASSWORD, MARIADB_ROOT_PASSWORD,
+#                  API_TOKEN, and BACKUP_TOKEN to strong random values
+# Generate tokens: openssl rand -hex 32
 nano api/.env
 ```
 
@@ -111,7 +113,9 @@ curl http://localhost:11650/ready
 1. Open `chrome://extensions`
 2. Enable **Developer mode**
 3. Click **Load unpacked** → select the `extension/` folder
-4. The extension defaults to `http://localhost:11650` — change it in Options if needed
+4. Open the extension **Options** page and set:
+   - **API Base URL** — defaults to `http://localhost:11650`; change if you use a different port
+   - **API Token** — paste the same value you set for `API_TOKEN` in `api/.env`
 
 ---
 
@@ -302,7 +306,7 @@ curl -H "Authorization: Bearer <BACKUP_TOKEN>" \
 - Returns a `bookmark_YYYY-MM-DD_HHMMSS.sql.gz` download
 - Requires `BACKUP_TOKEN` to be set in `api/.env` (a strong random value — the default `change_me_please` is refused with `503`)
 - Returns `401` on missing or invalid `Authorization` header, `503` if token is unconfigured
-- All other bookmark-management routes remain unauthenticated for trusted local-network use
+- Note: `/backup` uses its own `BACKUP_TOKEN`, separate from the general-purpose `API_TOKEN`
 - The **⬇ Backup** button in the `http://localhost:11650/app` topbar calls this endpoint — it will prompt for your token and send it securely in the request header
 
 ### Restore
@@ -334,6 +338,8 @@ gunzip -c backups/bookmark_YYYY-MM-DD_HHMMSS.sql.gz \
 |---|---|
 | Port 11650 or 11651 busy | Edit `quadlet/bookmark.pod`, change `PublishPort`, re-run `./scripts/install.sh` |
 | API can't reach DB | Check `api/.env` — `DB_PASSWORD` must match `MARIADB_PASSWORD`; `DB_HOST` must be `127.0.0.1`; then re-run `./scripts/install.sh` to regenerate split env files |
+| Extension gets `401` errors | Open the extension **Options** page and paste the value of `API_TOKEN` from `api/.env` into the **API Token** field |
+| API returns `503` on all requests | `API_TOKEN` is unset or still `change_me_please` — set a strong random value in `api/.env` and re-run `./scripts/install.sh` |
 | Extension can't reach API | Verify base URL in Options; check `host_permissions` in `extension/manifest.json` |
 | Services not starting at boot | Run `loginctl enable-linger $USER` to enable linger for your user |
 

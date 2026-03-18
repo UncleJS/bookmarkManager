@@ -12,6 +12,20 @@ import { tagRoutes } from "./routes/tags.ts";
 
 const PORT = Number(process.env.API_PORT ?? 11650);
 
+// Returns true for paths that do not require API_TOKEN authentication:
+// infrastructure probes, static HTML pages, and the API docs.
+function isAuthExempt(path: string): boolean {
+  return (
+    path === "/" ||
+    path === "/health" ||
+    path === "/ready" ||
+    path === "/app" ||
+    path === "/categories" ||
+    path === "/openapi.json" ||
+    path.startsWith("/docs")
+  );
+}
+
 type BuildAppOptions = {
   checkReadiness?: () => Promise<void>;
 };
@@ -24,6 +38,33 @@ export function buildApp({ checkReadiness }: BuildAppOptions = {}) {
         return { error: getValidationErrorMessage(error) };
       }
     })
+    // ---------------------------------------------------------------------------
+    // Global authentication guard
+    // All routes except the exempt paths above require a valid API_TOKEN.
+    // Set API_TOKEN in api/.env to a strong random value (e.g. openssl rand -hex 32).
+    // The extension sends it as:  Authorization: Bearer <API_TOKEN>
+    // ---------------------------------------------------------------------------
+    .onBeforeHandle(({ path, headers, set }) => {
+      if (isAuthExempt(path)) return;
+
+      const configuredToken = process.env.API_TOKEN ?? "";
+      if (!configuredToken || configuredToken === "change_me_please") {
+        set.status = 503;
+        return {
+          error:
+            "API is not configured. Set API_TOKEN to a strong random value in api/.env and restart the service.",
+        };
+      }
+
+      const authHeader = headers["authorization"] ?? "";
+      const bearerMatch = authHeader.match(/^Bearer\s+(.+)$/i);
+      const providedToken = bearerMatch ? bearerMatch[1] : "";
+
+      if (!providedToken || providedToken !== configuredToken) {
+        set.status = 401;
+        return { error: "Invalid or missing API token. Send header: Authorization: Bearer <API_TOKEN>" };
+      }
+    })
     .use(
       swagger({
         path: "/docs",
@@ -34,8 +75,11 @@ export function buildApp({ checkReadiness }: BuildAppOptions = {}) {
             description:
               "REST API for the Bookmark Manager Chrome extension.\n\n" +
               "Manages bookmarks, tags, classifications, and classification groups.\n\n" +
-              "**Auth model:** bookmark-management and UI routes are intended for a trusted local network and do not require auth. " +
-              "The `GET /backup` endpoint is the exception and requires `Authorization: Bearer <BACKUP_TOKEN>`.\n\n" +
+              "**Auth model:** all bookmark-management routes require `Authorization: Bearer <API_TOKEN>` " +
+              "(set `API_TOKEN` in `api/.env`). " +
+              "Health probes (`/health`, `/ready`), static UI pages (`/app`, `/categories`), " +
+              "and the API docs (`/docs`) are exempt. " +
+              "The `GET /backup` endpoint additionally requires its own `Authorization: Bearer <BACKUP_TOKEN>`.\n\n" +
               "**Data lifecycle:** records are never hard-deleted. Entity rows and bookmark association rows " +
               "use `archivedAt` for archive-only lifecycle, and archived associations are reactivated when re-attached.\n\n" +
               "**Timestamps:** stored and returned as UTC. The `archivedAt` field is `null` " +

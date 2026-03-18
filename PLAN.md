@@ -233,6 +233,7 @@ api/
 | `DB_USER` | `bookmark` | DB username |
 | `DB_PASSWORD` | — | DB password |
 | `DB_NAME` | `bookmarks` | DB name |
+| `API_TOKEN` | `change_me_please` | Bearer token required for all bookmark-management routes; the default placeholder is rejected with `503` |
 | `BACKUP_TOKEN` | `change_me_please` | Bearer token required by `GET /backup`; the default placeholder is rejected with `503` |
 | `MARIADB_DATABASE` | — | MariaDB container init |
 | `MARIADB_USER` | — | MariaDB container init |
@@ -245,7 +246,11 @@ api/
 [↑ Table of Contents](#table-of-contents)
 
 ### 6.4 Authentication
-- Bookmark-management routes and UI routes are unauthenticated and intended for a trusted local environment. `GET /backup` requires `Authorization: Bearer <BACKUP_TOKEN>`.
+- All bookmark-management routes (`/bookmarks*`, `/tags*`, `/classifications*`) require `Authorization: Bearer <API_TOKEN>` (set `API_TOKEN` in `api/.env` to a strong random value; e.g. `openssl rand -hex 32`).
+- Health probes (`/health`, `/ready`), static UI pages (`/app`, `/categories`), and the API docs (`/docs`) are exempt.
+- The pod binds the API port to `127.0.0.1` only, blocking all LAN access at the network level.
+- The Chrome extension reads the token from the Options page and sends it as a Bearer header on every API call.
+- `GET /backup` additionally requires its own `Authorization: Bearer <BACKUP_TOKEN>` (a separate credential).
 
 [↑ Table of Contents](#table-of-contents)
 
@@ -480,7 +485,8 @@ GET /tags response:
 
 ## 9) Security and Privacy Considerations
 
-- Bookmark-management routes do not require auth or CORS and are intended for a trusted local network only. `GET /backup` requires a Bearer token.
+- All bookmark-management routes require `Authorization: Bearer <API_TOKEN>`. The API pod binds to `127.0.0.1` only, blocking all LAN access at the network level.
+- `GET /backup` additionally requires its own `Authorization: Bearer <BACKUP_TOKEN>` (a separate credential).
 - Extension requests only necessary permissions.
 - No content scripts reading page content beyond URL and title.
 - `api/.env` is gitignored — credentials never committed.
