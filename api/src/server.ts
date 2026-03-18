@@ -1592,12 +1592,12 @@ const app = new Elysia()
   )
 
   // ── Backup ─────────────────────────────────────────────────────────────────
-  // GET /backup?token=<BACKUP_TOKEN>
+  // GET /backup   (Authorization: Bearer <BACKUP_TOKEN>)
   // Streams a gzip-compressed mariadb-dump of the bookmarks database.
   // The BACKUP_TOKEN env var must be set to a non-default value.
   .get(
     "/backup",
-    async ({ query, set }) => {
+    async ({ headers, set }) => {
       const configuredToken = process.env.BACKUP_TOKEN ?? "";
 
       // Refuse if the token is unset or still the placeholder
@@ -1609,9 +1609,14 @@ const app = new Elysia()
         };
       }
 
-      if (!query.token || query.token !== configuredToken) {
+      // Extract Bearer token from Authorization header
+      const authHeader = headers["authorization"] ?? "";
+      const bearerMatch = authHeader.match(/^Bearer\s+(.+)$/i);
+      const providedToken = bearerMatch ? bearerMatch[1] : "";
+
+      if (!providedToken || providedToken !== configuredToken) {
         set.status = 401;
-        return { error: "Invalid or missing backup token." };
+        return { error: "Invalid or missing backup token. Send header: Authorization: Bearer <BACKUP_TOKEN>" };
       }
 
       const dbHost     = process.env.DB_HOST     ?? "127.0.0.1";
@@ -1667,21 +1672,20 @@ const app = new Elysia()
       });
     },
     {
-      query: t.Object({
-        token: t.Optional(t.String({ description: "Backup token (must match BACKUP_TOKEN in api/.env)" })),
-      }),
       detail: {
         tags: ["backup"],
         summary: "Download a database backup",
         description:
-          "Streams a gzip-compressed `mysqldump` of the full bookmarks database.\n\n" +
-          "**Authentication:** pass `?token=<BACKUP_TOKEN>` where `BACKUP_TOKEN` is set in `api/.env`. " +
+          "Streams a gzip-compressed `mariadb-dump` of the full bookmarks database.\n\n" +
+          "**Authentication:** send the token in the `Authorization` header as a Bearer token:\n" +
+          "```\nAuthorization: Bearer <BACKUP_TOKEN>\n```\n" +
+          "where `BACKUP_TOKEN` is set in `api/.env`.\n\n" +
           "The endpoint returns `503` if the token is unset or still the default placeholder, " +
-          "and `401` if the token does not match.\n\n" +
+          "and `401` if the token is missing or does not match.\n\n" +
           "The response is a `.sql.gz` file attachment named `bookmark_YYYY-MM-DD_HHMMSS.sql.gz`.",
         responses: {
           200: { description: "SQL dump (gzip-compressed) file download" },
-          401: { ...ErrorResp, description: "Missing or invalid token" },
+          401: { ...ErrorResp, description: "Missing or invalid Authorization header" },
           503: { ...ErrorResp, description: "Backup not configured — set BACKUP_TOKEN in api/.env" },
         },
       },

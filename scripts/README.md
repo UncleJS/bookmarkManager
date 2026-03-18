@@ -307,7 +307,7 @@ Dumps the live MariaDB database to a gzip-compressed SQL file in `backups/`.
 **Notes:**
 
 - `backups/` is gitignored — dump files are never committed.
-- A backup is also available via the browser at `GET /backup?token=<BACKUP_TOKEN>` (set `BACKUP_TOKEN` in `api/.env`).
+- A backup is also available via the browser at `GET /backup` — send `Authorization: Bearer <BACKUP_TOKEN>` (set `BACKUP_TOKEN` in `api/.env`).
 - To restore: `gunzip -c backups/<file>.sql.gz | podman exec -i bookmark-db mariadb -u<user> -p<pass> <dbname>`
 
 [↑ Table of Contents](#table-of-contents)

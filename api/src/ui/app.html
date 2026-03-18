@@ -966,7 +966,32 @@
   function triggerBackup() {
     const token = window.prompt('Enter backup token:');
     if (token === null || token.trim() === '') return; // cancelled or empty
-    window.location.href = '/backup?token=' + encodeURIComponent(token.trim());
+
+    fetch('/backup', {
+      headers: { 'Authorization': 'Bearer ' + token.trim() },
+    })
+      .then(async (res) => {
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({ error: 'Request failed' }));
+          alert('Backup failed: ' + (body.error ?? res.statusText));
+          return;
+        }
+        // Derive filename from Content-Disposition or use a sensible default
+        const disp  = res.headers.get('Content-Disposition') ?? '';
+        const match = disp.match(/filename="?([^"]+)"?/);
+        const fname = match ? match[1] : 'backup.sql.gz';
+
+        const blob = await res.blob();
+        const url  = URL.createObjectURL(blob);
+        const a    = document.createElement('a');
+        a.href     = url;
+        a.download = fname;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+      })
+      .catch((err) => alert('Backup error: ' + err.message));
   }
 
   // ── State ──────────────────────────────────────────────────────────────────
