@@ -256,6 +256,7 @@ function addTag(tag) {
  */
 function renderTagSuggestions(tags) {
   const container = el('tag-suggestions');
+  state.tagSuggestions = tags;
   container.innerHTML = '';
 
   if (tags.length === 0) {
@@ -861,14 +862,20 @@ async function onTagEnterCreateIfNeeded(e) {
   const name = el('tag-input').value.trim();
   if (!name) return;
 
-  // Check if tag exists in current suggestions
-  const suggestions = el('tag-suggestions');
-  if (!suggestions.classList.contains('hidden')) {
-    const firstSuggestion = suggestions.querySelector('.suggestion');
-    if (firstSuggestion && firstSuggestion.textContent.toLowerCase() === name.toLowerCase()) {
-      firstSuggestion.click();
+  const exactLocalMatch = findExactExistingTag(name);
+  if (exactLocalMatch) {
+    addTag(exactLocalMatch);
+    return;
+  }
+
+  try {
+    const existingRes = await send('searchTags', { query: name, limit: 1, exact: true });
+    if (existingRes?.ok && existingRes.data?.items?.length) {
+      addTag(existingRes.data.items[0]);
       return;
     }
+  } catch (error) {
+    console.error('Exact tag lookup failed:', error);
   }
 
   try {
@@ -877,12 +884,29 @@ async function onTagEnterCreateIfNeeded(e) {
       addTag(res.data);
       setStatus('Tag created!', true);
       setTimeout(() => setStatus(''), 2000);
+    } else if (res?.status === 409) {
+      const existingRes = await send('searchTags', { query: name, limit: 1, exact: true });
+      if (existingRes?.ok && existingRes.data?.items?.length) {
+        addTag(existingRes.data.items[0]);
+        return;
+      }
+      setStatus(res?.error || 'Failed to create tag', false);
     } else {
       setStatus(res?.error || 'Failed to create tag', false);
     }
   } catch (error) {
     setStatus('Failed to create tag', false);
   }
+}
+
+function findExactExistingTag(name) {
+  const normalizedName = name.trim().toLowerCase();
+  const candidates = [...state.tagSuggestions, ...state.prefetchedTags];
+
+  return candidates.find(tag =>
+    tag.name.trim().toLowerCase() === normalizedName &&
+    !state.selectedTags.some(selected => selected.id === tag.id)
+  ) || null;
 }
 
 /**

@@ -11,11 +11,16 @@ export const tagRoutes = new Elysia()
       const limit = Math.min(Number(query.limit ?? 20), 100);
       const offset = Number(query.offset ?? 0);
       const search = query.query?.trim() ?? "";
+      const exact = query.exact === "true";
       const sort = query.sort === "alpha" ? "alpha" : "count";
 
       const where = and(
         isNull(tags.archivedAt),
-        search ? like(tags.name, `%${search}%`) : undefined
+        search
+          ? exact
+            ? sql`LOWER(${tags.name}) = LOWER(${search})`
+            : like(tags.name, `%${search}%`)
+          : undefined
       );
 
       const orderBy = sort === "alpha"
@@ -53,6 +58,7 @@ export const tagRoutes = new Elysia()
     {
       query: t.Object({
         query: t.Optional(t.String({ description: "Search term - filters tag names using a LIKE %term% match (case-insensitive)" })),
+        exact: t.Optional(t.String({ description: "When `true`, returns only exact case-insensitive matches for `query`." })),
         limit: t.Optional(t.String({ description: "Maximum number of tags to return. Default: 20, max: 100" })),
         offset: t.Optional(t.String({ description: "Zero-based offset for pagination. Default: 0" })),
         sort: t.Optional(t.String({ description: "Sort order. `count` (default) sorts by active bookmark count descending then name ascending. `alpha` sorts alphabetically ascending" })),
@@ -64,6 +70,7 @@ export const tagRoutes = new Elysia()
           "Returns a paginated list of active (non-archived) tags.\n\n" +
           "Each item includes a `bookmarkCount` that reflects only **active** (non-archived) bookmarks. " +
           "Archived bookmarks are excluded from the count even if they retain tag associations.\n\n" +
+          "Set `exact=true` with `query` to perform a case-insensitive exact-name lookup.\n\n" +
           "**Sorting:**\n" +
           "- `count` (default) - most-used tags first; ties broken alphabetically\n" +
           "- `alpha` - alphabetical A -> Z\n\n" +
