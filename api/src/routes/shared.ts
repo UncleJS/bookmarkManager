@@ -46,6 +46,17 @@ export const PositiveIdParam = t.Object({
   }),
 });
 
+export function getValidationErrorMessage(error: {
+  all?: Array<{ message?: string }>;
+  customError?: unknown;
+  message: string;
+}) {
+  return (typeof error.customError === "string" ? error.customError : undefined)
+    ?? error.message
+    ?? error.all?.find((entry) => entry.message)?.message
+    ?? "Validation error";
+}
+
 export function isDupEntry(err: unknown): boolean {
   const code =
     typeof err === "object" && err !== null && "code" in err

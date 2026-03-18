@@ -6,12 +6,19 @@ import { bookmarkRoutes } from "./routes/bookmarks.ts";
 import { classificationRoutes } from "./routes/classifications.ts";
 import { groupRoutes } from "./routes/groups.ts";
 import { healthRoutes } from "./routes/health.ts";
+import { getValidationErrorMessage } from "./routes/shared.ts";
 import { tagRoutes } from "./routes/tags.ts";
 
 const PORT = Number(process.env.API_PORT ?? 11650);
 
 export function buildApp() {
   return new Elysia()
+    .onError(({ code, error, set }) => {
+      if (code === "VALIDATION") {
+        set.status = 400;
+        return { error: getValidationErrorMessage(error) };
+      }
+    })
     .use(
       swagger({
         path: "/docs",
@@ -22,8 +29,8 @@ export function buildApp() {
             description:
               "REST API for the Bookmark Manager Chrome extension.\n\n" +
               "Manages bookmarks, tags, classifications, and classification groups.\n\n" +
-              "**Data lifecycle:** records are never hard-deleted. All destructive operations " +
-              "set an `archivedAt` timestamp and can be reversed with the corresponding `/restore` endpoint.\n\n" +
+              "**Data lifecycle:** records are never hard-deleted. Entity rows and bookmark association rows " +
+              "use `archivedAt` for archive-only lifecycle, and archived associations are reactivated when re-attached.\n\n" +
               "**Timestamps:** stored and returned as UTC. The `archivedAt` field is `null` " +
               "while a record is active and set to a UTC datetime when archived.",
           },

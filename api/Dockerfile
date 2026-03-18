@@ -3,20 +3,25 @@
 # =============================================================================
 FROM docker.io/oven/bun:1
 
-RUN apt-get update && apt-get install -y --no-install-recommends curl mariadb-client && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends mariadb-client && rm -rf /var/lib/apt/lists/*
+RUN groupadd --system app && useradd --system --gid app --create-home --home-dir /app app
 
 WORKDIR /app
 
-# Install all dependencies — drizzle-kit (devDep) is required at runtime for migrations
+# Install only production dependencies for the runtime image.
 COPY package.json bun.lock ./
-RUN bun install --frozen-lockfile
+RUN bun install --frozen-lockfile --production
 
 # Copy source
 COPY src/ ./src/
 COPY tsconfig.json ./
-COPY drizzle.config.ts ./
+COPY healthcheck.mjs ./
+
+RUN chown -R app:app /app
+
+USER app
 
 EXPOSE 11650
 
 # Run migrations then start the server
-CMD ["sh", "-c", "bun run db:migrate && bun run src/server.ts"]
+CMD ["sh", "-c", "bun run src/db/migrate.ts && bun run src/server.ts"]

@@ -152,7 +152,7 @@ extension/
 [↑ Table of Contents](#table-of-contents)
 
 ### 5.3 Manifest
-- `permissions`: `["tabs", "activeTab", "contextMenus", "storage", "notifications"]`
+- `permissions`: `["tabs", "activeTab", "contextMenus", "storage", "notifications", "scripting"]`
 - `host_permissions`: `["http://localhost:11650/*"]`
 - Configurable via Options page (stored in `chrome.storage.sync`)
 
@@ -306,7 +306,8 @@ Interactive docs always available at **`http://localhost:11650/docs`**.
 
 **POST /bookmarks duplicate detection:**
 - Returns `409` with a `duplicates` array if an active bookmark with the same URL already exists.
-- Send with `allowDuplicate: true` to create a copy after user confirmation.
+- Enforcement happens in the database, so concurrent requests cannot create duplicate active URLs.
+- Archived bookmarks do not conflict with active saves.
 
 [↑ Table of Contents](#table-of-contents)
 
@@ -343,9 +344,9 @@ All tables include `archived_at DATETIME NULL`. `NULL` = active. "Delete" sets `
 [↑ Table of Contents](#table-of-contents)
 
 ### 6.9 Duplicate Handling
-- Before inserting, query for existing bookmarks with the same URL.
-- Return 409 with existing bookmark metadata.
-- Client resends with `allowDuplicate: true` after user confirmation.
+- Before inserting, query active bookmarks with the same URL hash for a fast duplicate check.
+- The database also enforces uniqueness among active bookmark URLs, preventing race-condition duplicates.
+- Return `409` with existing bookmark metadata.
 
 ---
 
@@ -366,9 +367,10 @@ All tables include `archived_at DATETIME NULL`. `NULL` = active. "Delete" sets `
 | `bookmark-pma.container` | `docker.io/phpmyadmin:5` | phpMyAdmin |
 
 ### Environment
-- Single file: `api/.env` (gitignored)
-- Loaded by all three containers via `EnvironmentFile=%h/0_opencode/bookmarkManager/api/.env`
-- Template: `api/.env.example`
+- Source file: `api/.env` (gitignored)
+- Generated files: `api/.env.api`, `api/.env.db`, `api/.env.pma` (gitignored)
+- `scripts/install.sh` regenerates those split files from `api/.env`
+- Templates: `api/.env.example`, `api/.env.api.example`, `api/.env.db.example`, `api/.env.pma.example`
 
 ### Quadlet unit files
 Canonical copies live in `quadlet/` (version-controlled). `scripts/install.sh` deploys them to `~/.config/containers/systemd/`.

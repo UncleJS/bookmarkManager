@@ -166,6 +166,7 @@ extension/
 | `contextMenus` | Add right-click menu items |
 | `storage` | Save extension settings |
 | `notifications` | Show success/error messages |
+| `scripting` | Inject toast UI on demand in the active page |
 | `host_permissions` | Access API at `http://localhost:11650/*` |
 
 ---
@@ -217,7 +218,7 @@ User types in tag field
 POST /bookmarks → API returns 409 with duplicates array
   → popup shows existing bookmarks
   → user cancels or confirms
-  → if confirmed: re-POST with allowDuplicate: true
+  → UI shows the existing bookmarks and prevents saving a second active bookmark with the same URL
 ```
 
 ---
@@ -243,7 +244,7 @@ POST /bookmarks → API returns 409 with duplicates array
 | Scenario | Behaviour |
 |---|---|
 | Very long title/URL | Truncated in UI display; full value sent to API |
-| Duplicate URL | `409` response → UI shows existing bookmarks → cancel or proceed with `allowDuplicate: true` |
+| Duplicate URL | `409` response → UI shows existing bookmarks → review and close the warning |
 | Large tag set | Top N matches fetched; paginated suggestions |
 | API not configured | User prompted to open Options page |
 | API failure / timeout | Error shown in popup; POST is not retried |
@@ -256,7 +257,7 @@ POST /bookmarks → API returns 409 with duplicates array
 ## Security Considerations
 
 - No authentication (single-user local deployment on trusted network)
-- No content scripts — page content is never read beyond URL and title
+- No always-on content scripts — toast UI is injected on demand only when needed
 - No sensitive data stored in `chrome.storage`
 - Input validation on both popup and API side
 

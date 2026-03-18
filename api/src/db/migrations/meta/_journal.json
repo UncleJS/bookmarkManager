@@ -8,6 +8,34 @@
       "when": 1771584840301,
       "tag": "0000_fluffy_scarlet_witch",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "5",
+      "when": 1773811075782,
+      "tag": "0001_third_red_ghost",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1773815671522,
+      "tag": "0002_greedy_clea",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "5",
+      "when": 1773817644938,
+      "tag": "0003_boring_famine",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "5",
+      "when": 1773822690616,
+      "tag": "0004_overjoyed_zuras",
+      "breakpoints": true
     }
   ]
 }

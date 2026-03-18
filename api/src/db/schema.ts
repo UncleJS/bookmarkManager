@@ -6,7 +6,6 @@ import {
   tinyint,
   timestamp,
   datetime,
-  primaryKey,
   index,
   uniqueIndex,
 } from "drizzle-orm/mysql-core";
@@ -72,22 +71,32 @@ export const tags = mysqlTable(
 // ---------------------------------------------------------------------------
 // bookmarks
 // ---------------------------------------------------------------------------
-export const bookmarks = mysqlTable("bookmarks", {
-  id: int("id").autoincrement().primaryKey(),
-  url: text("url").notNull(),
-  title: varchar("title", { length: 1024 }).notNull(),
-  description: text("description"),
-  faviconUrl: text("favicon_url"),
-  readLater: tinyint("read_later").default(0),
-  hotTopic: tinyint("hot_topic").default(0),
-  cheatsheets: tinyint("cheatsheets").default(0),
-  forReview: tinyint("for_review").notNull().default(0),
-  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`),
-  updatedAt: timestamp("updated_at")
-    .default(sql`CURRENT_TIMESTAMP`)
-    .$onUpdateFn(() => new Date()),
-  archivedAt: datetime("archived_at"),
-});
+export const bookmarks = mysqlTable(
+  "bookmarks",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    url: text("url").notNull(),
+    title: varchar("title", { length: 1024 }).notNull(),
+    description: text("description"),
+    faviconUrl: text("favicon_url"),
+    readLater: tinyint("read_later").default(0),
+    hotTopic: tinyint("hot_topic").default(0),
+    cheatsheets: tinyint("cheatsheets").default(0),
+    forReview: tinyint("for_review").notNull().default(0),
+    createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: timestamp("updated_at")
+      .default(sql`CURRENT_TIMESTAMP`)
+      .onUpdateNow(),
+    archivedAt: datetime("archived_at"),
+    urlHashActive: varchar("url_hash_active", { length: 64 }).generatedAlwaysAs(
+      sql`CASE WHEN archived_at IS NULL THEN SHA2(url, 256) ELSE NULL END`,
+      { mode: "stored" }
+    ),
+  },
+  (t) => [
+    uniqueIndex("uniq_active_bookmark_url").on(t.urlHashActive),
+  ]
+);
 
 // ---------------------------------------------------------------------------
 // bookmark_tags  (many-to-many)
@@ -95,11 +104,22 @@ export const bookmarks = mysqlTable("bookmarks", {
 export const bookmarkTags = mysqlTable(
   "bookmark_tags",
   {
-    bookmarkId: int("bookmark_id").notNull(),
-    tagId: int("tag_id").notNull(),
+    id: int("id").autoincrement().primaryKey(),
+    bookmarkId: int("bookmark_id").notNull().references(() => bookmarks.id),
+    tagId: int("tag_id").notNull().references(() => tags.id),
+    createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`),
+    archivedAt: datetime("archived_at"),
+    bookmarkIdActive: int("bookmark_id_active").generatedAlwaysAs(
+      sql`CASE WHEN archived_at IS NULL THEN bookmark_id ELSE NULL END`,
+      { mode: "stored" }
+    ),
+    tagIdActive: int("tag_id_active").generatedAlwaysAs(
+      sql`CASE WHEN archived_at IS NULL THEN tag_id ELSE NULL END`,
+      { mode: "stored" }
+    ),
   },
   (t) => [
-    primaryKey({ columns: [t.bookmarkId, t.tagId] }),
+    uniqueIndex("uniq_active_bookmark_tag").on(t.bookmarkIdActive, t.tagIdActive),
     index("idx_bt_bookmark").on(t.bookmarkId),
     index("idx_bt_tag").on(t.tagId),
   ]
@@ -111,12 +131,22 @@ export const bookmarkTags = mysqlTable(
 export const bookmarkClassifications = mysqlTable(
   "bookmark_classifications",
   {
-    bookmarkId: int("bookmark_id").notNull(),
-    classificationId: int("classification_id").notNull(),
+    id: int("id").autoincrement().primaryKey(),
+    bookmarkId: int("bookmark_id").notNull().references(() => bookmarks.id),
+    classificationId: int("classification_id").notNull().references(() => classifications.id),
     createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`),
+    archivedAt: datetime("archived_at"),
+    bookmarkIdActive: int("bookmark_id_active").generatedAlwaysAs(
+      sql`CASE WHEN archived_at IS NULL THEN bookmark_id ELSE NULL END`,
+      { mode: "stored" }
+    ),
+    classificationIdActive: int("classification_id_active").generatedAlwaysAs(
+      sql`CASE WHEN archived_at IS NULL THEN classification_id ELSE NULL END`,
+      { mode: "stored" }
+    ),
   },
   (t) => [
-    primaryKey({ columns: [t.bookmarkId, t.classificationId] }),
+    uniqueIndex("uniq_active_bookmark_classification").on(t.bookmarkIdActive, t.classificationIdActive),
     index("idx_bc_bookmark").on(t.bookmarkId),
     index("idx_bc_classification").on(t.classificationId),
   ]

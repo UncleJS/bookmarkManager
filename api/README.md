@@ -46,13 +46,15 @@ nano api/.env
 
 > **Important:** `MARIADB_USER`/`MARIADB_PASSWORD` and `DB_USER`/`DB_PASSWORD` must match.
 
+`./scripts/install.sh` generates `api/.env.api`, `api/.env.db`, and `api/.env.pma` from `api/.env` so each container only receives the variables it needs.
+
 ### 2. Install and start (from repo root)
 
 ```bash
 ./scripts/install.sh
 ```
 
-This will build the API image, copy Quadlet unit files, reload systemd, and start the pod.
+This will generate split env files, build the API image, copy Quadlet unit files, reload systemd, and start the pod.
 
 Alternatively, run individual steps manually:
 
@@ -65,7 +67,7 @@ systemctl --user start bookmark-pod.service
 This starts:
 - **MariaDB** — pod-internal only (not exposed to host)
 - **phpMyAdmin** on `http://localhost:11651` (localhost only, login required)
-- **API** on `http://localhost:11650` (migrations run automatically on start)
+- **API** on `http://localhost:11650` (runtime migrations wait for the DB, then run automatically on start)
 
 ### 3. Health check
 
@@ -123,6 +125,13 @@ loginctl enable-linger $USER
 | `bun run db:migrate` | Apply pending Drizzle migrations |
 | `bun run db:studio` | Open Drizzle Studio (visual DB browser) |
 | `bun run smoke` | Smoke test — verifies `/health` (no DB required) |
+
+## Production runtime hardening
+
+- The API container installs production dependencies only; `drizzle-kit` stays out of the runtime image.
+- Startup migrations use `api/src/db/migrate.ts`, which waits for MariaDB and applies the checked-in SQL migrations before the server starts.
+- The API container runs as a non-root user with a read-only root filesystem, a tmpfs-backed `/tmp`, and `NoNewPrivileges=true`.
+- `mariadb-client` remains in the image only because the authenticated `/backup` endpoint streams `mariadb-dump`; this keeps deployment simple at the cost of a slightly larger runtime image.
 
 ### Workflow for schema changes
 
@@ -203,11 +212,12 @@ Interactive docs always available at **`http://localhost:11650/docs`**.
 | `PATCH` | `/classifications/groups/:id/archive` | Archive group |
 | `PATCH` | `/classifications/groups/:id/restore` | Restore archived group |
 
-**Data lifecycle:** nothing is hard-deleted. All "delete" actions set `archivedAt` and can be reversed with the corresponding `/restore` endpoint.
+**Data lifecycle:** nothing is hard-deleted. Entity records and bookmark association rows are archived via `archivedAt`, and restoring an entity or re-attaching an archived association preserves prior history.
 
 **POST /bookmarks — duplicate detection:**
 - Returns `409` with a `duplicates` array if an active bookmark with the same URL already exists.
-- To save anyway after user confirmation, include `allowDuplicate: true` in the body.
+- Enforcement happens in the database, so concurrent requests cannot create duplicate active URLs.
+- Archived bookmarks do not conflict with active saves.
 
 ---
 
@@ -215,7 +225,7 @@ Interactive docs always available at **`http://localhost:11650/docs`**.
 
 ## Database Schema
 
-All tables include `archived_at DATETIME NULL`. A `NULL` value means the row is active. "Deleting" a row sets `archived_at = NOW()`. All queries filter on `archived_at IS NULL`.
+All tables include `archived_at DATETIME NULL`. A `NULL` value means the row is active. "Deleting" a row sets `archived_at = NOW()`. Bookmark association replacement archives removed junction rows and reactivates them if the same link is added later. Active queries filter on `archived_at IS NULL`.
 
 | Table | Purpose |
 |---|---|
@@ -223,8 +233,8 @@ All tables include `archived_at DATETIME NULL`. A `NULL` value means the row is 
 | `classification_groups` | Groups for organizing classifications |
 | `classifications` | Individual categories; many-to-many with bookmarks |
 | `tags` | Flexible labels; many-to-many with bookmarks |
-| `bookmark_tags` | Junction table |
-| `bookmark_classifications` | Junction table |
+| `bookmark_tags` | Junction table with archive/restore semantics |
+| `bookmark_classifications` | Junction table with archive/restore semantics |
 
 **Uniqueness among active rows** — `tags` and `classifications` use a generated column (`name_active`) that is `NULL` when archived, with a unique index on that column. This allows archived rows to share names with active rows.
 
@@ -234,7 +244,7 @@ All tables include `archived_at DATETIME NULL`. A `NULL` value means the row is 
 
 ## Environment Variables
 
-All vars live in `api/.env` (gitignored). Copy from `api/.env.example` to get started.
+Set values in `api/.env` (gitignored). `./scripts/install.sh` splits that file into `api/.env.api`, `api/.env.db`, and `api/.env.pma` so each service only receives the variables it needs.
 
 | Variable | Default | Description |
 |---|---|---|

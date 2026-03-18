@@ -68,6 +68,8 @@ cp api/.env.example api/.env
 nano api/.env
 ```
 
+`./scripts/install.sh` splits `api/.env` into `api/.env.api`, `api/.env.db`, and `api/.env.pma` so each service only receives the variables it needs.
+
 ### 2. Install (build image + deploy Quadlet + start pod)
 
 ```bash
@@ -76,6 +78,7 @@ nano api/.env
 
 `install.sh` will:
 - Copy `api/.env.example → api/.env` if missing (then exit so you can set passwords)
+- Generate `api/.env.api`, `api/.env.db`, and `api/.env.pma` from `api/.env`
 - Pull `mariadb:11` and `phpmyadmin:5`
 - Build `localhost/bookmark-api:latest`
 - Copy `quadlet/` unit files into `~/.config/containers/systemd/`
@@ -244,9 +247,9 @@ Interactive docs always available at **`http://localhost:11650/docs`**.
 | `PATCH` | `/classifications/groups/:id/archive` | Archive group |
 | `PATCH` | `/classifications/groups/:id/restore` | Restore archived group |
 
-**Data lifecycle:** nothing is hard-deleted. All "delete" actions set `archivedAt` and can be reversed with the corresponding `/restore` endpoint.
+**Data lifecycle:** nothing is hard-deleted. Entity records and bookmark association rows are archived via `archivedAt`, and restoring an entity or re-attaching an archived association preserves prior history.
 
-**Duplicate URL detection:** `POST /bookmarks` returns `409` with existing bookmark metadata. Pass `allowDuplicate: true` to save anyway after explicit user confirmation.
+**Duplicate URL detection:** `POST /bookmarks` returns `409` with existing bookmark metadata when an active bookmark already has that URL. This is enforced by the database, so concurrent creates cannot produce duplicate active URLs, while archived bookmarks can still share the same URL.
 
 ---
 
@@ -309,7 +312,7 @@ gunzip -c backups/bookmark_YYYY-MM-DD_HHMMSS.sql.gz \
 | Symptom | Fix |
 |---|---|
 | Port 11650 or 11651 busy | Edit `quadlet/bookmark.pod`, change `PublishPort`, re-run `./scripts/install.sh` |
-| API can't reach DB | Check `api/.env` — `DB_PASSWORD` must match `MARIADB_PASSWORD`; `DB_HOST` must be `127.0.0.1` |
+| API can't reach DB | Check `api/.env` — `DB_PASSWORD` must match `MARIADB_PASSWORD`; `DB_HOST` must be `127.0.0.1`; then re-run `./scripts/install.sh` to regenerate split env files |
 | Extension can't reach API | Verify base URL in Options; check `host_permissions` in `extension/manifest.json` |
 | Services not starting at boot | Run `loginctl enable-linger $USER` to enable linger for your user |
 

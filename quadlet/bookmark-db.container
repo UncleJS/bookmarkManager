@@ -14,8 +14,8 @@ After=bookmark-db-volume.service
 Image=docker.io/mariadb:11
 ContainerName=bookmark-db
 
-# Load all env vars (includes MARIADB_* for container init and DB_* for app)
-EnvironmentFile=%h/0_opencode/bookmarkManager/api/.env
+# Load only MariaDB init env vars from generated prod env file
+EnvironmentFile=%h/0_opencode/bookmarkManager/api/.env.db
 
 # Persistent data volume (named Podman volume)
 Volume=bookmark-db.volume:/var/lib/mysql:Z
