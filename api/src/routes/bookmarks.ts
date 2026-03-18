@@ -1,5 +1,5 @@
 import { Elysia, t } from "elysia";
-import { and, asc, desc, eq, inArray, isNotNull, isNull, like, notInArray, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, isNull, like, ne, notInArray, or, sql } from "drizzle-orm";
 import { db } from "../db/client.ts";
 import {
   bookmarkClassifications,
@@ -21,6 +21,13 @@ import {
   S,
   type BookmarkFlagColumnMap,
 } from "./shared.ts";
+
+// MariaDB/mysql2 driver does not handle NOT IN (?) with a single value correctly.
+// Use ne() for a single exclusion and notInArray() only for multiple.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function notInList(col: any, ids: number[]) {
+  return ids.length === 1 ? ne(col, ids[0]) : notInArray(col, ids);
+}
 
 export const bookmarkRoutes = new Elysia()
   .post(
@@ -522,7 +529,7 @@ export const bookmarkRoutes = new Elysia()
               .set({ archivedAt: sql`NOW()` })
               .where(and(
                 eq(bookmarkTags.bookmarkId, id),
-                notInArray(bookmarkTags.tagId, uniqueTagIds),
+                notInList(bookmarkTags.tagId, uniqueTagIds),
                 isNull(bookmarkTags.archivedAt),
               ));
           } else {
@@ -566,7 +573,7 @@ export const bookmarkRoutes = new Elysia()
               .set({ archivedAt: sql`NOW()` })
               .where(and(
                 eq(bookmarkClassifications.bookmarkId, id),
-                notInArray(bookmarkClassifications.classificationId, uniqueClassIds),
+                notInList(bookmarkClassifications.classificationId, uniqueClassIds),
                 isNull(bookmarkClassifications.archivedAt),
               ));
           } else {
