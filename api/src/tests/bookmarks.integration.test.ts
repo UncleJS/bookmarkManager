@@ -339,12 +339,62 @@ describe("bookmark write transactions", () => {
   });
 });
 
+describe("bookmark request validation", () => {
+  it.each([
+    ["/bookmarks?limit=0", "limit must be an integer between 1 and 100"],
+    ["/bookmarks?limit=101", "limit must be an integer between 1 and 100"],
+    ["/bookmarks?limit=abc", "limit must be an integer between 1 and 100"],
+    ["/bookmarks?offset=-1", "offset must be a non-negative integer"],
+    ["/bookmarks?offset=abc", "offset must be a non-negative integer"],
+    ["/bookmarks?classificationId=0", "classificationId must be a positive integer"],
+    ["/bookmarks?classificationId=abc", "classificationId must be a positive integer"],
+    ["/bookmarks?tagId=0", "tagId must be a positive integer"],
+    ["/bookmarks?tagId=abc", "tagId must be a positive integer"],
+    ["/bookmarks?flag=unknown", "flag must be one of: readLater, hotTopic, cheatsheets, forReview"],
+    ["/bookmarks?sortBy=random", "sortBy must be one of: newest, oldest"],
+    ["/bookmarks?archived=maybe", "archived must be true or false"],
+  ])("returns 400 for invalid bookmark query %s", async (path, message) => {
+    const res = await app.handle(request(path));
+
+    expect(res.status).toBe(400);
+    await expect(res.json()).resolves.toMatchObject({ error: message });
+  });
+
+  it.each([
+    ["/bookmarks/abc", jsonRequest("/bookmarks/abc", "PATCH", { title: "Invalid id" })],
+    ["/bookmarks/0", jsonRequest("/bookmarks/0", "PATCH", { title: "Invalid id" })],
+    ["/bookmarks/-1", jsonRequest("/bookmarks/-1", "PATCH", { title: "Invalid id" })],
+    ["/bookmarks/abc/archive", request("/bookmarks/abc/archive", "PATCH")],
+    ["/bookmarks/0/archive", request("/bookmarks/0/archive", "PATCH")],
+    ["/bookmarks/-1/archive", request("/bookmarks/-1/archive", "PATCH")],
+    ["/bookmarks/abc/restore", request("/bookmarks/abc/restore", "PATCH")],
+    ["/bookmarks/0/restore", request("/bookmarks/0/restore", "PATCH")],
+    ["/bookmarks/-1/restore", request("/bookmarks/-1/restore", "PATCH")],
+  ])("returns 400 for invalid bookmark id path %s", async (_path, req) => {
+    const res = await app.handle(req);
+
+    expect(res.status).toBe(400);
+    await expect(res.json()).resolves.toMatchObject({ error: "id must be a positive integer" });
+  });
+
+  it("keeps valid but missing bookmark ids as 404", async () => {
+    const res = await app.handle(jsonRequest("/bookmarks/999999", "PATCH", { title: "Missing bookmark" }));
+
+    expect(res.status).toBe(404);
+    await expect(res.json()).resolves.toMatchObject({ error: "Bookmark not found" });
+  });
+});
+
 function jsonRequest(path: string, method: string, body: unknown): Request {
   return new Request(`http://localhost${path}`, {
     method,
     headers: { "content-type": "application/json" },
     body: JSON.stringify(body),
   });
+}
+
+function request(path: string, method = "GET"): Request {
+  return new Request(`http://localhost${path}`, { method });
 }
 
 function uniqueName(prefix: string): string {

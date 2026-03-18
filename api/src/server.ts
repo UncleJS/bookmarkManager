@@ -64,6 +64,22 @@ const OkResp = {
   }}},
 };
 
+const BOOKMARK_FLAG_VALUES = ["readLater", "hotTopic", "cheatsheets", "forReview"] as const;
+const BOOKMARK_SORT_VALUES = ["newest", "oldest"] as const;
+
+const PositiveIdParam = t.Object({
+  id: t.Number({
+    minimum: 1,
+    multipleOf: 1,
+    description: "Positive integer ID.",
+    error: "id must be a positive integer",
+  }),
+});
+
+function getValidationErrorMessage(error: { all?: Array<{ message?: string }> ; message: string }) {
+  return error.all?.find((entry) => entry.message)?.message ?? error.message;
+}
+
 async function replaceBookmarkTagLinks(tx: any, bookmarkId: number, tagIds: number[]) {
   const requestedTagIds = [...new Set(tagIds)].filter(Boolean);
   const rows = await tx
@@ -162,6 +178,12 @@ async function replaceBookmarkClassificationLinks(tx: any, bookmarkId: number, c
 
 export function buildApp() {
   return new Elysia()
+  .onError(({ code, error, set }) => {
+    if (code === "VALIDATION") {
+      set.status = 400;
+      return { error: getValidationErrorMessage(error) };
+    }
+  })
   // ── Swagger / OpenAPI ──────────────────────────────────────────────────────
   .use(
     swagger({
@@ -843,13 +865,13 @@ export function buildApp() {
   .get(
     "/bookmarks",
     async ({ query }) => {
-      const limit = Math.min(Number(query.limit ?? 20), 100);
-      const offset = Number(query.offset ?? 0);
-      const classificationId = query.classificationId ? Number(query.classificationId) : null;
-      const tagId            = query.tagId            ? Number(query.tagId)            : null;
-      const flag             = query.flag ?? null; // readLater | hotTopic | cheatsheets | forReview
-      const sortBy           = query.sortBy === "oldest" ? "oldest" : "newest";
-      const showArchived     = query.archived === "true";
+      const limit = query.limit ?? 20;
+      const offset = query.offset ?? 0;
+      const classificationId = query.classificationId ?? null;
+      const tagId = query.tagId ?? null;
+      const flag = query.flag ?? null;
+      const sortBy = query.sortBy ?? "newest";
+      const showArchived = query.archived ?? false;
 
       const orderCol = sortBy === "oldest" ? asc(bookmarks.createdAt) : desc(bookmarks.createdAt);
 
@@ -964,13 +986,51 @@ export function buildApp() {
     },
     {
       query: t.Object({
-        limit:            t.Optional(t.String({ description: "Maximum number of bookmarks to return. Default: 20, max: 100." })),
-        offset:           t.Optional(t.String({ description: "Zero-based pagination offset. Default: 0." })),
-        classificationId: t.Optional(t.String({ description: "Filter to bookmarks assigned to this classification ID." })),
-        tagId:            t.Optional(t.String({ description: "Filter to bookmarks that have this tag ID attached." })),
-        flag:             t.Optional(t.String({ description: "Filter to bookmarks with a specific flag set. Allowed values: `readLater`, `hotTopic`, `cheatsheets`, `forReview`." })),
-        sortBy:           t.Optional(t.String({ description: "Sort order by creation date. `newest` (default) returns most recent first; `oldest` returns oldest first." })),
-        archived:         t.Optional(t.String({ description: "Pass `true` to return archived bookmarks instead of active ones. By default only active bookmarks are returned." })),
+        limit: t.Optional(t.Number({
+          minimum: 1,
+          maximum: 100,
+          multipleOf: 1,
+          description: "Maximum number of bookmarks to return. Default: 20, max: 100.",
+          error: "limit must be an integer between 1 and 100",
+        })),
+        offset: t.Optional(t.Number({
+          minimum: 0,
+          multipleOf: 1,
+          description: "Zero-based pagination offset. Default: 0.",
+          error: "offset must be a non-negative integer",
+        })),
+        classificationId: t.Optional(t.Number({
+          minimum: 1,
+          multipleOf: 1,
+          description: "Filter to bookmarks assigned to this classification ID.",
+          error: "classificationId must be a positive integer",
+        })),
+        tagId: t.Optional(t.Number({
+          minimum: 1,
+          multipleOf: 1,
+          description: "Filter to bookmarks that have this tag ID attached.",
+          error: "tagId must be a positive integer",
+        })),
+        flag: t.Optional(t.Union([
+          t.Literal("readLater"),
+          t.Literal("hotTopic"),
+          t.Literal("cheatsheets"),
+          t.Literal("forReview"),
+        ], {
+          description: "Filter to bookmarks with a specific flag set. Allowed values: `readLater`, `hotTopic`, `cheatsheets`, `forReview`.",
+          error: `flag must be one of: ${BOOKMARK_FLAG_VALUES.join(", ")}`,
+        })),
+        sortBy: t.Optional(t.Union([
+          t.Literal("newest"),
+          t.Literal("oldest"),
+        ], {
+          description: "Sort order by creation date. `newest` (default) returns most recent first; `oldest` returns oldest first.",
+          error: `sortBy must be one of: ${BOOKMARK_SORT_VALUES.join(", ")}`,
+        })),
+        archived: t.Optional(t.Boolean({
+          description: "Pass `true` to return archived bookmarks instead of active ones. By default only active bookmarks are returned.",
+          error: "archived must be true or false",
+        })),
       }),
       detail: {
         tags: ["bookmarks"],
@@ -1020,6 +1080,7 @@ export function buildApp() {
               },
             },
           },
+          400: { ...ErrorResp, description: "Validation error - invalid bookmark query parameter" },
         },
       },
     }
@@ -1029,7 +1090,7 @@ export function buildApp() {
   .patch(
     "/bookmarks/:id",
     async ({ params, body, set }) => {
-      const id = Number(params.id);
+      const id = params.id;
       const [row] = await db.select({ id: bookmarks.id }).from(bookmarks).where(eq(bookmarks.id, id));
       if (!row) { set.status = 404; return { error: "Bookmark not found" }; }
 
@@ -1076,6 +1137,7 @@ export function buildApp() {
       return { ok: true };
     },
     {
+      params: PositiveIdParam,
       body: t.Object({
         title:             t.Optional(t.String({ description: "New title. Whitespace is trimmed. Cannot be set to an empty string." })),
         url:               t.Optional(t.String({ description: "New URL. Whitespace is trimmed. Cannot be set to an empty string." })),
@@ -1105,7 +1167,7 @@ export function buildApp() {
           "The `updatedAt` timestamp is maintained automatically. Any bookmark edit, including tag/classification replacement, refreshes it.",
         responses: {
           200: { ...OkResp, description: "Bookmark updated successfully" },
-          400: { ...ErrorResp, description: "Validation error — title was provided but is blank after trimming" },
+          400: { ...ErrorResp, description: "Validation error - invalid bookmark ID, invalid payload, or a blank title/url after trimming" },
           404: { ...ErrorResp, description: "Bookmark not found" },
         },
       },
@@ -1116,7 +1178,7 @@ export function buildApp() {
   .patch(
     "/bookmarks/:id/archive",
     async ({ params, set }) => {
-      const id = Number(params.id);
+      const id = params.id;
       const [row] = await db.select({ id: bookmarks.id, archivedAt: bookmarks.archivedAt })
         .from(bookmarks).where(eq(bookmarks.id, id));
       if (!row) { set.status = 404; return { error: "Bookmark not found" }; }
@@ -1125,6 +1187,7 @@ export function buildApp() {
       return { ok: true };
     },
     {
+      params: PositiveIdParam,
       detail: {
         tags: ["bookmarks"],
         summary: "Archive a bookmark",
@@ -1135,6 +1198,7 @@ export function buildApp() {
           "Tag and classification associations are retained during archiving.",
         responses: {
           200: { ...OkResp, description: "Bookmark archived" },
+          400: { ...ErrorResp, description: "Validation error - invalid bookmark ID" },
           404: { ...ErrorResp, description: "Bookmark not found" },
           409: { ...ErrorResp, description: "Bookmark is already archived" },
         },
@@ -1146,7 +1210,7 @@ export function buildApp() {
   .patch(
     "/bookmarks/:id/restore",
     async ({ params, set }) => {
-      const id = Number(params.id);
+      const id = params.id;
       const [row] = await db.select({ id: bookmarks.id, archivedAt: bookmarks.archivedAt })
         .from(bookmarks).where(eq(bookmarks.id, id));
       if (!row) { set.status = 404; return { error: "Bookmark not found" }; }
@@ -1155,6 +1219,7 @@ export function buildApp() {
       return { ok: true };
     },
     {
+      params: PositiveIdParam,
       detail: {
         tags: ["bookmarks"],
         summary: "Restore an archived bookmark",
@@ -1164,6 +1229,7 @@ export function buildApp() {
           "All tag and classification associations that were present at archive time are still intact.",
         responses: {
           200: { ...OkResp, description: "Bookmark restored to active" },
+          400: { ...ErrorResp, description: "Validation error - invalid bookmark ID" },
           404: { ...ErrorResp, description: "Bookmark not found" },
           409: { ...ErrorResp, description: "Bookmark is not archived — cannot restore an active bookmark" },
         },
