@@ -120,7 +120,7 @@ export const bookmarkRoutes = new Elysia()
           })
         ),
         faviconUrl: t.Optional(t.String({ description: "URL of the page favicon, typically captured by the extension at save time." })),
-        allowDuplicate: t.Optional(t.Boolean({ description: "Set to true to bypass the duplicate URL check and allow saving the same URL more than once." })),
+        allowDuplicate: t.Optional(t.Boolean({ description: "Set to true to skip the pre-insert duplicate lookup and rely on the database constraint. Active duplicate URLs still return 409." })),
       }),
       detail: {
         tags: ["bookmarks"],
@@ -129,7 +129,8 @@ export const bookmarkRoutes = new Elysia()
           "Saves a new bookmark with optional tags, classifications, and flags.\n\n" +
           "**Duplicate detection:** by default, if an active bookmark with the same URL already exists " +
           "a `409` is returned with a `duplicates` array listing the existing records. " +
-          "Pass `allowDuplicate: true` to skip this check and save regardless.\n\n" +
+          "Pass `allowDuplicate: true` to skip the preflight lookup and rely on the database uniqueness constraint instead; " +
+          "active duplicate URLs still return `409`.\n\n" +
           "**Tags and classifications** must already exist; pass their integer IDs in `tags` and " +
           "`classificationIds`. Duplicates in those arrays are silently deduplicated.\n\n" +
           "**Flags** are all `false` by default. The special `flags.archived` field allows the " +

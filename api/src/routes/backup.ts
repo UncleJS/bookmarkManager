@@ -99,16 +99,17 @@ export function createBackupRoutes({ spawn = bunSpawn }: { spawn?: SpawnProcess 
         tags: ["backup"],
         summary: "Download a database backup",
         description:
-          "Streams a gzip-compressed `mariadb-dump` of the full bookmarks database.\n\n" +
+          "Generates a gzip-compressed `mariadb-dump` of the full bookmarks database and returns it as a file download.\n\n" +
           "**Authentication:** send the token in the `Authorization` header as a Bearer token:\n" +
           "```\nAuthorization: Bearer <BACKUP_TOKEN>\n```\n" +
           "where `BACKUP_TOKEN` is set in `api/.env`.\n\n" +
           "The endpoint returns `503` if the token is unset or still the default placeholder, " +
-          "and `401` if the token is missing or does not match.\n\n" +
+          "`401` if the token is missing or does not match, and `500` if the dump command fails.\n\n" +
           "The response is a `.sql.gz` file attachment named `bookmark_YYYY-MM-DD_HHMMSS.sql.gz`.",
         responses: {
           200: { description: "SQL dump (gzip-compressed) file download" },
           401: { ...ErrorResp, description: "Missing or invalid Authorization header" },
+          500: { ...ErrorResp, description: "Backup generation failed" },
           503: { ...ErrorResp, description: "Backup not configured - set BACKUP_TOKEN in api/.env" },
         },
       },

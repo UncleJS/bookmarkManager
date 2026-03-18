@@ -68,8 +68,8 @@ A precise description of what is built, how it works, and how to extend it.
   - Background Service Worker for context menus, tab info, API calls, and messaging.
   - Options page for configuring API base URL.
 - Bun/Elysia API + MariaDB
-  - Endpoints for bookmarks, tags, and classifications.
-  - No authentication or CORS; input validation on the frontend.
+  - Endpoints for bookmarks, tags, classifications, and authenticated backups.
+  - No auth or CORS for bookmark-management routes; `GET /backup` requires a Bearer token.
   - Swagger UI at `/docs`; OpenAPI spec at `/openapi.json`.
 - Data Flow
   1) Popup opens ➜ background fetches classifications/tags ➜ UI populates dropdowns.
@@ -98,8 +98,8 @@ A precise description of what is built, how it works, and how to extend it.
   - Access to active tab (url/title), context menus, notifications, storage, and API host permissions.
   - Handle network errors with clear user feedback.
 - API
-  - Endpoints to list/create classifications and tags, and to create/edit/archive bookmarks.
-  - No auth or CORS.
+  - Endpoints to list/create classifications and tags, create/edit/archive bookmarks, and download backups.
+  - No auth or CORS for bookmark-management routes; `GET /backup` requires `Authorization: Bearer <BACKUP_TOKEN>`.
 - Detect existing bookmarks with the same URL and require explicit user confirmation before creating a duplicate.
 
 ---
@@ -111,7 +111,7 @@ A precise description of what is built, how it works, and how to extend it.
 - Simplicity: vanilla JS for the extension.
 - Performance: responsive popup (under 200ms UI operations, excluding network).
 - Reliability: API with clear errors; DB constraints enforce uniqueness/relations.
-- Security: no auth/CORS; operate in a trusted environment. Minimize extension permissions.
+- Security: no auth/CORS on bookmark-management routes; operate in a trusted environment. `GET /backup` requires a Bearer token. Minimize extension permissions.
 - Observability: API logging for requests and errors.
 - Data safety: no hard deletes — all tables have `archived_at`; archive-only lifecycle.
 
@@ -232,6 +232,7 @@ api/
 | `DB_USER` | `bookmark` | DB username |
 | `DB_PASSWORD` | — | DB password |
 | `DB_NAME` | `bookmarks` | DB name |
+| `BACKUP_TOKEN` | `change_me_please` | Bearer token required by `GET /backup`; the default placeholder is rejected with `503` |
 | `MARIADB_DATABASE` | — | MariaDB container init |
 | `MARIADB_USER` | — | MariaDB container init |
 | `MARIADB_PASSWORD` | — | MariaDB container init |
@@ -243,7 +244,7 @@ api/
 [↑ Table of Contents](#table-of-contents)
 
 ### 6.4 Authentication
-- None. API runs in a trusted local environment.
+- Bookmark-management routes and UI routes are unauthenticated and intended for a trusted local environment. `GET /backup` requires `Authorization: Bearer <BACKUP_TOKEN>`.
 
 [↑ Table of Contents](#table-of-contents)
 
@@ -262,6 +263,7 @@ Interactive docs always available at **`http://localhost:11650/docs`**.
 | `GET` | `/app` | Bookmark viewer UI |
 | `GET` | `/categories` | Category management UI |
 | `GET` | `/flag-counts` | Count of active bookmarks per flag |
+| `GET` | `/backup` | Download a gzipped MariaDB dump (requires `Authorization: Bearer` header) |
 
 #### Bookmarks
 
@@ -313,7 +315,7 @@ Interactive docs always available at **`http://localhost:11650/docs`**.
 
 ### 6.6 Database Schema
 
-All tables include `archived_at DATETIME NULL`. `NULL` = active. "Delete" sets `archived_at = NOW()`.
+All tables include `archived_at DATETIME NULL`. `NULL` = active. "Delete" sets `archived_at = NOW()`. Replacing bookmark tags/classifications archives removed junction rows and reactivates them when the same link is added again.
 
 | Table | Purpose |
 |---|---|
@@ -444,7 +446,7 @@ POST /bookmarks request:
   "url": "https://example.com/article",
   "title": "Great Article",
   "description": "Why this is useful…",
-  "classificationId": 3,
+  "classificationIds": [3],
   "tags": [1, 4, 7],
   "flags": { "readLater": true, "hotTopic": false, "cheatsheets": false, "forReview": false },
   "faviconUrl": "https://example.com/favicon.ico"
@@ -477,7 +479,7 @@ GET /tags response:
 
 ## 9) Security and Privacy Considerations
 
-- No authentication or CORS; operate in a trusted local network only.
+- Bookmark-management routes do not require auth or CORS and are intended for a trusted local network only. `GET /backup` requires a Bearer token.
 - Extension requests only necessary permissions.
 - No content scripts reading page content beyond URL and title.
 - `api/.env` is gitignored — credentials never committed.

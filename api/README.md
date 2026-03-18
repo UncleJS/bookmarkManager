@@ -8,7 +8,7 @@
 [![OpenAPI](https://img.shields.io/badge/API-OpenAPI%203.0-85ea2d?logo=openapiinitiative&logoColor=black)](http://localhost:11650/docs)
 [![Podman](https://img.shields.io/badge/Container-Podman-892ca0?logo=podman)](https://podman.io)
 
-A Bun + Elysia API for managing bookmarks, tags, and classifications. Backed by MariaDB with Drizzle ORM. Data is never hard-deleted — all "delete" actions archive rows (`archived_at`).
+A Bun + Elysia API for managing bookmarks, tags, and classifications. Backed by MariaDB with Drizzle ORM. Data is never hard-deleted — entity rows and bookmark association rows use archive/restore semantics via `archived_at`.
 
 ---
 
@@ -170,6 +170,7 @@ Interactive docs always available at **`http://localhost:11650/docs`**.
 | `GET` | `/app` | Bookmark viewer UI |
 | `GET` | `/categories` | Category management UI |
 | `GET` | `/flag-counts` | Count of active bookmarks per flag |
+| `GET` | `/backup` | Download a gzipped MariaDB dump (requires `Authorization: Bearer` header) |
 
 [↑ Table of Contents](#table-of-contents)
 
@@ -220,7 +221,7 @@ Interactive docs always available at **`http://localhost:11650/docs`**.
 | `PATCH` | `/classifications/groups/:id/archive` | Archive group |
 | `PATCH` | `/classifications/groups/:id/restore` | Restore archived group |
 
-**Data lifecycle:** nothing is hard-deleted. Entity records and bookmark association rows are archived via `archivedAt`, and restoring an entity or re-attaching an archived association preserves prior history.
+**Data lifecycle:** nothing is hard-deleted. Entity records and bookmark association rows are archived via `archivedAt`, and replacing bookmark tags/classifications archives removed links instead of deleting them.
 
 **POST /bookmarks — duplicate detection:**
 - Returns `409` with a `duplicates` array if an active bookmark with the same URL already exists.
@@ -254,6 +255,8 @@ All tables include `archived_at DATETIME NULL`. A `NULL` value means the row is 
 
 Set values in `api/.env` (gitignored). `./scripts/install.sh` splits that file into `api/.env.api`, `api/.env.db`, and `api/.env.pma` so each service only receives the variables it needs.
 
+Bookmark-management routes are unauthenticated for trusted local-network use. `GET /backup` is the exception and requires `Authorization: Bearer <BACKUP_TOKEN>`.
+
 | Variable | Default | Description |
 |---|---|---|
 | `API_PORT` | `11650` | HTTP port |
@@ -263,6 +266,7 @@ Set values in `api/.env` (gitignored). `./scripts/install.sh` splits that file i
 | `DB_USER` | `bookmark` | DB username |
 | `DB_PASSWORD` | — | DB password |
 | `DB_NAME` | `bookmarks` | DB name |
+| `BACKUP_TOKEN` | `change_me_please` | Bearer token required by `GET /backup`; the default placeholder is rejected with `503` |
 | `MARIADB_DATABASE` | — | Used by mariadb:11 container on first init |
 | `MARIADB_USER` | — | Used by mariadb:11 container on first init |
 | `MARIADB_PASSWORD` | — | Used by mariadb:11 container on first init |

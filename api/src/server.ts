@@ -34,6 +34,8 @@ export function buildApp({ checkReadiness }: BuildAppOptions = {}) {
             description:
               "REST API for the Bookmark Manager Chrome extension.\n\n" +
               "Manages bookmarks, tags, classifications, and classification groups.\n\n" +
+              "**Auth model:** bookmark-management and UI routes are intended for a trusted local network and do not require auth. " +
+              "The `GET /backup` endpoint is the exception and requires `Authorization: Bearer <BACKUP_TOKEN>`.\n\n" +
               "**Data lifecycle:** records are never hard-deleted. Entity rows and bookmark association rows " +
               "use `archivedAt` for archive-only lifecycle, and archived associations are reactivated when re-attached.\n\n" +
               "**Timestamps:** stored and returned as UTC. The `archivedAt` field is `null` " +
@@ -45,6 +47,7 @@ export function buildApp({ checkReadiness }: BuildAppOptions = {}) {
             { name: "tags", description: "Manage tags and attach them to bookmarks" },
             { name: "classifications", description: "Manage classifications (categories) and assign them to bookmarks" },
             { name: "groups", description: "Manage classification groups that organise classifications" },
+            { name: "backup", description: "Generate authenticated MariaDB backup downloads" },
           ],
         },
       })
