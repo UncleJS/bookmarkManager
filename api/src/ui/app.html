@@ -94,6 +94,12 @@
       display: flex;
       align-items: center;
       gap: 6px;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .nav-section-label:hover {
+      color: var(--text);
     }
 
     .nav-section-label::before {
@@ -104,6 +110,28 @@
       background: var(--border2);
       border-radius: 2px;
       flex-shrink: 0;
+    }
+
+    .nav-section-chevron {
+      margin-left: auto;
+      font-size: 9px;
+      opacity: 0.5;
+      transition: transform 0.2s;
+      flex-shrink: 0;
+    }
+
+    .nav-section-label.open .nav-section-chevron {
+      transform: rotate(90deg);
+    }
+
+    .nav-group-items {
+      overflow: hidden;
+      max-height: 0;
+      transition: max-height 0.2s ease;
+    }
+
+    .nav-group-items.open {
+      max-height: 600px;
     }
 
     /* indent category items under their group label */
@@ -1007,6 +1035,7 @@
     total: 0,
     lastItems: [],            // cached for edit modal
     tagSortOrder: 'count',    // 'count' | 'alpha'
+    openCatGroups: new Set(), // set of group IDs that are expanded
   };
 
   // ── Boot ───────────────────────────────────────────────────────────────────
@@ -1033,41 +1062,6 @@
       groups.forEach(g => totalCats += g.classifications.length);
       document.getElementById('sidebar-subtitle').textContent =
         `${totalCats} categories · ${tagItems.length} tags`;
-
-      // ── Categories ───────────────────────────────────────────────────────
-      const catHeading = document.createElement('div');
-      catHeading.className = 'nav-group-heading';
-      catHeading.textContent = 'Categories';
-      nav.appendChild(catHeading);
-
-      groups.forEach(group => {
-        if (!group.classifications.length) return;
-
-        const heading = document.createElement('div');
-        heading.className = 'nav-section-label';
-        heading.textContent = group.name;
-        nav.appendChild(heading);
-
-        group.classifications.forEach(c => {
-          const btn = document.createElement('button');
-          btn.className = 'nav-item cat-item';
-          btn.dataset.id = String(c.id);
-          btn.title = c.name;
-          btn.onclick = () => selectCategory(c.id, c.name, btn);
-
-          const label = document.createElement('span');
-          label.className = 'nav-item-label';
-          label.textContent = c.name;
-
-          const count = document.createElement('span');
-          count.className = 'nav-item-count';
-          count.textContent = String(c.bookmarkCount ?? 0);
-
-          btn.appendChild(label);
-          btn.appendChild(count);
-          nav.appendChild(btn);
-        });
-      });
 
       // ── Flags ─────────────────────────────────────────────────────────────
       const flagHeading = document.createElement('div');
@@ -1098,6 +1092,68 @@
         btn.appendChild(lbl);
         btn.appendChild(cnt);
         nav.appendChild(btn);
+      });
+
+      // ── Categories ───────────────────────────────────────────────────────
+      const catHeading = document.createElement('div');
+      catHeading.className = 'nav-group-heading';
+      catHeading.textContent = 'Categories';
+      nav.appendChild(catHeading);
+
+      groups.forEach(group => {
+        if (!group.classifications.length) return;
+
+        const groupId = `cat-group-${group.name.replace(/\s+/g, '-').toLowerCase()}`;
+        const isOpen = state.openCatGroups && state.openCatGroups.has(groupId);
+
+        const heading = document.createElement('div');
+        heading.className = 'nav-section-label' + (isOpen ? ' open' : '');
+        heading.dataset.groupId = groupId;
+
+        const labelSpan = document.createElement('span');
+        labelSpan.textContent = group.name;
+
+        const chevron = document.createElement('span');
+        chevron.className = 'nav-section-chevron';
+        chevron.textContent = '▶';
+
+        heading.appendChild(labelSpan);
+        heading.appendChild(chevron);
+        nav.appendChild(heading);
+
+        const itemsContainer = document.createElement('div');
+        itemsContainer.className = 'nav-group-items' + (isOpen ? ' open' : '');
+        itemsContainer.dataset.groupId = groupId;
+
+        group.classifications.forEach(c => {
+          const btn = document.createElement('button');
+          btn.className = 'nav-item cat-item';
+          btn.dataset.id = String(c.id);
+          btn.title = c.name;
+          btn.onclick = () => selectCategory(c.id, c.name, btn);
+
+          const label = document.createElement('span');
+          label.className = 'nav-item-label';
+          label.textContent = c.name;
+
+          const count = document.createElement('span');
+          count.className = 'nav-item-count';
+          count.textContent = String(c.bookmarkCount ?? 0);
+
+          btn.appendChild(label);
+          btn.appendChild(count);
+          itemsContainer.appendChild(btn);
+        });
+
+        nav.appendChild(itemsContainer);
+
+        heading.onclick = () => {
+          const open = heading.classList.toggle('open');
+          itemsContainer.classList.toggle('open', open);
+          if (!state.openCatGroups) state.openCatGroups = new Set();
+          if (open) state.openCatGroups.add(groupId);
+          else state.openCatGroups.delete(groupId);
+        };
       });
 
       // ── Tags ──────────────────────────────────────────────────────────────
