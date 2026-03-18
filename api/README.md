@@ -65,7 +65,7 @@ systemctl --user start bookmark-pod.service
 This starts:
 - **MariaDB** — pod-internal only (not exposed to host)
 - **phpMyAdmin** on `http://localhost:11651` (localhost only, login required)
-- **API** on `http://localhost:11650` (migrations run automatically on start)
+- **API** on `http://localhost:11650` (runtime migrations wait for the DB, then run automatically on start)
 
 ### 3. Health check
 
@@ -123,6 +123,13 @@ loginctl enable-linger $USER
 | `bun run db:migrate` | Apply pending Drizzle migrations |
 | `bun run db:studio` | Open Drizzle Studio (visual DB browser) |
 | `bun run smoke` | Smoke test — verifies `/health` (no DB required) |
+
+## Production runtime hardening
+
+- The API container installs production dependencies only; `drizzle-kit` stays out of the runtime image.
+- Startup migrations use `api/src/db/migrate.ts`, which waits for MariaDB and applies the checked-in SQL migrations before the server starts.
+- The API container runs as a non-root user with a read-only root filesystem, a tmpfs-backed `/tmp`, and `NoNewPrivileges=true`.
+- `mariadb-client` remains in the image only because the authenticated `/backup` endpoint streams `mariadb-dump`; this keeps deployment simple at the cost of a slightly larger runtime image.
 
 ### Workflow for schema changes
 
