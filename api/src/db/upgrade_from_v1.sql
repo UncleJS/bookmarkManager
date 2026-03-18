@@ -109,6 +109,74 @@ ALTER TABLE bookmark_classifications
 CREATE UNIQUE INDEX IF NOT EXISTS uniq_active_bookmark_classification
   ON bookmark_classifications (bookmark_id_active, classification_id_active);
 
+SET @fk_bc_bookmark_exists := (
+  SELECT COUNT(*)
+  FROM information_schema.TABLE_CONSTRAINTS
+  WHERE CONSTRAINT_SCHEMA = DATABASE()
+    AND TABLE_NAME = 'bookmark_classifications'
+    AND CONSTRAINT_NAME = 'bookmark_classifications_bookmark_id_bookmarks_id_fk'
+    AND CONSTRAINT_TYPE = 'FOREIGN KEY'
+);
+SET @fk_bc_bookmark_sql := IF(
+  @fk_bc_bookmark_exists = 0,
+  'ALTER TABLE bookmark_classifications ADD CONSTRAINT bookmark_classifications_bookmark_id_bookmarks_id_fk FOREIGN KEY (bookmark_id) REFERENCES bookmarks(id) ON DELETE NO ACTION ON UPDATE NO ACTION',
+  'SELECT 1'
+);
+PREPARE stmt FROM @fk_bc_bookmark_sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @fk_bc_classification_exists := (
+  SELECT COUNT(*)
+  FROM information_schema.TABLE_CONSTRAINTS
+  WHERE CONSTRAINT_SCHEMA = DATABASE()
+    AND TABLE_NAME = 'bookmark_classifications'
+    AND CONSTRAINT_NAME = 'bookmark_classifications_classification_id_classifications_id_fk'
+    AND CONSTRAINT_TYPE = 'FOREIGN KEY'
+);
+SET @fk_bc_classification_sql := IF(
+  @fk_bc_classification_exists = 0,
+  'ALTER TABLE bookmark_classifications ADD CONSTRAINT bookmark_classifications_classification_id_classifications_id_fk FOREIGN KEY (classification_id) REFERENCES classifications(id) ON DELETE NO ACTION ON UPDATE NO ACTION',
+  'SELECT 1'
+);
+PREPARE stmt FROM @fk_bc_classification_sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @fk_bt_bookmark_exists := (
+  SELECT COUNT(*)
+  FROM information_schema.TABLE_CONSTRAINTS
+  WHERE CONSTRAINT_SCHEMA = DATABASE()
+    AND TABLE_NAME = 'bookmark_tags'
+    AND CONSTRAINT_NAME = 'bookmark_tags_bookmark_id_bookmarks_id_fk'
+    AND CONSTRAINT_TYPE = 'FOREIGN KEY'
+);
+SET @fk_bt_bookmark_sql := IF(
+  @fk_bt_bookmark_exists = 0,
+  'ALTER TABLE bookmark_tags ADD CONSTRAINT bookmark_tags_bookmark_id_bookmarks_id_fk FOREIGN KEY (bookmark_id) REFERENCES bookmarks(id) ON DELETE NO ACTION ON UPDATE NO ACTION',
+  'SELECT 1'
+);
+PREPARE stmt FROM @fk_bt_bookmark_sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @fk_bt_tag_exists := (
+  SELECT COUNT(*)
+  FROM information_schema.TABLE_CONSTRAINTS
+  WHERE CONSTRAINT_SCHEMA = DATABASE()
+    AND TABLE_NAME = 'bookmark_tags'
+    AND CONSTRAINT_NAME = 'bookmark_tags_tag_id_tags_id_fk'
+    AND CONSTRAINT_TYPE = 'FOREIGN KEY'
+);
+SET @fk_bt_tag_sql := IF(
+  @fk_bt_tag_exists = 0,
+  'ALTER TABLE bookmark_tags ADD CONSTRAINT bookmark_tags_tag_id_tags_id_fk FOREIGN KEY (tag_id) REFERENCES tags(id) ON DELETE NO ACTION ON UPDATE NO ACTION',
+  'SELECT 1'
+);
+PREPARE stmt FROM @fk_bt_tag_sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
 -- ---------------------------------------------------------------------------
 -- 6. Register the Drizzle 0000 baseline as already applied
 --    This prevents drizzle-kit from trying to re-run the fresh-install migration.
