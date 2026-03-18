@@ -193,7 +193,7 @@ Interactive docs always available at **`http://localhost:11650/docs`**.
 | `GET` | `/app` | Bookmark viewer UI |
 | `GET` | `/categories` | Category management UI |
 | `GET` | `/flag-counts` | Count of active bookmarks per flag |
-| `GET` | `/backup` | Download a gzipped MariaDB dump (requires `?token=`) |
+| `GET` | `/backup` | Download a gzipped MariaDB dump (requires `Authorization: Bearer` header) |
 
 [↑ Table of Contents](#table-of-contents)
 
@@ -282,14 +282,16 @@ See [`scripts/README.md`](scripts/README.md) for full options and a restore comm
 
 ### API endpoint
 
-```
-GET http://localhost:11650/backup?token=<BACKUP_TOKEN>
+```bash
+curl -H "Authorization: Bearer <BACKUP_TOKEN>" \
+     http://localhost:11650/backup \
+     -o backup.sql.gz
 ```
 
 - Returns a `bookmark_YYYY-MM-DD_HHMMSS.sql.gz` download
 - Requires `BACKUP_TOKEN` to be set in `api/.env` (a strong random value — the default `change_me_please` is refused with `503`)
-- Returns `401` on token mismatch, `503` if token is unconfigured
-- The **⬇ Backup** button in the `http://localhost:11650/app` topbar calls this endpoint — it will prompt for your token
+- Returns `401` on missing or invalid `Authorization` header, `503` if token is unconfigured
+- The **⬇ Backup** button in the `http://localhost:11650/app` topbar calls this endpoint — it will prompt for your token and send it securely in the request header
 
 ### Restore
 
