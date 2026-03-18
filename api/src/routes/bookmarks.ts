@@ -390,7 +390,10 @@ export const bookmarkRoutes = new Elysia()
                 })
                 .from(bookmarkTags)
                 .innerJoin(tags, eq(bookmarkTags.tagId, tags.id))
-                .where(inArray(bookmarkTags.bookmarkId, ids)),
+                .where(and(
+                  inArray(bookmarkTags.bookmarkId, ids),
+                  isNull(bookmarkTags.archivedAt),
+                )),
               db
                 .select({
                   bookmarkId: bookmarkClassifications.bookmarkId,
@@ -402,7 +405,10 @@ export const bookmarkRoutes = new Elysia()
                 .from(bookmarkClassifications)
                 .innerJoin(classifications, eq(bookmarkClassifications.classificationId, classifications.id))
                 .leftJoin(classificationGroups, eq(classifications.groupId, classificationGroups.id))
-                .where(inArray(bookmarkClassifications.bookmarkId, ids)),
+                .where(and(
+                  inArray(bookmarkClassifications.bookmarkId, ids),
+                  isNull(bookmarkClassifications.archivedAt),
+                )),
             ])
           : [[], []];
 
