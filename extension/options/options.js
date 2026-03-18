@@ -15,6 +15,22 @@ import { getApiBaseUrl, setApiBaseUrl } from '../lib/storage.js';
  */
 const el = (id) => document.getElementById(id);
 
+let statusTimer;
+
+function showStatus(message, { success = true, timeoutMs = 1500 } = {}) {
+  const statusEl = el('status');
+  clearTimeout(statusTimer);
+  statusEl.textContent = message;
+  statusEl.dataset.state = message ? (success ? 'success' : 'error') : '';
+
+  if (message && timeoutMs > 0) {
+    statusTimer = setTimeout(() => {
+      statusEl.textContent = '';
+      statusEl.dataset.state = '';
+    }, timeoutMs);
+  }
+}
+
 /**
  * Page Initialization Handler
  *
@@ -34,16 +50,16 @@ window.addEventListener('DOMContentLoaded', async () => {
  * the URL field is not empty.
  */
 el('save').addEventListener('click', async () => {
-  const url = el('apiBaseUrl').value.trim();
+  const input = el('apiBaseUrl');
 
-  // Basic validation - ensure URL is provided
-  if (!url) return;
-
-  // Save the new URL to storage
-  await setApiBaseUrl(url);
-
-  // Show temporary success message
-  const statusEl = el('status');
-  statusEl.textContent = 'Saved';
-  setTimeout(() => (statusEl.textContent = ''), 1500);
+  try {
+    await setApiBaseUrl(input.value);
+    input.value = await getApiBaseUrl();
+    showStatus('Saved');
+  } catch (error) {
+    showStatus(error?.message || 'Failed to save API Base URL.', {
+      success: false,
+      timeoutMs: 4000,
+    });
+  }
 });

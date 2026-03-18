@@ -6,10 +6,17 @@
  * across Chrome installations when the user is signed in.
  */
 
+import { normalizeStoredApiBaseUrl, validateApiBaseUrl } from './validate.js';
+
 /**
  * Storage key for API base URL configuration
  */
 const KEY = 'apiBaseUrl';
+const DEFAULT_API_BASE_URL = 'http://localhost:11650';
+
+function setStoredApiBaseUrl(value) {
+  return new Promise((resolve) => chrome.storage.sync.set({ [KEY]: value }, resolve));
+}
 
 /**
  * Get API Base URL from Storage
@@ -21,8 +28,19 @@ const KEY = 'apiBaseUrl';
  */
 export async function getApiBaseUrl() {
   return new Promise((resolve) => {
-    chrome.storage.sync.get([KEY], (items) => {
-      resolve(items[KEY] || 'http://localhost:11650');
+    chrome.storage.sync.get([KEY], async (items) => {
+      const normalizedUrl = normalizeStoredApiBaseUrl(items[KEY]);
+
+      if (normalizedUrl) {
+        if (items[KEY] !== normalizedUrl) {
+          await setStoredApiBaseUrl(normalizedUrl);
+        }
+        resolve(normalizedUrl);
+        return;
+      }
+
+      await setStoredApiBaseUrl(DEFAULT_API_BASE_URL);
+      resolve(DEFAULT_API_BASE_URL);
     });
   });
 }
@@ -37,9 +55,13 @@ export async function getApiBaseUrl() {
  * @returns {Promise<void>} Promise that resolves when the URL is saved
  */
 export async function setApiBaseUrl(url) {
-  return new Promise((resolve) => {
-    chrome.storage.sync.set({ [KEY]: url }, () => resolve());
-  });
+  const result = validateApiBaseUrl(url);
+
+  if (!result.ok) {
+    throw new Error(result.error);
+  }
+
+  await setStoredApiBaseUrl(result.value);
 }
 
 /**
