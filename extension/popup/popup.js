@@ -20,6 +20,15 @@ import { h, debounce } from '../lib/dom.js';
  */
 const el = (id) => document.getElementById(id);
 
+const FOCUSABLE_SELECTOR = [
+  'button:not([disabled])',
+  '[href]',
+  'input:not([disabled])',
+  'select:not([disabled])',
+  'textarea:not([disabled])',
+  '[tabindex]:not([tabindex="-1"])'
+].join(', ');
+
 /**
  * Application State Management
  *
@@ -38,7 +47,58 @@ let state = {
   hasTagsPrefetched: false, // Track if initial tags are loaded
   pendingDuplicate: null, // Store duplicate entries requiring confirmation
   faviconUrl: '', // Active tab favicon for full-save payload
+  visibleClassifications: [], // Currently rendered classification suggestions
+  activeClassificationIndex: -1, // Keyboard-selected classification suggestion
+  activeTagIndex: -1, // Keyboard-selected tag suggestion
+  lastFocusedElement: null, // Previously focused element before modal open
 };
+
+function getFocusableElements(container) {
+  return Array.from(container.querySelectorAll(FOCUSABLE_SELECTOR)).filter((node) => {
+    return !node.hasAttribute('hidden') && !node.closest('.hidden');
+  });
+}
+
+function queueLiveRegionText(node, text) {
+  if (!node) return;
+  node.textContent = '';
+  if (!text) return;
+  window.setTimeout(() => {
+    node.textContent = text;
+  }, 0);
+}
+
+function getSuggestionId(type, index) {
+  return `${type}-suggestion-${index}`;
+}
+
+function updateListboxState(inputId, containerId, activeIndex) {
+  const input = el(inputId);
+  const container = el(containerId);
+  if (!input || !container) return;
+
+  const isExpanded = !container.classList.contains('hidden');
+  input.setAttribute('aria-expanded', String(isExpanded));
+
+  const activeId = activeIndex >= 0 ? getSuggestionId(containerId, activeIndex) : '';
+  if (activeId) {
+    input.setAttribute('aria-activedescendant', activeId);
+  } else {
+    input.removeAttribute('aria-activedescendant');
+  }
+}
+
+function updateActiveSuggestion(containerId, activeIndex) {
+  const options = Array.from(el(containerId)?.querySelectorAll('[role="option"]') || []);
+  options.forEach((option, index) => {
+    const isActive = index === activeIndex;
+    option.classList.toggle('active', isActive);
+    option.setAttribute('aria-selected', String(isActive));
+    if (isActive) {
+      option.scrollIntoView({ block: 'nearest' });
+    }
+  });
+}
 
 /**
  * Create Chip Component
@@ -62,7 +122,9 @@ function createChip(text, onRemove, isClassification = false) {
       </svg>
     </button>
   `;
-  chip.querySelector('.chip-remove').addEventListener('click', onRemove);
+  const removeButton = chip.querySelector('.chip-remove');
+  removeButton.setAttribute('aria-label', `Remove ${text}`);
+  removeButton.addEventListener('click', onRemove);
   return chip;
 }
 
@@ -128,6 +190,8 @@ function addClassification(classification) {
 function renderClassificationSuggestions(classifications) {
   const container = el('classification-suggestions');
   container.innerHTML = '';
+  state.visibleClassifications = classifications;
+  state.activeClassificationIndex = -1;
 
   if (classifications.length === 0) {
     hideClassificationSuggestions();
@@ -143,6 +207,7 @@ function renderClassificationSuggestions(classifications) {
   });
 
   // Render groups
+  let optionIndex = 0;
   Object.entries(grouped).forEach(([groupName, items]) => {
     // Add group header
     const header = document.createElement('div');
@@ -155,8 +220,12 @@ function renderClassificationSuggestions(classifications) {
       const item = document.createElement('div');
       item.className = 'suggestion';
       item.textContent = classification.name;
+      item.id = getSuggestionId('classification-suggestions', optionIndex);
+      item.setAttribute('role', 'option');
+      item.setAttribute('aria-selected', 'false');
       item.addEventListener('click', () => addClassification(classification));
       container.appendChild(item);
+      optionIndex += 1;
     });
   });
 
@@ -170,6 +239,7 @@ function renderClassificationSuggestions(classifications) {
  */
 function showClassificationSuggestions() {
   el('classification-suggestions').classList.remove('hidden');
+  updateListboxState('classification-search', 'classification-suggestions', state.activeClassificationIndex);
 }
 
 /**
@@ -180,6 +250,9 @@ function showClassificationSuggestions() {
 function hideClassificationSuggestions() {
   el('classification-suggestions').classList.add('hidden');
   state.hasClassificationsPrefetched = false;
+  state.visibleClassifications = [];
+  state.activeClassificationIndex = -1;
+  updateListboxState('classification-search', 'classification-suggestions', state.activeClassificationIndex);
 }
 
 /**
@@ -257,22 +330,35 @@ function addTag(tag) {
 function renderTagSuggestions(tags) {
   const container = el('tag-suggestions');
   state.tagSuggestions = tags;
+  state.activeTagIndex = -1;
   container.innerHTML = '';
 
   if (tags.length === 0) {
-    container.classList.add('hidden');
+    hideTagSuggestions();
     return;
   }
 
-  tags.forEach(tag => {
+  tags.forEach((tag, index) => {
     const li = document.createElement('li');
     li.className = 'suggestion';
     li.textContent = tag.name;
+    li.id = getSuggestionId('tag-suggestions', index);
+    li.setAttribute('role', 'option');
+    li.setAttribute('aria-selected', 'false');
     li.addEventListener('click', () => addTag(tag));
     container.appendChild(li);
   });
 
   container.classList.remove('hidden');
+  updateListboxState('tag-input', 'tag-suggestions', state.activeTagIndex);
+}
+
+function hideTagSuggestions() {
+  const container = el('tag-suggestions');
+  if (!container) return;
+  container.classList.add('hidden');
+  state.activeTagIndex = -1;
+  updateListboxState('tag-input', 'tag-suggestions', state.activeTagIndex);
 }
 
 /**
@@ -287,6 +373,7 @@ function renderTagSuggestions(tags) {
  */
 function showModal() {
   const modal = el('classification-modal');
+  state.lastFocusedElement = document.activeElement;
   modal.classList.remove('hidden');
 
   // Populate existing groups dropdown
@@ -298,6 +385,8 @@ function showModal() {
     option.textContent = group.name;
     groupsSelect.appendChild(option);
   });
+
+  document.addEventListener('keydown', onModalKeydown);
 
   // Focus on the name input
   setTimeout(() => el('modal-classification-name').focus(), 100);
@@ -322,6 +411,7 @@ function showModal() {
 function hideModal() {
   const modal = el('classification-modal');
   modal.classList.add('hidden');
+  document.removeEventListener('keydown', onModalKeydown);
 
   // Reset form
   el('modal-classification-name').value = '';
@@ -329,6 +419,43 @@ function hideModal() {
   document.querySelector('input[name="group-option"][value="none"]').checked = true;
   el('existing-groups-section').classList.add('hidden');
   el('new-group-section').classList.add('hidden');
+
+  if (state.lastFocusedElement instanceof HTMLElement) {
+    state.lastFocusedElement.focus();
+  }
+}
+
+function onModalKeydown(e) {
+  const modal = el('classification-modal');
+  if (!modal || modal.classList.contains('hidden')) return;
+
+  if (e.key === 'Escape') {
+    e.preventDefault();
+    hideModal();
+    return;
+  }
+
+  if (e.key !== 'Tab') return;
+
+  const dialog = modal.querySelector('.modal-content');
+  const focusable = getFocusableElements(dialog);
+
+  if (focusable.length === 0) {
+    e.preventDefault();
+    dialog.focus();
+    return;
+  }
+
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+
+  if (e.shiftKey && document.activeElement === first) {
+    e.preventDefault();
+    last.focus();
+  } else if (!e.shiftKey && document.activeElement === last) {
+    e.preventDefault();
+    first.focus();
+  }
 }
 
 /**
@@ -479,15 +606,15 @@ async function loadInitial() {
  */
 function setStatus(text, success = false) {
   const s = el('status');
-  s.textContent = text || '';
   s.className = `status-text ${success ? 'success' : (text ? 'error' : '')}`;
+  queueLiveRegionText(s, text || '');
 }
 
 function showSaveToast(msg, ok) {
   var t = document.getElementById('save-toast');
   if (!t) return;
-  t.textContent = msg;
   t.className = 'save-toast ' + (ok ? 'ok' : 'err');
+  queueLiveRegionText(t, msg);
 }
 
 function setSubmitPending(isPending) {
@@ -556,6 +683,7 @@ function showDuplicateWarning(duplicates) {
 
   if (container) {
     container.classList.remove('hidden');
+    window.setTimeout(() => container.focus(), 0);
   }
   if (confirmBtn) {
     confirmBtn.disabled = false;
@@ -680,6 +808,55 @@ function onClassificationFocus() {
   prefetchClassifications();
 }
 
+function setActiveClassificationIndex(index) {
+  if (state.visibleClassifications.length === 0) return;
+  state.activeClassificationIndex = index;
+  updateActiveSuggestion('classification-suggestions', index);
+  updateListboxState('classification-search', 'classification-suggestions', index);
+}
+
+function moveClassificationActive(delta) {
+  if (state.visibleClassifications.length === 0) return;
+  const nextIndex = state.activeClassificationIndex < 0
+    ? (delta > 0 ? 0 : state.visibleClassifications.length - 1)
+    : (state.activeClassificationIndex + delta + state.visibleClassifications.length) % state.visibleClassifications.length;
+  setActiveClassificationIndex(nextIndex);
+}
+
+function onClassificationKeydown(e) {
+  if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    if (el('classification-suggestions').classList.contains('hidden')) {
+      prefetchClassifications();
+      return;
+    }
+    moveClassificationActive(1);
+    return;
+  }
+
+  if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    if (!el('classification-suggestions').classList.contains('hidden')) {
+      moveClassificationActive(-1);
+    }
+    return;
+  }
+
+  if (e.key === 'Escape' && !el('classification-suggestions').classList.contains('hidden')) {
+    e.preventDefault();
+    hideClassificationSuggestions();
+    return;
+  }
+
+  if (e.key === 'Enter' && state.activeClassificationIndex >= 0) {
+    const activeClassification = state.visibleClassifications[state.activeClassificationIndex];
+    if (activeClassification) {
+      e.preventDefault();
+      addClassification(activeClassification);
+    }
+  }
+}
+
 /**
  * On Tag Input
  *
@@ -706,6 +883,59 @@ function onTagInput(e) {
  */
 function onTagFocus() {
   prefetchTags();
+}
+
+function setActiveTagIndex(index) {
+  if (state.tagSuggestions.length === 0) return;
+  state.activeTagIndex = index;
+  updateActiveSuggestion('tag-suggestions', index);
+  updateListboxState('tag-input', 'tag-suggestions', index);
+}
+
+function moveTagActive(delta) {
+  if (state.tagSuggestions.length === 0) return;
+  const nextIndex = state.activeTagIndex < 0
+    ? (delta > 0 ? 0 : state.tagSuggestions.length - 1)
+    : (state.activeTagIndex + delta + state.tagSuggestions.length) % state.tagSuggestions.length;
+  setActiveTagIndex(nextIndex);
+}
+
+async function onTagKeydown(e) {
+  if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    if (el('tag-suggestions').classList.contains('hidden')) {
+      await prefetchTags();
+      return;
+    }
+    moveTagActive(1);
+    return;
+  }
+
+  if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    if (!el('tag-suggestions').classList.contains('hidden')) {
+      moveTagActive(-1);
+    }
+    return;
+  }
+
+  if (e.key === 'Escape' && !el('tag-suggestions').classList.contains('hidden')) {
+    e.preventDefault();
+    hideTagSuggestions();
+    state.hasTagsPrefetched = false;
+    return;
+  }
+
+  if (e.key === 'Enter' && state.activeTagIndex >= 0) {
+    const activeTag = state.tagSuggestions[state.activeTagIndex];
+    if (activeTag) {
+      e.preventDefault();
+      addTag(activeTag);
+      return;
+    }
+  }
+
+  await onTagEnterCreateIfNeeded(e);
 }
 
 /**
@@ -779,7 +1009,7 @@ document.addEventListener('click', (e) => {
     hideClassificationSuggestions();
   }
   if (!e.target.closest('#tag-input') && !e.target.closest('#tag-suggestions')) {
-    renderTagSuggestions([]);
+    hideTagSuggestions();
     state.hasTagsPrefetched = false;
   }
 });
@@ -795,10 +1025,11 @@ function initEvents() {
   el('classification-search').addEventListener('input', onClassificationSearch);
   el('classification-search').addEventListener('focus', onClassificationFocus);
   el('classification-search').addEventListener('click', onClassificationFocus);
+  el('classification-search').addEventListener('keydown', onClassificationKeydown);
   el('tag-input').addEventListener('input', onTagInput);
   el('tag-input').addEventListener('focus', onTagFocus);
   el('tag-input').addEventListener('click', onTagFocus);
-  el('tag-input').addEventListener('keydown', onTagEnterCreateIfNeeded);
+  el('tag-input').addEventListener('keydown', onTagKeydown);
   el('form').addEventListener('submit', onSubmit);
   el('duplicate-cancel').addEventListener('click', onDuplicateCancel);
   el('duplicate-confirm').addEventListener('click', onDuplicateConfirm);

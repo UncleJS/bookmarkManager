@@ -195,6 +195,8 @@ body {
   border: 1px solid #d1d5db;
   border-radius: 6px;
   box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+  max-height: 220px;
+  overflow-y: auto;
 }
 
 .dark .dropdown,
@@ -228,6 +230,11 @@ body {
 .dark .suggestion:hover,
 .dark .suggestion.active {
   background-color: rgba(59, 130, 246, 0.2);
+}
+
+.suggestion.active {
+  outline: 2px solid rgba(59, 130, 246, 0.45);
+  outline-offset: -2px;
 }
 
 .group-header {
@@ -363,6 +370,11 @@ body {
 
 .dark .duplicate-warning-text p {
   color: #fde68a;
+}
+
+.duplicate-warning:focus {
+  outline: 2px solid #facc15;
+  outline-offset: 2px;
 }
 
 .duplicate-list {
@@ -528,6 +540,11 @@ body {
 
 .dark .modal-content {
   background-color: #1e293b;
+}
+
+.modal-content:focus {
+  outline: 2px solid #60a5fa;
+  outline-offset: 2px;
 }
 
 .modal-title {

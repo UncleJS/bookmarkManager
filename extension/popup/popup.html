@@ -8,7 +8,7 @@
 </head>
 <body class="dark-bg dark-text">
   <main class="main-container">
-    <div id="save-toast" class="save-toast"></div>
+    <div id="save-toast" class="save-toast" role="status" aria-live="polite" aria-atomic="true"></div>
 
     <div class="header">
       <h1 class="title">Save Bookmark</h1>
@@ -59,11 +59,15 @@
               id="classification-search"
               type="text"
               placeholder="Search classifications..."
+              autocomplete="off"
+              aria-autocomplete="list"
+              aria-expanded="false"
+              aria-controls="classification-suggestions"
               class="input-field"
             />
 
             <!-- Classification suggestions dropdown - moved inside relative container -->
-            <div id="classification-suggestions" class="dropdown hidden"></div>
+            <div id="classification-suggestions" class="dropdown hidden" role="listbox" aria-label="Classification suggestions"></div>
           </div>
 
           <!-- Selected classifications -->
@@ -94,9 +98,12 @@
               type="text"
               placeholder="Type to search or add tags"
               autocomplete="off"
+              aria-autocomplete="list"
+              aria-expanded="false"
+              aria-controls="tag-suggestions"
               class="input-field"
             />
-            <ul id="tag-suggestions" class="dropdown-suggestions hidden"></ul>
+            <ul id="tag-suggestions" class="dropdown-suggestions hidden" role="listbox" aria-label="Tag suggestions"></ul>
           </div>
         </div>
       </div>
@@ -131,7 +138,7 @@
       </div>
 
       <!-- Duplicate warning -->
-      <div id="duplicate-warning" class="duplicate-warning hidden">
+      <div id="duplicate-warning" class="duplicate-warning hidden" role="alert" aria-live="assertive" aria-atomic="true" tabindex="-1">
         <div class="duplicate-warning-text">
           <h2>Possible duplicate</h2>
           <p>This URL already exists in your bookmarks. Review the existing entries below.</p>
@@ -145,7 +152,7 @@
 
       <!-- Actions -->
       <div class="actions-container">
-        <span id="status" class="status-text"></span>
+        <span id="status" class="status-text" role="status" aria-live="polite" aria-atomic="true"></span>
         <button
           id="save"
           type="submit"
@@ -159,8 +166,8 @@
 
   <!-- Modal for creating classifications -->
   <div id="classification-modal" class="modal-backdrop hidden">
-    <div class="modal-content">
-      <h3 class="modal-title">Create New Classification</h3>
+    <div class="modal-content" role="dialog" aria-modal="true" aria-labelledby="classification-modal-title" tabindex="-1">
+      <h3 id="classification-modal-title" class="modal-title">Create New Classification</h3>
 
       <div class="modal-body">
         <div class="field-group">
