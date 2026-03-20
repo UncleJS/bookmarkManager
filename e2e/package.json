@@ -1,0 +1,22 @@
+{
+  "name": "bookmark-manager-e2e",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Playwright E2E tests for the Bookmark Manager extension + web UI",
+  "type": "module",
+  "scripts": {
+    "test": "playwright test",
+    "test:headed": "playwright test --headed",
+    "test:ui": "playwright test --ui",
+    "test:debug": "playwright test --debug",
+    "test:api": "playwright test tests/api.spec.ts",
+    "test:options": "playwright test tests/options.spec.ts",
+    "test:popup": "playwright test tests/popup.spec.ts",
+    "test:webapp": "playwright test tests/webapp.spec.ts",
+    "report": "playwright show-report"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.52.0",
+    "@types/node": "^22.0.0"
+  }
+}

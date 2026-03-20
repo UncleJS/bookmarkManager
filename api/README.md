@@ -132,6 +132,10 @@ loginctl enable-linger $USER
 | `bun run db:migrate` | Apply pending Drizzle migrations |
 | `bun run db:studio` | Open Drizzle Studio (visual DB browser) |
 | `bun run smoke` | Smoke test — verifies real app `/health` and `/ready` route behavior |
+| `bun run e2e` | Run the full Playwright E2E suite (delegates to `e2e/`) |
+| `bun run e2e:api` | Run API smoke tests only |
+| `bun run e2e:headed` | Run the E2E suite in headed (visible) browser mode |
+| `bun run e2e:report` | Open the last Playwright HTML report |
 
 ## Production runtime hardening
 
@@ -260,6 +264,7 @@ Bookmark-management routes are unauthenticated for trusted local-network use. `G
 | Variable | Default | Description |
 |---|---|---|
 | `API_PORT` | `11650` | HTTP port |
+| `API_TOKEN` | — | Bearer token required by all bookmark-management routes; the default placeholder is rejected with `503` |
 | `LOG_LEVEL` | `info` | Elysia log level |
 | `DB_HOST` | `127.0.0.1` | MariaDB host (must be `127.0.0.1` within the pod) |
 | `DB_PORT` | `3306` | MariaDB port |

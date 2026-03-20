@@ -19,12 +19,26 @@ let schema: SchemaModule;
 beforeAll(async () => {
   process.env.API_TOKEN ||= "test-api-token";
 
+  // Always use the test database — NEVER the live 'bookmarks' database.
+  // DB_NAME must be explicitly overridden to anything other than 'bookmarks_test'
+  // before this guard will allow the tests to run against a different database.
+  const dbName = process.env.DB_NAME ?? "bookmarks_test";
+  if (dbName === "bookmarks") {
+    throw new Error(
+      "SAFETY: integration tests must not run against the live 'bookmarks' database. " +
+      "Set DB_NAME=bookmarks_test or leave DB_NAME unset."
+    );
+  }
+
+  // Point the app's db client at the test database before importing the server.
+  process.env.DB_NAME = dbName;
+
   adminConnection = await mysql.createConnection({
     host: process.env.DB_HOST ?? "127.0.0.1",
     port: Number(process.env.DB_PORT ?? 3306),
     user: process.env.DB_USER ?? "root",
     password: process.env.DB_PASSWORD ?? "",
-    database: process.env.DB_NAME ?? "bookmarks",
+    database: dbName,
     multipleStatements: true,
   });
 

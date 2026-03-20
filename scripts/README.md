@@ -32,6 +32,7 @@ Every script uses `set -euo pipefail` and colour-coded output:
 - [status.sh](#statussh)
 - [dev.sh](#devsh)
 - [test-integration.sh](#test-integrationsh)
+- [test-e2e.sh](#test-e2esh)
 - [backup.sh](#backupsh)
 
 ---
@@ -50,6 +51,7 @@ Every script uses `set -euo pipefail` and colour-coded output:
 | [`status.sh`](#statussh) | — | Show systemctl status for all services |
 | [`dev.sh`](#devsh) | — | Run API locally via Bun (no container) |
 | [`test-integration.sh`](#test-integrationsh) | — | Run Bun integration tests against the pod DB |
+| [`test-e2e.sh`](#test-e2esh) | — | Run the Playwright E2E suite (API + Web UI + extension) |
 | [`backup.sh`](#backupsh) | — | Dump DB to `backups/bookmark_YYYY-MM-DD_HHMMSS.sql.gz` |
 
 ---
@@ -307,6 +309,52 @@ Runs the Bun integration suite from a temporary Bun container joined to the runn
 1. Starts `bookmark-pod.service` if it is not already running.
 2. Launches a temporary `docker.io/oven/bun:1.3.8` container inside the `systemd-bookmark` pod.
 3. Mounts `api/` into that container and runs `bun test src/tests/bookmarks.integration.test.ts`.
+
+[↑ Table of Contents](#table-of-contents)
+
+---
+
+## test-e2e.sh
+
+Runs the full Playwright E2E suite against the running pod. Covers the REST API, Web UI (`/app`, `/manage-categories`, `/docs`), and the Chrome extension (options page + popup).
+
+```bash
+API_TOKEN=<your-token> ./scripts/test-e2e.sh [playwright-args...]
+```
+
+**Optional env vars:**
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `API_BASE_URL` | `http://localhost:11650` | Base URL of the running API |
+| `API_TOKEN` | *(empty)* | Bearer token — required for authenticated tests |
+| `EXTENSION_PATH` | `<repo>/extension` | Path to the unpacked Chrome extension |
+
+If `API_TOKEN` is not set, all token-gated tests are automatically **skipped** (not failed). The health and auth-guard tests always run.
+
+**Common examples:**
+
+```bash
+# Full suite
+API_TOKEN=abc123 ./scripts/test-e2e.sh
+
+# API smoke only (fastest — no extension required)
+API_TOKEN=abc123 ./scripts/test-e2e.sh --project=api-smoke
+
+# Headed mode (watch the browser)
+API_TOKEN=abc123 ./scripts/test-e2e.sh --headed
+
+# Re-open the last HTML report
+API_TOKEN=abc123 ./scripts/test-e2e.sh --reporter=html
+```
+
+**What it does:**
+
+1. Warns if `API_TOKEN` is not set.
+2. Checks `GET /ready`; if the API is not up, starts `bookmark-pod.service` and waits 3 seconds.
+3. Runs `bun run test` inside `e2e/`, forwarding any extra arguments directly to Playwright.
+
+See [`e2e/README.md`](../e2e/README.md) for the full E2E suite documentation.
 
 [↑ Table of Contents](#table-of-contents)
 

@@ -7,13 +7,17 @@
   "scripts": {
     "start": "bun run src/server.ts",
     "dev": "bun --watch src/server.ts",
-    "test": "bun test",
-    "test:integration": "bun test src/tests/bookmarks.integration.test.ts",
+    "test": "DB_NAME=bookmarks_test bun test",
+    "test:integration": "DB_NAME=bookmarks_test bun test src/tests/bookmarks.integration.test.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:studio": "drizzle-kit studio",
     "smoke": "bun run src/smoke/health.ts",
-    "smoke:full": "bun run src/smoke/full.ts"
+    "smoke:full": "bun run src/smoke/full.ts",
+    "e2e": "bun --cwd ../e2e run test",
+    "e2e:api": "bun --cwd ../e2e run test:api",
+    "e2e:headed": "bun --cwd ../e2e run test:headed",
+    "e2e:report": "bun --cwd ../e2e run report"
   },
   "dependencies": {
     "@elysiajs/swagger": "^1.2.2",

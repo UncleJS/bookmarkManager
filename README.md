@@ -23,6 +23,7 @@ Everything is implemented in JavaScript (no TypeScript) for the extension; the A
   - [3. Health check](#3-health-check)
   - [4. Load the Chrome extension](#4-load-the-chrome-extension)
 - [Scripts](#scripts)
+- [Testing](#testing)
 - [Repository Structure](#repository-structure)
 - [API Overview](#api-overview)
   - [Health & UI](#health--ui)
@@ -138,8 +139,41 @@ All scripts live in `scripts/` and are run from the repo root.
 | `./scripts/dev.sh` | Run API locally via `bun run dev` (no container) |
 | `./scripts/backup.sh` | Dump MariaDB to `backups/bookmark_YYYY-MM-DD_HHMMSS.sql.gz` |
 | `./scripts/test-integration.sh` | Run the Bun integration suite against the running pod DB |
+| `./scripts/test-e2e.sh` | Run the Playwright E2E suite (API smoke + Web UI + extension) |
 
 See [`scripts/README.md`](scripts/README.md) for full per-script documentation.
+
+---
+
+[↑ Table of Contents](#table-of-contents)
+
+## Testing
+
+### Integration tests (Bun)
+
+Fast tests that run inside a temporary container joined to the running pod, exercising MariaDB directly:
+
+```bash
+./scripts/test-integration.sh
+```
+
+### E2E tests (Playwright)
+
+Full end-to-end suite covering the REST API, Web UI, Chrome extension options page, and popup. Requires the pod to be running and your `API_TOKEN`:
+
+```bash
+API_TOKEN=<your-token> ./scripts/test-e2e.sh
+
+# API smoke only (fastest — no extension required):
+API_TOKEN=<your-token> ./scripts/test-e2e.sh --project=api-smoke
+
+# Headed mode (watch the browser):
+API_TOKEN=<your-token> ./scripts/test-e2e.sh --headed
+```
+
+If `API_TOKEN` is not set, all token-gated tests are automatically **skipped** (not failed). The health and auth-guard tests always run.
+
+See [`e2e/README.md`](e2e/README.md) for full E2E documentation.
 
 ---
 
@@ -167,6 +201,15 @@ bookmarkManager/
 │   ├── options/
 │   ├── lib/
 │   └── assets/
+├── e2e/                    # Playwright E2E test suite
+│   ├── playwright.config.ts
+│   ├── global-setup.ts
+│   ├── fixtures.ts
+│   └── tests/
+│       ├── api.spec.ts
+│       ├── webapp.spec.ts
+│       ├── options.spec.ts
+│       └── popup.spec.ts
 ├── quadlet/                # Canonical Quadlet unit files (version-controlled)
 │   ├── bookmark.pod
 │   ├── bookmark-api.container
@@ -182,7 +225,9 @@ bookmarkManager/
 │   ├── logs.sh
 │   ├── status.sh
 │   ├── dev.sh
-│   └── backup.sh           # DB dump → backups/
+│   ├── backup.sh           # DB dump → backups/
+│   ├── test-integration.sh # Bun integration suite
+│   └── test-e2e.sh         # Playwright E2E suite
 ├── backups/                # Dump files (gitignored)
 ├── PLAN.md                 # Full project reference
 └── README.md               # This file

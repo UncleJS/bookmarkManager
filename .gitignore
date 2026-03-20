@@ -24,3 +24,11 @@ api/.env.pma
 !api/.env.db.example
 !api/.env.pma.example
 backups/
+
+# Playwright E2E test artifacts
+e2e/.tmp-chrome-*/
+e2e/.tmp-chrome-profile/
+e2e/playwright-report/
+e2e/test-results/
+
+
