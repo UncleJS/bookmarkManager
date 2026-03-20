@@ -1178,7 +1178,7 @@ document.querySelectorAll('input[name="category-option"]').forEach(radio => {
   radio.addEventListener('change', updateCategorySections);
 });
 document.querySelectorAll('input[name="level-option"]').forEach(radio => {
-  radio.addEventListener('change', updateCategorySections);
+  radio.addEventListener('change', updateModalLevelUi);
 });
 
   // Close modal when clicking backdrop

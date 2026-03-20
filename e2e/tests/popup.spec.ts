@@ -18,6 +18,10 @@ import { test, expect } from "../fixtures.js";
 const API_BASE = process.env.API_BASE_URL ?? "http://localhost:11650";
 const TOKEN = process.env.API_TOKEN ?? "";
 
+function authHeaders() {
+  return { Authorization: `Bearer ${TOKEN}` };
+}
+
 // Helper: configure the extension via the options page within the same context
 async function configureExtension(
   extensionContext: BrowserContext,
@@ -170,6 +174,64 @@ test.describe("Popup — subcategory modal", () => {
 
     await popupPage.keyboard.press("Escape");
     await expect(modal).toHaveClass(/hidden/, { timeout: 3_000 });
+  });
+
+  test("creates a sub-sub-category from the popup modal and makes it selectable", async ({
+    request,
+    extensionContext,
+    extensionId,
+    popupPage,
+  }) => {
+    await configureExtension(extensionContext, extensionId);
+
+    const categoryName = `popup-l3-cat-${Date.now()}`;
+    const subcategoryName = `popup-l2-parent-${Date.now()}`;
+    const subSubcategoryName = `popup-l3-child-${Date.now()}`;
+
+    const categoryRes = await request.post(`${API_BASE}/categories`, {
+      headers: authHeaders(),
+      data: { name: categoryName, description: "Popup level-3 category" },
+    });
+    expect(categoryRes.status()).toBe(201);
+    const categoryBody = await categoryRes.json();
+
+    const subcategoryRes = await request.post(`${API_BASE}/subcategories`, {
+      headers: authHeaders(),
+      data: { name: subcategoryName, categoryId: categoryBody.id, description: "Popup level-2 parent" },
+    });
+    expect(subcategoryRes.status()).toBe(201);
+    const subcategoryBody = await subcategoryRes.json();
+
+    await popupPage.reload({ waitUntil: "domcontentloaded" });
+    await popupPage.waitForTimeout(700);
+
+    await popupPage.locator("#add-subcategory").click();
+    const modal = popupPage.locator("#subcategory-modal");
+    await expect(modal).not.toHaveClass(/hidden/, { timeout: 3_000 });
+
+    await popupPage.locator('input[name="level-option"][value="subSubcategory"]').check();
+    await expect(popupPage.locator("#parent-subcategory-section")).not.toHaveClass(/hidden/);
+    await expect(popupPage.locator("#subcategory-modal-title")).toHaveText(/Create sub-sub-category/i);
+
+    await popupPage.locator("#modal-parent-subcategory").selectOption(String(subcategoryBody.id));
+    await popupPage.locator("#modal-subcategory-name").fill(subSubcategoryName);
+    await popupPage.locator("#modal-subcategory-description").fill("Created from popup modal");
+    await popupPage.locator("#modal-create").click();
+
+    await expect(popupPage.locator("#status")).toHaveText(/sub-sub-category created/i, { timeout: 5_000 });
+    await expect(modal).toHaveClass(/hidden/, { timeout: 5_000 });
+
+    await expect(popupPage.locator("#selected-subcategories")).toContainText(subSubcategoryName);
+    await expect(popupPage.locator("#selected-subcategories")).toContainText(subcategoryName);
+
+    const verifyRes = await request.get(`${API_BASE}/subSubcategories`, {
+      headers: authHeaders(),
+    });
+    expect(verifyRes.status()).toBe(200);
+    const verifyBody = await verifyRes.json();
+    const parentGroup = (verifyBody.subcategories as Array<{ id: number; subSubcategories: Array<{ name: string }> }>)
+      .find((item) => item.id === subcategoryBody.id);
+    expect(parentGroup?.subSubcategories.some((item) => item.name === subSubcategoryName)).toBe(true);
   });
 });
 
