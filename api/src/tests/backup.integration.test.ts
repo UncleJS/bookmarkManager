@@ -6,18 +6,18 @@ import { Elysia } from "elysia";
 import { createBackupRoutes } from "../routes/backup.ts";
 
 const SQL_DUMP = [
-  "CREATE TABLE classification_groups (id INT NOT NULL AUTO_INCREMENT PRIMARY KEY, name VARCHAR(255) NOT NULL, `order` INT NOT NULL);",
-  "CREATE TABLE classifications (id INT NOT NULL AUTO_INCREMENT PRIMARY KEY, name VARCHAR(255) NOT NULL, group_id INT NULL);",
+  "CREATE TABLE categories (id INT NOT NULL AUTO_INCREMENT PRIMARY KEY, name VARCHAR(255) NOT NULL, `order` INT NOT NULL);",
+  "CREATE TABLE subcategories (id INT NOT NULL AUTO_INCREMENT PRIMARY KEY, name VARCHAR(255) NOT NULL, category_id INT NULL);",
   "CREATE TABLE tags (id INT NOT NULL AUTO_INCREMENT PRIMARY KEY, name VARCHAR(255) NOT NULL);",
   "CREATE TABLE bookmarks (id INT NOT NULL AUTO_INCREMENT PRIMARY KEY, url TEXT NOT NULL, title VARCHAR(255) NOT NULL);",
   "CREATE TABLE bookmark_tags (bookmark_id INT NOT NULL, tag_id INT NOT NULL, PRIMARY KEY (bookmark_id, tag_id));",
-  "CREATE TABLE bookmark_classifications (bookmark_id INT NOT NULL, classification_id INT NOT NULL, PRIMARY KEY (bookmark_id, classification_id));",
-  "INSERT INTO classification_groups (id, name, `order`) VALUES (1, 'Reference', 1);",
-  "INSERT INTO classifications (id, name, group_id) VALUES (1, 'Docs', 1);",
+  "CREATE TABLE bookmark_subcategories (bookmark_id INT NOT NULL, subcategory_id INT NOT NULL, PRIMARY KEY (bookmark_id, subcategory_id));",
+  "INSERT INTO categories (id, name, `order`) VALUES (1, 'Reference', 1);",
+  "INSERT INTO subcategories (id, name, category_id) VALUES (1, 'Docs', 1);",
   "INSERT INTO tags (id, name) VALUES (1, 'bun');",
   "INSERT INTO bookmarks (id, url, title) VALUES (1, 'https://example.com', 'Example');",
   "INSERT INTO bookmark_tags (bookmark_id, tag_id) VALUES (1, 1);",
-  "INSERT INTO bookmark_classifications (bookmark_id, classification_id) VALUES (1, 1);",
+  "INSERT INTO bookmark_subcategories (bookmark_id, subcategory_id) VALUES (1, 1);",
 ].join("\n");
 
 let adminConnection: mysql.Connection;
@@ -86,10 +86,10 @@ describe("backup route", () => {
 
           expect(tables.map((table) => table.name)).toEqual([
             "bookmarks",
-            "bookmark_classifications",
+            "bookmark_subcategories",
             "bookmark_tags",
-            "classifications",
-            "classification_groups",
+            "subcategories",
+            "categories",
             "tags",
           ]);
 

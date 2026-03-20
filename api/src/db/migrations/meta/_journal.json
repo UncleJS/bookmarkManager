@@ -36,6 +36,27 @@
       "when": 1773822690616,
       "tag": "0004_overjoyed_zuras",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "5",
+      "when": 1774003200000,
+      "tag": "0005_add_classification_description",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "5",
+      "when": 1774089600000,
+      "tag": "0006_add_group_description",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "5",
+      "when": 1774176000000,
+      "tag": "0007_rename_categories_subcategories",
+      "breakpoints": true
     }
   ]
 }

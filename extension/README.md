@@ -39,7 +39,7 @@ A Chrome Manifest V3 extension that captures bookmarks and sends them to a local
 ### Bookmark Capture
 
 - **Quick Save**: Right-click context menu for instant bookmark saving
-- **Full Save**: Detailed form with tags, classifications, and metadata
+- **Full Save**: Detailed form with tags, subcategories, and metadata
 - **Auto-fill**: Automatically captures page title, URL, and favicon
 - **Duplicate Detection**: Highlights existing bookmarks with the same URL and prevents saving a second active bookmark with that URL
 
@@ -47,7 +47,7 @@ A Chrome Manifest V3 extension that captures bookmarks and sends them to a local
 
 ### Organisation
 
-- **Classifications**: Hierarchical categorisation system with groups
+- **Sub-categories**: Hierarchical categorisation system with categories; each subcategory can have an optional description
 - **Tags**: Flexible tagging with autocomplete and search
 - **Flags**: Boolean properties — `readLater`, `hotTopic`, `cheatsheets`, `forReview`
 
@@ -142,13 +142,13 @@ extension/
 - **Quick Save**: captures active tab → POST `/bookmarks` → notification
 - **Full Save**: opens popup programmatically (fallback to window if blocked)
 - Centralises all API calls (reads base URL from storage, fetch with timeouts, error mapping)
-- Message types: `getInitialData`, `createTag`, `createClassification`, `saveBookmark`, `searchTags`
+- Message types: `fetchInitialData`, `createTag`, `createSubcategory`, `createBookmark`, `searchTags`
 
 #### Popup (`popup.js`)
-- On load: reads active tab, fetches classifications + tag suggestions, populates form
-- Classifications multi-select: grouped suggestions, removable chips, create new on the fly
+- On load: reads active tab, fetches subcategories + tag suggestions, populates form
+- Sub-categories multi-select: category-grouped suggestions, removable chips, create new on the fly
 - Tags multi-select: input + listbox, debounced API calls (250 ms), removable chips, create new on the fly
-- Classification creation: inline affordance → POST `/classifications` → refresh dropdown
+- Sub-category creation: inline affordance → name + optional description inputs → POST `/subcategories` → refresh dropdown
 - Submission: validate → send via background message → disable button + loader → show success/error
 
 #### API Library (`api.js`)
@@ -195,7 +195,7 @@ Right-click page
 ```
 Click extension icon
   → popup.html opens
-  → background.js fetches /classifications + /tags
+  → background.js fetches /subcategories + /tags
   → user fills form and submits
   → popup sends message to background.js
   → background.js POSTs to /bookmarks
@@ -232,10 +232,10 @@ POST /bookmarks → API returns 409 with duplicates array
 
 | Method | Path | Purpose |
 |---|---|---|
-| `GET` | `/classifications` | Fetch classification groups for dropdown |
+| `GET` | `/subcategories` | Fetch categories with nested sub-categories for the dropdown |
 | `GET` | `/tags?query=...` | Search tags with autocomplete |
 | `POST` | `/tags` | Create a new tag on the fly |
-| `POST` | `/classifications` | Create a new classification on the fly |
+| `POST` | `/subcategories` | Create a new subcategory on the fly (name + optional description) |
 | `POST` | `/bookmarks` | Save a bookmark |
 
 ---

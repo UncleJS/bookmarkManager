@@ -19,30 +19,30 @@ SET NAMES utf8mb4;
 SET time_zone = '+00:00';
 
 -- ---------------------------------------------------------------------------
--- 1. Add archived_at to classification_groups
+-- 1. Add archived_at to categories
 -- ---------------------------------------------------------------------------
-ALTER TABLE classification_groups
+ALTER TABLE categories
   ADD COLUMN IF NOT EXISTS archived_at DATETIME NULL DEFAULT NULL;
 
 -- ---------------------------------------------------------------------------
--- 2. Add archived_at to classifications
+-- 2. Add archived_at to subcategories
 -- ---------------------------------------------------------------------------
-ALTER TABLE classifications
+ALTER TABLE subcategories
   ADD COLUMN IF NOT EXISTS archived_at DATETIME NULL DEFAULT NULL;
 
 -- Add generated column for unique-among-active index
-ALTER TABLE classifications
+ALTER TABLE subcategories
   ADD COLUMN IF NOT EXISTS name_active TEXT GENERATED ALWAYS AS (
     CASE WHEN archived_at IS NULL THEN name ELSE NULL END
   ) STORED;
 
--- Drop old unique constraint (group_id, name) — replace with (group_id, name_active)
-ALTER TABLE classifications
-  DROP INDEX IF EXISTS uniq_group_name;
+-- Drop old unique constraint (category_id, name) — replace with (category_id, name_active)
+ALTER TABLE subcategories
+  DROP INDEX IF EXISTS uniq_category_name;
 
 -- Add new unique-among-active index (allows archived duplicates)
-CREATE UNIQUE INDEX IF NOT EXISTS uniq_active_group_name
-  ON classifications (group_id, name_active);
+CREATE UNIQUE INDEX IF NOT EXISTS uniq_active_category_name
+  ON subcategories (category_id, name_active);
 
 -- ---------------------------------------------------------------------------
 -- 3. Add archived_at to tags + generated column
@@ -103,51 +103,51 @@ ALTER TABLE bookmark_tags
 CREATE UNIQUE INDEX IF NOT EXISTS uniq_active_bookmark_tag
   ON bookmark_tags (bookmark_id_active, tag_id_active);
 
-ALTER TABLE bookmark_classifications
+ALTER TABLE bookmark_subcategories
   DROP PRIMARY KEY,
   ADD COLUMN IF NOT EXISTS id INT NOT NULL AUTO_INCREMENT PRIMARY KEY FIRST,
   ADD COLUMN IF NOT EXISTS archived_at DATETIME NULL DEFAULT NULL,
   ADD COLUMN IF NOT EXISTS bookmark_id_active INT GENERATED ALWAYS AS (
     CASE WHEN archived_at IS NULL THEN bookmark_id ELSE NULL END
   ) STORED,
-  ADD COLUMN IF NOT EXISTS classification_id_active INT GENERATED ALWAYS AS (
-    CASE WHEN archived_at IS NULL THEN classification_id ELSE NULL END
+  ADD COLUMN IF NOT EXISTS subcategory_id_active INT GENERATED ALWAYS AS (
+    CASE WHEN archived_at IS NULL THEN subcategory_id ELSE NULL END
   ) STORED;
 
-CREATE UNIQUE INDEX IF NOT EXISTS uniq_active_bookmark_classification
-  ON bookmark_classifications (bookmark_id_active, classification_id_active);
+CREATE UNIQUE INDEX IF NOT EXISTS uniq_active_bookmark_subcategory
+  ON bookmark_subcategories (bookmark_id_active, subcategory_id_active);
 
 SET @fk_bc_bookmark_exists := (
   SELECT COUNT(*)
   FROM information_schema.TABLE_CONSTRAINTS
   WHERE CONSTRAINT_SCHEMA = DATABASE()
-    AND TABLE_NAME = 'bookmark_classifications'
-    AND CONSTRAINT_NAME = 'bookmark_classifications_bookmark_id_bookmarks_id_fk'
+    AND TABLE_NAME = 'bookmark_subcategories'
+    AND CONSTRAINT_NAME = 'bookmark_subcategories_bookmark_id_bookmarks_id_fk'
     AND CONSTRAINT_TYPE = 'FOREIGN KEY'
 );
 SET @fk_bc_bookmark_sql := IF(
   @fk_bc_bookmark_exists = 0,
-  'ALTER TABLE bookmark_classifications ADD CONSTRAINT bookmark_classifications_bookmark_id_bookmarks_id_fk FOREIGN KEY (bookmark_id) REFERENCES bookmarks(id) ON DELETE NO ACTION ON UPDATE NO ACTION',
+  'ALTER TABLE bookmark_subcategories ADD CONSTRAINT bookmark_subcategories_bookmark_id_bookmarks_id_fk FOREIGN KEY (bookmark_id) REFERENCES bookmarks(id) ON DELETE NO ACTION ON UPDATE NO ACTION',
   'SELECT 1'
 );
 PREPARE stmt FROM @fk_bc_bookmark_sql;
 EXECUTE stmt;
 DEALLOCATE PREPARE stmt;
 
-SET @fk_bc_classification_exists := (
+SET @fk_bc_subcategory_exists := (
   SELECT COUNT(*)
   FROM information_schema.TABLE_CONSTRAINTS
   WHERE CONSTRAINT_SCHEMA = DATABASE()
-    AND TABLE_NAME = 'bookmark_classifications'
-    AND CONSTRAINT_NAME = 'bookmark_classifications_classification_id_classifications_id_fk'
+    AND TABLE_NAME = 'bookmark_subcategories'
+    AND CONSTRAINT_NAME = 'bookmark_subcategories_subcategory_id_subcategories_id_fk'
     AND CONSTRAINT_TYPE = 'FOREIGN KEY'
 );
-SET @fk_bc_classification_sql := IF(
-  @fk_bc_classification_exists = 0,
-  'ALTER TABLE bookmark_classifications ADD CONSTRAINT bookmark_classifications_classification_id_classifications_id_fk FOREIGN KEY (classification_id) REFERENCES classifications(id) ON DELETE NO ACTION ON UPDATE NO ACTION',
+SET @fk_bc_subcategory_sql := IF(
+  @fk_bc_subcategory_exists = 0,
+  'ALTER TABLE bookmark_subcategories ADD CONSTRAINT bookmark_subcategories_subcategory_id_subcategories_id_fk FOREIGN KEY (subcategory_id) REFERENCES subcategories(id) ON DELETE NO ACTION ON UPDATE NO ACTION',
   'SELECT 1'
 );
-PREPARE stmt FROM @fk_bc_classification_sql;
+PREPARE stmt FROM @fk_bc_subcategory_sql;
 EXECUTE stmt;
 DEALLOCATE PREPARE stmt;
 

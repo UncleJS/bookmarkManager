@@ -4,7 +4,7 @@
  * Main user interface for the bookmark manager extension popup.
  * Handles the complete bookmark capture workflow including:
  * - Form initialization and data loading
- * - Tag and classification management with autocomplete
+ * - Tag and subcategory management with autocomplete
  * - Dynamic UI updates and chip-based selection display
  * - Real-time search and filtering
  * - Form validation and submission
@@ -37,18 +37,18 @@ const FOCUSABLE_SELECTOR = [
  */
 let state = {
   selectedTags: [], // Array of selected tag objects: { id, name }
-  selectedClassifications: [], // Array of selected classification objects: { id, name, groupName }
-  allClassifications: [], // All available classifications with groups from API
-  filteredClassifications: [], // Filtered classifications for display in search
+  selectedSubcategories: [], // Array of selected subcategory objects: { id, name, categoryName }
+  allSubcategories: [], // All available subcategories with categories from API
+  filteredSubcategories: [], // Filtered subcategories for display in search
   tagSuggestions: [], // Tag suggestions for autocomplete dropdown
-  existingGroups: [], // Available classification groups for modal: { id, name }
+  existingCategories: [], // Available subcategory categories for modal: { id, name }
   prefetchedTags: [], // Cache for prefetched tag results
-  hasClassificationsPrefetched: false, // Track if classifications are loaded
+  hasSubcategoriesPrefetched: false, // Track if subcategories are loaded
   hasTagsPrefetched: false, // Track if initial tags are loaded
   pendingDuplicate: null, // Store duplicate entries requiring confirmation
   faviconUrl: '', // Active tab favicon for full-save payload
-  visibleClassifications: [], // Currently rendered classification suggestions
-  activeClassificationIndex: -1, // Keyboard-selected classification suggestion
+  visibleSubcategories: [], // Currently rendered subcategory suggestions
+  activeSubcategoryIndex: -1, // Keyboard-selected subcategory suggestion
   activeTagIndex: -1, // Keyboard-selected tag suggestion
   lastFocusedElement: null, // Previously focused element before modal open
 };
@@ -103,17 +103,17 @@ function updateActiveSuggestion(containerId, activeIndex) {
 /**
  * Create Chip Component
  *
- * Creates a removable chip UI element for displaying selected tags/classifications.
+ * Creates a removable chip UI element for displaying selected tags/subcategories.
  * Chips show the selected item name and include a remove button with click handler.
  *
  * @param {string} text - Display text for the chip
  * @param {Function} onRemove - Callback function when remove button is clicked
- * @param {boolean} [isClassification=false] - Whether this is a classification chip (affects styling)
+ * @param {boolean} [isSubcategory=false] - Whether this is a subcategory chip (affects styling)
  * @returns {HTMLElement} Chip DOM element with remove functionality
  */
-function createChip(text, onRemove, isClassification = false) {
+function createChip(text, onRemove, isSubcategory = false) {
   const chip = document.createElement('span');
-  chip.className = `chip ${isClassification ? 'chip-classification' : ''}`;
+  chip.className = `chip ${isSubcategory ? 'chip-subcategory' : ''}`;
   chip.innerHTML = `
     ${text}
     <button type="button" class="chip-remove" title="Remove">
@@ -129,150 +129,150 @@ function createChip(text, onRemove, isClassification = false) {
 }
 
 /**
- * Render Selected Classifications
+ * Render Selected Sub-categories
  *
- * Updates the DOM to display all currently selected classifications as chips.
- * Each chip shows the group name and classification name in hierarchical format.
+ * Updates the DOM to display all currently selected subcategories as chips.
+ * Each chip shows the category name and subcategory name in hierarchical format.
  * Clears existing chips and rebuilds the entire list.
  */
-function renderSelectedClassifications() {
-  const container = el('selected-classifications');
+function renderSelectedSubcategories() {
+  const container = el('selected-subcategories');
   container.innerHTML = '';
 
-  state.selectedClassifications.forEach(classification => {
-    // Format display text with group hierarchy if available
-    const chipText = classification.groupName
-      ? `${classification.groupName} → ${classification.name}`
-      : classification.name;
+  state.selectedSubcategories.forEach(subcategory => {
+    // Format display text with category hierarchy if available
+    const chipText = subcategory.categoryName
+      ? `${subcategory.categoryName} → ${subcategory.name}`
+      : subcategory.name;
 
-    const chip = createChip(chipText, () => removeClassification(classification.id), true);
+    const chip = createChip(chipText, () => removeSubcategory(subcategory.id), true);
     container.appendChild(chip);
   });
 }
 
 /**
- * Remove Classification Handler
+ * Remove Sub-category Handler
  *
- * Removes a classification from the selected list and updates the UI.
+ * Removes a subcategory from the selected list and updates the UI.
  *
- * @param {number} id - Classification ID to remove
+ * @param {number} id - Sub-category ID to remove
  */
-function removeClassification(id) {
-  state.selectedClassifications = state.selectedClassifications.filter(c => c.id !== id);
-  renderSelectedClassifications();
+function removeSubcategory(id) {
+  state.selectedSubcategories = state.selectedSubcategories.filter(c => c.id !== id);
+  renderSelectedSubcategories();
 }
 
 /**
- * Add Classification Handler
+ * Add Sub-category Handler
  *
- * Adds a classification to the selected list and updates the UI.
+ * Adds a subcategory to the selected list and updates the UI.
  * Ensures no duplicates are added.
  *
- * @param {Object} classification - Classification object to add
+ * @param {Object} subcategory - Sub-category object to add
  */
-function addClassification(classification) {
-  if (!state.selectedClassifications.some(c => c.id === classification.id)) {
-    state.selectedClassifications.push(classification);
-    renderSelectedClassifications();
+function addSubcategory(subcategory) {
+  if (!state.selectedSubcategories.some(c => c.id === subcategory.id)) {
+    state.selectedSubcategories.push(subcategory);
+    renderSelectedSubcategories();
   }
-  el('classification-search').value = '';
-  hideClassificationSuggestions();
+  el('subcategory-search').value = '';
+  hideSubcategorySuggestions();
 }
 
 /**
- * Render Classification Suggestions
+ * Render Sub-category Suggestions
  *
- * Displays a dropdown of classification suggestions based on user search input.
- * Suggestions are grouped by their classification group with headers.
+ * Displays a dropdown of subcategory suggestions based on user search input.
+ * Suggestions are grouped by category with headers.
  *
- * @param {Array} classifications - Array of classification objects to display
+ * @param {Array} subcategories - Array of subcategory objects to display
  */
-function renderClassificationSuggestions(classifications) {
-  const container = el('classification-suggestions');
+function renderSubcategorySuggestions(subcategories) {
+  const container = el('subcategory-suggestions');
   container.innerHTML = '';
-  state.visibleClassifications = classifications;
-  state.activeClassificationIndex = -1;
+  state.visibleSubcategories = subcategories;
+  state.activeSubcategoryIndex = -1;
 
-  if (classifications.length === 0) {
-    hideClassificationSuggestions();
+  if (subcategories.length === 0) {
+    hideSubcategorySuggestions();
     return;
   }
 
-  // Group classifications by group name
-  const grouped = {};
-  classifications.forEach(c => {
-    const groupName = c.groupName || 'Ungrouped';
-    if (!grouped[groupName]) grouped[groupName] = [];
-    grouped[groupName].push(c);
+  // Category subcategories by category name
+  const groupedByCategory = {};
+  subcategories.forEach(c => {
+    const categoryName = c.categoryName || 'Uncategorized';
+    if (!groupedByCategory[categoryName]) groupedByCategory[categoryName] = [];
+    groupedByCategory[categoryName].push(c);
   });
 
-  // Render groups
+  // Render categories
   let optionIndex = 0;
-  Object.entries(grouped).forEach(([groupName, items]) => {
-    // Add group header
+  Object.entries(groupedByCategory).forEach(([categoryName, items]) => {
+    // Add category header
     const header = document.createElement('div');
-    header.className = 'group-header';
-    header.textContent = groupName;
+    header.className = 'category-header';
+    header.textContent = categoryName;
     container.appendChild(header);
 
-    // Add group items
-    items.forEach(classification => {
+    // Add category items
+    items.forEach(subcategory => {
       const item = document.createElement('div');
       item.className = 'suggestion';
-      item.textContent = classification.name;
-      item.id = getSuggestionId('classification-suggestions', optionIndex);
+      item.textContent = subcategory.name;
+      item.id = getSuggestionId('subcategory-suggestions', optionIndex);
       item.setAttribute('role', 'option');
       item.setAttribute('aria-selected', 'false');
-      item.addEventListener('click', () => addClassification(classification));
+      item.addEventListener('click', () => addSubcategory(subcategory));
       container.appendChild(item);
       optionIndex += 1;
     });
   });
 
-  showClassificationSuggestions();
+  showSubcategorySuggestions();
 }
 
 /**
- * Show Classification Suggestions
+ * Show Sub-category Suggestions
  *
- * Reveals the classification suggestions dropdown.
+ * Reveals the subcategory suggestions dropdown.
  */
-function showClassificationSuggestions() {
-  el('classification-suggestions').classList.remove('hidden');
-  updateListboxState('classification-search', 'classification-suggestions', state.activeClassificationIndex);
+function showSubcategorySuggestions() {
+  el('subcategory-suggestions').classList.remove('hidden');
+  updateListboxState('subcategory-search', 'subcategory-suggestions', state.activeSubcategoryIndex);
 }
 
 /**
- * Hide Classification Suggestions
+ * Hide Sub-category Suggestions
  *
- * Hides the classification suggestions dropdown and resets the prefetched state.
+ * Hides the subcategory suggestions dropdown and resets the prefetched state.
  */
-function hideClassificationSuggestions() {
-  el('classification-suggestions').classList.add('hidden');
-  state.hasClassificationsPrefetched = false;
-  state.visibleClassifications = [];
-  state.activeClassificationIndex = -1;
-  updateListboxState('classification-search', 'classification-suggestions', state.activeClassificationIndex);
+function hideSubcategorySuggestions() {
+  el('subcategory-suggestions').classList.add('hidden');
+  state.hasSubcategoriesPrefetched = false;
+  state.visibleSubcategories = [];
+  state.activeSubcategoryIndex = -1;
+  updateListboxState('subcategory-search', 'subcategory-suggestions', state.activeSubcategoryIndex);
 }
 
 /**
- * Filter Classifications
+ * Filter Sub-categories
  *
- * Filters the available classifications based on user search query.
- * Excludes already selected classifications from the results.
+ * Filters the available subcategories based on user search query.
+ * Excludes already selected subcategories from the results.
  *
  * @param {string} query - Search query string
  */
-function filterClassifications(query) {
-  const filtered = state.allClassifications.filter(c => {
+function filterSubcategories(query) {
+  const filtered = state.allSubcategories.filter(c => {
     const nameMatch = c.name.toLowerCase().includes(query.toLowerCase());
-    const groupMatch = c.groupName && c.groupName.toLowerCase().includes(query.toLowerCase());
-    const notSelected = !state.selectedClassifications.some(selected => selected.id === c.id);
-    return (nameMatch || groupMatch) && notSelected;
+    const categoryMatch = c.categoryName && c.categoryName.toLowerCase().includes(query.toLowerCase());
+    const notSelected = !state.selectedSubcategories.some(selected => selected.id === c.id);
+    return (nameMatch || categoryMatch) && notSelected;
   });
 
-  state.filteredClassifications = filtered;
-  renderClassificationSuggestions(filtered.slice(0, 20)); // Limit to 20 results
+  state.filteredSubcategories = filtered;
+  renderSubcategorySuggestions(filtered.slice(0, 20)); // Limit to 20 results
 }
 
 /**
@@ -368,33 +368,33 @@ function hideTagSuggestions() {
 /**
  * Show Modal
  *
- * Displays the modal dialog for creating a new classification.
- * Populates existing groups dropdown and sets up event handlers.
+ * Displays the modal dialog for creating a new subcategory.
+ * Populates existing categories dropdown and sets up event handlers.
  */
 function showModal() {
-  const modal = el('classification-modal');
+  const modal = el('subcategory-modal');
   state.lastFocusedElement = document.activeElement;
   modal.classList.remove('hidden');
 
-  // Populate existing groups dropdown
-  const groupsSelect = el('modal-existing-groups');
-  groupsSelect.innerHTML = '<option value="">Select a group</option>';
-  state.existingGroups.forEach(group => {
+  // Populate existing categories dropdown
+  const categoriesSelect = el('modal-existing-categories');
+  categoriesSelect.innerHTML = '<option value="">Select a category</option>';
+  state.existingCategories.forEach(category => {
     const option = document.createElement('option');
-    option.value = String(group.id);
-    option.textContent = group.name;
-    groupsSelect.appendChild(option);
+    option.value = String(category.id);
+    option.textContent = category.name;
+    categoriesSelect.appendChild(option);
   });
 
   document.addEventListener('keydown', onModalKeydown);
 
   // Focus on the name input
-  setTimeout(() => el('modal-classification-name').focus(), 100);
+  setTimeout(() => el('modal-subcategory-name').focus(), 100);
 
-  // Show/hide existing groups option based on availability
-  const existingRadio = document.querySelector('input[name="group-option"][value="existing"]');
+  // Show/hide existing categories option based on availability
+  const existingRadio = document.querySelector('input[name="category-option"][value="existing"]');
   const existingLabel = existingRadio.closest('.radio-label');
-  if (state.existingGroups.length === 0) {
+  if (state.existingCategories.length === 0) {
     existingRadio.disabled = true;
     existingLabel.style.opacity = '0.5';
   } else {
@@ -409,16 +409,17 @@ function showModal() {
  * Hides the modal dialog and resets its form fields.
  */
 function hideModal() {
-  const modal = el('classification-modal');
+  const modal = el('subcategory-modal');
   modal.classList.add('hidden');
   document.removeEventListener('keydown', onModalKeydown);
 
   // Reset form
-  el('modal-classification-name').value = '';
-  el('modal-new-group-name').value = '';
-  document.querySelector('input[name="group-option"][value="none"]').checked = true;
-  el('existing-groups-section').classList.add('hidden');
-  el('new-group-section').classList.add('hidden');
+  el('modal-subcategory-name').value = '';
+  el('modal-subcategory-description').value = '';
+  el('modal-new-category-name').value = '';
+  document.querySelector('input[name="category-option"][value="none"]').checked = true;
+  el('existing-categories-section').classList.add('hidden');
+  el('new-category-section').classList.add('hidden');
 
   if (state.lastFocusedElement instanceof HTMLElement) {
     state.lastFocusedElement.focus();
@@ -426,7 +427,7 @@ function hideModal() {
 }
 
 function onModalKeydown(e) {
-  const modal = el('classification-modal');
+  const modal = el('subcategory-modal');
   if (!modal || modal.classList.contains('hidden')) return;
 
   if (e.key === 'Escape') {
@@ -459,19 +460,19 @@ function onModalKeydown(e) {
 }
 
 /**
- * Update Group Sections
+ * Update Category Sections
  *
- * Shows or hides the existing/new group sections in the modal based on user selection.
+ * Shows or hides the existing/new category sections in the modal based on user selection.
  */
-function updateGroupSections() {
-  const groupOption = document.querySelector('input[name="group-option"]:checked')?.value;
-  const existingSection = el('existing-groups-section');
-  const newSection = el('new-group-section');
+function updateCategorySections() {
+  const categoryOption = document.querySelector('input[name="category-option"]:checked')?.value;
+  const existingSection = el('existing-categories-section');
+  const newSection = el('new-category-section');
 
-  if (groupOption === 'existing') {
+  if (categoryOption === 'existing') {
     existingSection.classList.remove('hidden');
     newSection.classList.add('hidden');
-  } else if (groupOption === 'new') {
+  } else if (categoryOption === 'new') {
     existingSection.classList.add('hidden');
     newSection.classList.remove('hidden');
   } else {
@@ -481,70 +482,74 @@ function updateGroupSections() {
 }
 
 /**
- * Handle Create Classification
+ * Handle Create Sub-category
  *
- * Validates and submits the new classification form in the modal.
+ * Validates and submits the new subcategory form in the modal.
  * Displays success or error messages based on the result.
  */
-async function handleCreateClassification() {
-  const name = el('modal-classification-name').value.trim();
+async function handleCreateSubcategory() {
+  const name = el('modal-subcategory-name').value.trim();
   if (!name) {
-    setStatus('Classification name is required', false);
+    setStatus('Sub-category name is required', false);
     return;
   }
 
-  const groupOption = document.querySelector('input[name="group-option"]:checked')?.value;
-  let groupId = null;
-  let groupName = null;
-  let resolvedGroupName = null;
+  const description = el('modal-subcategory-description').value.trim() || null;
 
-  if (groupOption === 'existing') {
-    const selected = el('modal-existing-groups').value;
-    groupId = selected ? Number(selected) : null;
-    if (Number.isNaN(groupId)) groupId = null;
-    resolvedGroupName = state.existingGroups.find(g => g.id === groupId)?.name || null;
-  } else if (groupOption === 'new') {
-    groupName = el('modal-new-group-name').value.trim() || null;
-    resolvedGroupName = groupName || null;
+  const categoryOption = document.querySelector('input[name="category-option"]:checked')?.value;
+  let categoryId = null;
+  let categoryName = null;
+  let resolvedCategoryName = null;
+
+  if (categoryOption === 'existing') {
+    const selected = el('modal-existing-categories').value;
+    categoryId = selected ? Number(selected) : null;
+    if (Number.isNaN(categoryId)) categoryId = null;
+    resolvedCategoryName = state.existingCategories.find(g => g.id === categoryId)?.name || null;
+  } else if (categoryOption === 'new') {
+    categoryName = el('modal-new-category-name').value.trim() || null;
+    resolvedCategoryName = categoryName || null;
   }
 
   try {
   const payload = {
     name,
-    ...(groupId != null ? { groupId } : {}),
-    ...(groupName != null ? { groupName } : {}),
+    ...(description != null ? { description } : {}),
+    ...(categoryId != null ? { categoryId } : {}),
+    ...(categoryName != null ? { categoryName } : {}),
   };
-  const res = await send('createClassification', payload);
+  const res = await send('createSubcategory', payload);
     if (!res?.ok) {
-      setStatus(res.error || 'Failed to create classification', false);
+      setStatus(res.error || 'Failed to create sub-category', false);
       return;
     }
 
     // Add to local state
-    const newClassification = {
+    const newSubcategory = {
       id: res.data.id,
       name: res.data.name,
-      groupId: res.data.groupId ?? groupId ?? null,
-      groupName: resolvedGroupName
+      description: res.data.description ?? null,
+      categoryId: res.data.categoryId ?? categoryId ?? null,
+      categoryName: resolvedCategoryName
     };
-    state.allClassifications.push(newClassification);
+    state.allSubcategories.push(newSubcategory);
 
-    // Update existing groups if we created a new one
-    if (groupName && res.data.groupId) {
-      const hasGroup = state.existingGroups.some(group => group.id === res.data.groupId);
-      if (!hasGroup) {
-        state.existingGroups.push({ id: res.data.groupId, name: groupName });
+    // Update existing categories if we created a new one
+    if (categoryName && res.data.categoryId) {
+      const hasCategory = state.existingCategories.some(category => category.id === res.data.categoryId);
+      if (!hasCategory) {
+        state.existingCategories.push({ id: res.data.categoryId, name: categoryName });
       }
     }
 
-    // Auto-select the newly created classification
-    addClassification(newClassification);
+    // Auto-select the newly created subcategory
+    addSubcategory(newSubcategory);
 
     hideModal();
-    setStatus('Classification created!', true);
+    setStatus('Sub-category created!', true);
     setTimeout(() => setStatus(''), 2000);
   } catch (error) {
-    setStatus('Failed to create classification', false);
+    setStatus('Failed to create sub-category', false);
   }
 }
 
@@ -552,37 +557,38 @@ async function handleCreateClassification() {
  * Load Initial Data
  *
  * Fetches and loads the initial data for the popup including existing bookmarks,
- * classifications, and tags. Populates the form fields and updates the UI state.
+ * subcategories, and tags. Populates the form fields and updates the UI state.
  */
 async function loadInitial() {
   try {
-    const res = await send('getInitialData');
+    const res = await send('fetchInitialData');
     if (!res?.ok) {
       setStatus(res?.error || 'Failed to load initial data', false);
       return;
     }
 
-    const { tab, classifications, tags } = res.data;
+    const { tab, subcategories, tags } = res.data;
     el('url').value = tab.url || '';
     el('title').value = tab.title || '';
     state.faviconUrl = tab.faviconUrl || '';
 
-    // Process classifications data
-    state.allClassifications = [];
-    state.existingGroups = [];
-    if (classifications.groups) {
-      classifications.groups.forEach(group => {
-        if (group?.id && group?.name) {
-          const hasGroup = state.existingGroups.some(existing => existing.id === group.id);
-          if (!hasGroup) state.existingGroups.push({ id: group.id, name: group.name });
+    // Process subcategories data
+    state.allSubcategories = [];
+    state.existingCategories = [];
+    if (subcategories.categories) {
+      subcategories.categories.forEach(category => {
+        if (category?.id && category?.name) {
+          const hasCategory = state.existingCategories.some(existing => existing.id === category.id);
+          if (!hasCategory) state.existingCategories.push({ id: category.id, name: category.name });
         }
-        if (group.classifications) {
-          group.classifications.forEach(c => {
-            state.allClassifications.push({
+        if (category.subcategories) {
+          category.subcategories.forEach(c => {
+            state.allSubcategories.push({
               id: c.id,
               name: c.name,
-              groupId: group.id,
-              groupName: group.name
+              description: c.description ?? null,
+              categoryId: category.id,
+              categoryName: category.name
             });
           });
         }
@@ -748,22 +754,22 @@ async function onDuplicateConfirm() {
 }
 
 /**
- * On Create Classification Button Click
+ * On Create Sub-category Button Click
  *
- * Event handler for the "Add Classification" button.
- * Shows the modal for creating a new classification.
+ * Event handler for the "Add Sub-category" button.
+ * Shows the modal for creating a new subcategory.
  */
-async function onCreateClassification() {
+async function onCreateSubcategory() {
   showModal();
 }
 
 // Debounced search handlers to limit API calls
-const debouncedClassificationSearch = debounce((query) => {
+const debouncedSubcategorySearch = debounce((query) => {
   if (!query.trim()) {
-    hideClassificationSuggestions();
+    hideSubcategorySuggestions();
     return;
   }
-  filterClassifications(query);
+  filterSubcategories(query);
 }, 250);
 
 const debouncedTagSearch = debounce(async (q) => {
@@ -781,78 +787,78 @@ const debouncedTagSearch = debounce(async (q) => {
 }, 250);
 
 /**
- * On Classification Search Input
+ * On Sub-category Search Input
  *
- * Event handler for the classification search input field.
- * Triggers filtering of classifications based on user query.
+ * Event handler for the subcategory search input field.
+ * Triggers filtering of subcategories based on user query.
  *
  * @param {Event} e - Input event
  */
-function onClassificationSearch(e) {
+function onSubcategorySearch(e) {
   const query = e.target.value;
   if (!query.trim()) {
     // Show prefetched results when clearing search
-    prefetchClassifications();
+    prefetchSubcategories();
     return;
   }
-  debouncedClassificationSearch(query);
+  debouncedSubcategorySearch(query);
 }
 
 /**
- * On Classification Focus
+ * On Sub-category Focus
  *
- * Event handler for focusing on the classification search input.
- * Prefetches classifications to show initial suggestions.
+ * Event handler for focusing on the subcategory search input.
+ * Prefetches subcategories to show initial suggestions.
  */
-function onClassificationFocus() {
-  prefetchClassifications();
+function onSubcategoryFocus() {
+  prefetchSubcategories();
 }
 
-function setActiveClassificationIndex(index) {
-  if (state.visibleClassifications.length === 0) return;
-  state.activeClassificationIndex = index;
-  updateActiveSuggestion('classification-suggestions', index);
-  updateListboxState('classification-search', 'classification-suggestions', index);
+function setActiveSubcategoryIndex(index) {
+  if (state.visibleSubcategories.length === 0) return;
+  state.activeSubcategoryIndex = index;
+  updateActiveSuggestion('subcategory-suggestions', index);
+  updateListboxState('subcategory-search', 'subcategory-suggestions', index);
 }
 
-function moveClassificationActive(delta) {
-  if (state.visibleClassifications.length === 0) return;
-  const nextIndex = state.activeClassificationIndex < 0
-    ? (delta > 0 ? 0 : state.visibleClassifications.length - 1)
-    : (state.activeClassificationIndex + delta + state.visibleClassifications.length) % state.visibleClassifications.length;
-  setActiveClassificationIndex(nextIndex);
+function moveSubcategoryActive(delta) {
+  if (state.visibleSubcategories.length === 0) return;
+  const nextIndex = state.activeSubcategoryIndex < 0
+    ? (delta > 0 ? 0 : state.visibleSubcategories.length - 1)
+    : (state.activeSubcategoryIndex + delta + state.visibleSubcategories.length) % state.visibleSubcategories.length;
+  setActiveSubcategoryIndex(nextIndex);
 }
 
-function onClassificationKeydown(e) {
+function onSubcategoryKeydown(e) {
   if (e.key === 'ArrowDown') {
     e.preventDefault();
-    if (el('classification-suggestions').classList.contains('hidden')) {
-      prefetchClassifications();
+    if (el('subcategory-suggestions').classList.contains('hidden')) {
+      prefetchSubcategories();
       return;
     }
-    moveClassificationActive(1);
+    moveSubcategoryActive(1);
     return;
   }
 
   if (e.key === 'ArrowUp') {
     e.preventDefault();
-    if (!el('classification-suggestions').classList.contains('hidden')) {
-      moveClassificationActive(-1);
+    if (!el('subcategory-suggestions').classList.contains('hidden')) {
+      moveSubcategoryActive(-1);
     }
     return;
   }
 
-  if (e.key === 'Escape' && !el('classification-suggestions').classList.contains('hidden')) {
+  if (e.key === 'Escape' && !el('subcategory-suggestions').classList.contains('hidden')) {
     e.preventDefault();
-    hideClassificationSuggestions();
+    hideSubcategorySuggestions();
     return;
   }
 
-  if (e.key === 'Enter' && state.activeClassificationIndex >= 0) {
-    const activeClassification = state.visibleClassifications[state.activeClassificationIndex];
-    if (activeClassification) {
+  if (e.key === 'Enter' && state.activeSubcategoryIndex >= 0) {
+    const activeSubcategory = state.visibleSubcategories[state.activeSubcategoryIndex];
+    if (activeSubcategory) {
       e.preventDefault();
-      addClassification(activeClassification);
+      addSubcategory(activeSubcategory);
     }
   }
 }
@@ -939,26 +945,26 @@ async function onTagKeydown(e) {
 }
 
 /**
- * Add prefetching for classifications on focus/click
+ * Add prefetching for subcategories on focus/click
  */
 
 /**
- * Prefetch Classifications
+ * Prefetch Sub-categories
  *
- * Loads and displays a set of classifications to suggest to the user before they start typing.
- * Typically shows the first 10 available classifications that are not already selected.
+ * Loads and displays a set of subcategories to suggest to the user before they start typing.
+ * Typically shows the first 10 available subcategories that are not already selected.
  */
-async function prefetchClassifications() {
-  if (state.hasClassificationsPrefetched) return;
+async function prefetchSubcategories() {
+  if (state.hasSubcategoriesPrefetched) return;
 
-  // Show first 10 available classifications (not already selected)
-  const availableClassifications = state.allClassifications.filter(c =>
-    !state.selectedClassifications.some(selected => selected.id === c.id)
+  // Show first 10 available subcategories (not already selected)
+  const availableSubcategories = state.allSubcategories.filter(c =>
+    !state.selectedSubcategories.some(selected => selected.id === c.id)
   ).slice(0, 10);
 
-  if (availableClassifications.length > 0) {
-    state.hasClassificationsPrefetched = true;
-    renderClassificationSuggestions(availableClassifications);
+  if (availableSubcategories.length > 0) {
+    state.hasSubcategoriesPrefetched = true;
+    renderSubcategorySuggestions(availableSubcategories);
   }
 }
 
@@ -1005,8 +1011,8 @@ async function prefetchTags() {
  * @param {Event} e - Click event
  */
 document.addEventListener('click', (e) => {
-  if (!e.target.closest('#classification-search') && !e.target.closest('#classification-suggestions')) {
-    hideClassificationSuggestions();
+  if (!e.target.closest('#subcategory-search') && !e.target.closest('#subcategory-suggestions')) {
+    hideSubcategorySuggestions();
   }
   if (!e.target.closest('#tag-input') && !e.target.closest('#tag-suggestions')) {
     hideTagSuggestions();
@@ -1021,11 +1027,11 @@ document.addEventListener('click', (e) => {
  * Binds actions to buttons, inputs, and modal events.
  */
 function initEvents() {
-  el('add-classification').addEventListener('click', onCreateClassification);
-  el('classification-search').addEventListener('input', onClassificationSearch);
-  el('classification-search').addEventListener('focus', onClassificationFocus);
-  el('classification-search').addEventListener('click', onClassificationFocus);
-  el('classification-search').addEventListener('keydown', onClassificationKeydown);
+  el('add-subcategory').addEventListener('click', onCreateSubcategory);
+  el('subcategory-search').addEventListener('input', onSubcategorySearch);
+  el('subcategory-search').addEventListener('focus', onSubcategoryFocus);
+  el('subcategory-search').addEventListener('click', onSubcategoryFocus);
+  el('subcategory-search').addEventListener('keydown', onSubcategoryKeydown);
   el('tag-input').addEventListener('input', onTagInput);
   el('tag-input').addEventListener('focus', onTagFocus);
   el('tag-input').addEventListener('click', onTagFocus);
@@ -1036,32 +1042,32 @@ function initEvents() {
 
   // Modal events
   el('modal-cancel').addEventListener('click', hideModal);
-  el('modal-create').addEventListener('click', handleCreateClassification);
+  el('modal-create').addEventListener('click', handleCreateSubcategory);
 
-  // Group option radio buttons
-  document.querySelectorAll('input[name="group-option"]').forEach(radio => {
-    radio.addEventListener('change', updateGroupSections);
+  // Category option radio buttons
+  document.querySelectorAll('input[name="category-option"]').forEach(radio => {
+    radio.addEventListener('change', updateCategorySections);
   });
 
   // Close modal when clicking backdrop
-  el('classification-modal').addEventListener('click', (e) => {
-    if (e.target === el('classification-modal')) {
+  el('subcategory-modal').addEventListener('click', (e) => {
+    if (e.target === el('subcategory-modal')) {
       hideModal();
     }
   });
 
   // Enter key handling in modal
-  el('modal-classification-name').addEventListener('keydown', (e) => {
+  el('modal-subcategory-name').addEventListener('keydown', (e) => {
     if (e.key === 'Enter') {
       e.preventDefault();
-      handleCreateClassification();
+      handleCreateSubcategory();
     }
   });
 
-  el('modal-new-group-name').addEventListener('keydown', (e) => {
+  el('modal-new-category-name').addEventListener('keydown', (e) => {
     if (e.key === 'Enter') {
       e.preventDefault();
-      handleCreateClassification();
+      handleCreateSubcategory();
     }
   });
 }
@@ -1152,7 +1158,7 @@ function buildBookmarkPayload(url, title) {
     url,
     title,
     description: el('description').value || '',
-    classificationIds: state.selectedClassifications.map(c => c.id),
+    subcategoryIds: state.selectedSubcategories.map(c => c.id),
     tags: state.selectedTags.map(t => t.id),
     flags: {
       forReview: el('flag-forReview').checked,
@@ -1191,7 +1197,7 @@ async function onSubmit(e) {
   setStatus('Saving…');
 
   try {
-    const res = await send('saveBookmark', payload);
+    const res = await send('createBookmark', payload);
     if (res?.ok) {
       shouldRestoreSubmitState = false;
       showSaveToast('✓ Bookmark saved!', true);

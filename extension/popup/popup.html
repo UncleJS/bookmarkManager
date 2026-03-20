@@ -49,37 +49,37 @@
         ></textarea>
       </div>
 
-      <!-- Classifications -->
+      <!-- Sub-categories -->
       <div class="field-group">
-        <label for="classification-search" class="field-label">Classifications</label>
+        <label for="subcategory-search" class="field-label">Sub-categories</label>
         <div class="input-group">
-          <!-- Search input for classifications -->
+          <!-- Search input for subcategories -->
           <div class="relative">
             <input
-              id="classification-search"
+              id="subcategory-search"
               type="text"
-              placeholder="Search classifications..."
+              placeholder="Search sub-categories..."
               autocomplete="off"
               aria-autocomplete="list"
               aria-expanded="false"
-              aria-controls="classification-suggestions"
+              aria-controls="subcategory-suggestions"
               class="input-field"
             />
 
-            <!-- Classification suggestions dropdown - moved inside relative container -->
-            <div id="classification-suggestions" class="dropdown hidden" role="listbox" aria-label="Classification suggestions"></div>
+            <!-- Sub-category suggestions dropdown - moved inside relative container -->
+            <div id="subcategory-suggestions" class="dropdown hidden" role="listbox" aria-label="Sub-category suggestions"></div>
           </div>
 
-          <!-- Selected classifications -->
-          <div id="selected-classifications" class="chips-container"></div>
+          <!-- Selected subcategories -->
+          <div id="selected-subcategories" class="chips-container"></div>
 
-          <!-- Add new classification -->
+          <!-- Add new subcategory -->
           <button
-            id="add-classification"
+            id="add-subcategory"
             type="button"
             class="add-button"
           >
-            + Add New Classification
+            + Add New Sub-category
           </button>
         </div>
       </div>
@@ -164,55 +164,65 @@
     </form>
   </main>
 
-  <!-- Modal for creating classifications -->
-  <div id="classification-modal" class="modal-backdrop hidden">
-    <div class="modal-content" role="dialog" aria-modal="true" aria-labelledby="classification-modal-title" tabindex="-1">
-      <h3 id="classification-modal-title" class="modal-title">Create New Classification</h3>
+  <!-- Modal for creating subcategories -->
+  <div id="subcategory-modal" class="modal-backdrop hidden">
+    <div class="modal-content" role="dialog" aria-modal="true" aria-labelledby="subcategory-modal-title" tabindex="-1">
+      <h3 id="subcategory-modal-title" class="modal-title">Create New Sub-category</h3>
 
       <div class="modal-body">
         <div class="field-group">
-          <label for="modal-classification-name" class="field-label">Classification Name</label>
+          <label for="modal-subcategory-name" class="field-label">Sub-category Name</label>
           <input
-            id="modal-classification-name"
+            id="modal-subcategory-name"
             type="text"
-            placeholder="Enter classification name..."
+            placeholder="Enter sub-category name..."
             class="input-field"
           />
         </div>
 
         <div class="field-group">
-          <label class="field-label">Group</label>
+          <label for="modal-subcategory-description" class="field-label">Description <span style="font-weight:400;opacity:0.65">(optional)</span></label>
+          <textarea
+            id="modal-subcategory-description"
+            placeholder="What does this sub-category mean?"
+            class="input-field textarea-field"
+            rows="2"
+          ></textarea>
+        </div>
+
+        <div class="field-group">
+          <label class="field-label">Category</label>
           <div class="radio-group">
             <label class="radio-label">
-              <input type="radio" name="group-option" value="none" checked class="radio-input" />
-              <span>No Group</span>
+              <input type="radio" name="category-option" value="none" checked class="radio-input" />
+              <span>No Category</span>
             </label>
             <label class="radio-label">
-              <input type="radio" name="group-option" value="existing" class="radio-input" />
-              <span>Existing Group</span>
+              <input type="radio" name="category-option" value="existing" class="radio-input" />
+              <span>Existing Category</span>
             </label>
             <label class="radio-label">
-              <input type="radio" name="group-option" value="new" class="radio-input" />
-              <span>New Group</span>
+              <input type="radio" name="category-option" value="new" class="radio-input" />
+              <span>New Category</span>
             </label>
           </div>
         </div>
 
-        <div id="existing-groups-section" class="field-group hidden">
-          <label for="modal-existing-groups" class="field-label">Select Existing Group</label>
+        <div id="existing-categories-section" class="field-group hidden">
+          <label for="modal-existing-categories" class="field-label">Select Existing Category</label>
           <select
-            id="modal-existing-groups"
+            id="modal-existing-categories"
             class="input-field"
           >
           </select>
         </div>
 
-        <div id="new-group-section" class="field-group hidden">
-          <label for="modal-new-group-name" class="field-label">New Group Name</label>
+        <div id="new-category-section" class="field-group hidden">
+          <label for="modal-new-category-name" class="field-label">New Category Name</label>
           <input
-            id="modal-new-group-name"
+            id="modal-new-category-name"
             type="text"
-            placeholder="Enter group name..."
+            placeholder="Enter category name..."
             class="input-field"
           />
         </div>

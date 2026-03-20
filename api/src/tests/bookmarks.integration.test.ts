@@ -17,6 +17,8 @@ let pool: DbModule["pool"];
 let schema: SchemaModule;
 
 beforeAll(async () => {
+  process.env.API_TOKEN ||= "test-api-token";
+
   adminConnection = await mysql.createConnection({
     host: process.env.DB_HOST ?? "127.0.0.1",
     port: Number(process.env.DB_PORT ?? 3306),
@@ -34,12 +36,12 @@ beforeAll(async () => {
   };
 
   await adminConnection.query("DROP TRIGGER IF EXISTS fail_bookmark_tags_insert");
-  await adminConnection.query("DROP TRIGGER IF EXISTS fail_bookmark_classifications_insert");
-  await adminConnection.query("DROP TABLE IF EXISTS bookmark_classifications");
+  await adminConnection.query("DROP TRIGGER IF EXISTS fail_bookmark_subcategories_insert");
+  await adminConnection.query("DROP TABLE IF EXISTS bookmark_subcategories");
   await adminConnection.query("DROP TABLE IF EXISTS bookmark_tags");
   await adminConnection.query("DROP TABLE IF EXISTS bookmarks");
-  await adminConnection.query("DROP TABLE IF EXISTS classifications");
-  await adminConnection.query("DROP TABLE IF EXISTS classification_groups");
+  await adminConnection.query("DROP TABLE IF EXISTS subcategories");
+  await adminConnection.query("DROP TABLE IF EXISTS categories");
   await adminConnection.query("DROP TABLE IF EXISTS tags");
 
   for (const entry of journal.entries) {
@@ -70,12 +72,12 @@ beforeAll(async () => {
   `);
 
   await adminConnection.query(`
-    CREATE TRIGGER fail_bookmark_classifications_insert
-    BEFORE INSERT ON bookmark_classifications
+    CREATE TRIGGER fail_bookmark_subcategories_insert
+    BEFORE INSERT ON bookmark_subcategories
     FOR EACH ROW
     BEGIN
-      IF NEW.classification_id = ${FAILING_CLASSIFICATION_ID} THEN
-        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'forced classification failure';
+      IF NEW.subcategory_id = ${FAILING_CLASSIFICATION_ID} THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'forced subcategory failure';
       END IF;
     END
   `);
@@ -100,19 +102,19 @@ describe("create endpoint status codes", () => {
     await expect(res.json()).resolves.toMatchObject({ name });
   });
 
-  it("returns 201 for classification creation", async () => {
-    const name = uniqueName("classification-created");
+  it("returns 201 for subcategory creation", async () => {
+    const name = uniqueName("subcategory-created");
 
-    const res = await app.handle(jsonRequest("/classifications", "POST", { name }));
+    const res = await app.handle(jsonRequest("/subcategories", "POST", { name }));
 
     expect(res.status).toBe(201);
-    await expect(res.json()).resolves.toMatchObject({ name, groupId: null });
+    await expect(res.json()).resolves.toMatchObject({ name, categoryId: null });
   });
 
-  it("returns 201 for classification group creation", async () => {
-    const name = uniqueName("group-created");
+  it("returns 201 for subcategory category creation", async () => {
+    const name = uniqueName("category-created");
 
-    const res = await app.handle(jsonRequest("/classifications/groups", "POST", { name, order: 7 }));
+    const res = await app.handle(jsonRequest("/categories", "POST", { name, order: 7 }));
 
     expect(res.status).toBe(201);
     await expect(res.json()).resolves.toMatchObject({ name, order: 7 });
@@ -176,124 +178,124 @@ describe("tag lifecycle", () => {
   });
 });
 
-describe("classification lifecycle", () => {
-  it("rejects duplicate active classification names within the same group", async () => {
-    const [{ id: groupId }] = await db
-      .insert(schema.classificationGroups)
-      .values({ name: uniqueName("classification-duplicate-group") })
+describe("subcategory lifecycle", () => {
+  it("rejects duplicate active subcategory names within the same category", async () => {
+    const [{ id: categoryId }] = await db
+      .insert(schema.categories)
+      .values({ name: uniqueName("subcategory-duplicate-category") })
       .$returningId();
-    const name = uniqueName("classification-duplicate");
+    const name = uniqueName("subcategory-duplicate");
 
-    const first = await app.handle(jsonRequest("/classifications", "POST", { name, groupId }));
-    const second = await app.handle(jsonRequest("/classifications", "POST", { name, groupId }));
+    const first = await app.handle(jsonRequest("/subcategories", "POST", { name, categoryId }));
+    const second = await app.handle(jsonRequest("/subcategories", "POST", { name, categoryId }));
 
     expect(first.status).toBe(201);
     expect(second.status).toBe(409);
-    await expect(second.json()).resolves.toMatchObject({ error: "Classification already exists in this group" });
+    await expect(second.json()).resolves.toMatchObject({ error: "Sub-category already exists in this category" });
   });
 
-  it("blocks archiving classifications that still have active bookmarks", async () => {
-    const [{ id: classificationId }] = await db
-      .insert(schema.classifications)
-      .values({ name: uniqueName("classification-archive-blocked"), groupId: null })
+  it("blocks archiving subcategories that still have active bookmarks", async () => {
+    const [{ id: subcategoryId }] = await db
+      .insert(schema.subcategories)
+      .values({ name: uniqueName("subcategory-archive-blocked"), categoryId: null })
       .$returningId();
     const [{ id: bookmarkId }] = await db
       .insert(schema.bookmarks)
-      .values({ url: uniqueUrl("classification-archive-blocked"), title: "Classification archive blocked" })
+      .values({ url: uniqueUrl("subcategory-archive-blocked"), title: "Subcategory archive blocked" })
       .$returningId();
 
-    await db.insert(schema.bookmarkClassifications).values({ bookmarkId, classificationId });
+    await db.insert(schema.bookmarkSubcategories).values({ bookmarkId, subcategoryId });
 
-    const res = await app.handle(request(`/classifications/${classificationId}/archive`, "PATCH"));
+    const res = await app.handle(request(`/subcategories/${subcategoryId}/archive`, "PATCH"));
 
     expect(res.status).toBe(409);
     await expect(res.json()).resolves.toMatchObject({
-      error: "Cannot archive: 1 active bookmark linked to this classification",
+      error: "Cannot archive: 1 active bookmark linked to this sub-category",
     });
   });
 
-  it("archives and restores classifications through the API", async () => {
-    const name = uniqueName("classification-lifecycle");
-    const createRes = await app.handle(jsonRequest("/classifications", "POST", { name }));
+  it("archives and restores subcategories through the API", async () => {
+    const name = uniqueName("subcategory-lifecycle");
+    const createRes = await app.handle(jsonRequest("/subcategories", "POST", { name }));
     const created = await createRes.json() as { id: number };
 
-    const archiveRes = await app.handle(request(`/classifications/${created.id}/archive`, "PATCH"));
+    const archiveRes = await app.handle(request(`/subcategories/${created.id}/archive`, "PATCH"));
     expect(archiveRes.status).toBe(200);
 
-    const hiddenRes = await app.handle(request("/classifications"));
+    const hiddenRes = await app.handle(request("/subcategories"));
     const hiddenBody = await hiddenRes.json() as {
-      groups: Array<{ classifications: Array<{ id: number }> }>;
+      categories: Array<{ subcategories: Array<{ id: number }> }>;
     };
-    expect(hiddenBody.groups.flatMap((group) => group.classifications).some((item) => item.id === created.id)).toBe(false);
+    expect(hiddenBody.categories.flatMap((category) => category.subcategories).some((item) => item.id === created.id)).toBe(false);
 
-    const duplicateArchiveRes = await app.handle(request(`/classifications/${created.id}/archive`, "PATCH"));
+    const duplicateArchiveRes = await app.handle(request(`/subcategories/${created.id}/archive`, "PATCH"));
     expect(duplicateArchiveRes.status).toBe(409);
     await expect(duplicateArchiveRes.json()).resolves.toMatchObject({ error: "Already archived" });
 
-    const restoreRes = await app.handle(request(`/classifications/${created.id}/restore`, "PATCH"));
+    const restoreRes = await app.handle(request(`/subcategories/${created.id}/restore`, "PATCH"));
     expect(restoreRes.status).toBe(200);
 
-    const visibleRes = await app.handle(request("/classifications"));
+    const visibleRes = await app.handle(request("/subcategories"));
     const visibleBody = await visibleRes.json() as {
-      groups: Array<{ classifications: Array<{ id: number }> }>;
+      categories: Array<{ subcategories: Array<{ id: number }> }>;
     };
-    expect(visibleBody.groups.flatMap((group) => group.classifications).some((item) => item.id === created.id)).toBe(true);
+    expect(visibleBody.categories.flatMap((category) => category.subcategories).some((item) => item.id === created.id)).toBe(true);
 
-    const duplicateRestoreRes = await app.handle(request(`/classifications/${created.id}/restore`, "PATCH"));
+    const duplicateRestoreRes = await app.handle(request(`/subcategories/${created.id}/restore`, "PATCH"));
     expect(duplicateRestoreRes.status).toBe(409);
     await expect(duplicateRestoreRes.json()).resolves.toMatchObject({ error: "Not archived" });
   });
 });
 
-describe("classification group lifecycle", () => {
-  it("blocks archiving groups that still have active bookmarked classifications", async () => {
-    const [{ id: groupId }] = await db
-      .insert(schema.classificationGroups)
-      .values({ name: uniqueName("group-archive-blocked") })
+describe("subcategory category lifecycle", () => {
+  it("blocks archiving categories that still have active bookmarked subcategories", async () => {
+    const [{ id: categoryId }] = await db
+      .insert(schema.categories)
+      .values({ name: uniqueName("category-archive-blocked") })
       .$returningId();
-    const [{ id: classificationId }] = await db
-      .insert(schema.classifications)
-      .values({ name: uniqueName("group-archive-blocked-classification"), groupId })
+    const [{ id: subcategoryId }] = await db
+      .insert(schema.subcategories)
+      .values({ name: uniqueName("category-archive-blocked-subcategory"), categoryId })
       .$returningId();
     const [{ id: bookmarkId }] = await db
       .insert(schema.bookmarks)
-      .values({ url: uniqueUrl("group-archive-blocked"), title: "Group archive blocked" })
+      .values({ url: uniqueUrl("category-archive-blocked"), title: "Category archive blocked" })
       .$returningId();
 
-    await db.insert(schema.bookmarkClassifications).values({ bookmarkId, classificationId });
+    await db.insert(schema.bookmarkSubcategories).values({ bookmarkId, subcategoryId });
 
-    const res = await app.handle(request(`/classifications/groups/${groupId}/archive`, "PATCH"));
+    const res = await app.handle(request(`/categories/${categoryId}/archive`, "PATCH"));
 
     expect(res.status).toBe(409);
     await expect(res.json()).resolves.toMatchObject({
-      error: "Cannot archive: 1 active bookmark linked to classifications in this group",
+      error: "Cannot archive: 1 active bookmark linked to sub-categories in this category",
     });
   });
 
-  it("archives and restores groups through the API", async () => {
-    const name = uniqueName("group-lifecycle");
-    const createRes = await app.handle(jsonRequest("/classifications/groups", "POST", { name, order: 11 }));
+  it("archives and restores categories through the API", async () => {
+    const name = uniqueName("category-lifecycle");
+    const createRes = await app.handle(jsonRequest("/categories", "POST", { name, order: 11 }));
     const created = await createRes.json() as { id: number };
 
-    const archiveRes = await app.handle(request(`/classifications/groups/${created.id}/archive`, "PATCH"));
+    const archiveRes = await app.handle(request(`/categories/${created.id}/archive`, "PATCH"));
     expect(archiveRes.status).toBe(200);
 
-    const hiddenRes = await app.handle(request("/classifications/groups"));
+    const hiddenRes = await app.handle(request("/categories"));
     const hiddenBody = await hiddenRes.json() as { items: Array<{ id: number }> };
     expect(hiddenBody.items.some((item) => item.id === created.id)).toBe(false);
 
-    const duplicateArchiveRes = await app.handle(request(`/classifications/groups/${created.id}/archive`, "PATCH"));
+    const duplicateArchiveRes = await app.handle(request(`/categories/${created.id}/archive`, "PATCH"));
     expect(duplicateArchiveRes.status).toBe(409);
     await expect(duplicateArchiveRes.json()).resolves.toMatchObject({ error: "Already archived" });
 
-    const restoreRes = await app.handle(request(`/classifications/groups/${created.id}/restore`, "PATCH"));
+    const restoreRes = await app.handle(request(`/categories/${created.id}/restore`, "PATCH"));
     expect(restoreRes.status).toBe(200);
 
-    const visibleRes = await app.handle(request("/classifications/groups"));
+    const visibleRes = await app.handle(request("/categories"));
     const visibleBody = await visibleRes.json() as { items: Array<{ id: number }> };
     expect(visibleBody.items.some((item) => item.id === created.id)).toBe(true);
 
-    const duplicateRestoreRes = await app.handle(request(`/classifications/groups/${created.id}/restore`, "PATCH"));
+    const duplicateRestoreRes = await app.handle(request(`/categories/${created.id}/restore`, "PATCH"));
     expect(duplicateRestoreRes.status).toBe(409);
     await expect(duplicateRestoreRes.json()).resolves.toMatchObject({ error: "Not archived" });
   });
@@ -318,36 +320,36 @@ describe("bookmark write transactions", () => {
     expect(links).toHaveLength(0);
   });
 
-  it("rejects bookmark-classification links that reference missing classifications", async () => {
+  it("rejects bookmark-subcategory links that reference missing subcategories", async () => {
     const [{ id: bookmarkId }] = await db
       .insert(schema.bookmarks)
-      .values({ url: uniqueUrl("fk-classification"), title: "FK classification" })
+      .values({ url: uniqueUrl("fk-subcategory"), title: "FK subcategory" })
       .$returningId();
 
     await expect((async () => {
-      await db.insert(schema.bookmarkClassifications).values({ bookmarkId, classificationId: 999999 });
+      await db.insert(schema.bookmarkSubcategories).values({ bookmarkId, subcategoryId: 999999 });
     })()).rejects.toMatchObject({ cause: { code: "ER_NO_REFERENCED_ROW_2" } });
 
     const links = await db
       .select()
-      .from(schema.bookmarkClassifications)
-      .where(eq(schema.bookmarkClassifications.bookmarkId, bookmarkId));
+      .from(schema.bookmarkSubcategories)
+      .where(eq(schema.bookmarkSubcategories.bookmarkId, bookmarkId));
 
     expect(links).toHaveLength(0);
   });
 
-  it("creates bookmark, tags, and classifications atomically on success", async () => {
+  it("creates bookmark, tags, and subcategories atomically on success", async () => {
     const [{ id: tagId }] = await db.insert(schema.tags).values({ name: uniqueName("tag") }).$returningId();
-    const [{ id: classificationId }] = await db
-      .insert(schema.classifications)
-      .values({ name: uniqueName("classification"), groupId: null })
+    const [{ id: subcategoryId }] = await db
+      .insert(schema.subcategories)
+      .values({ name: uniqueName("subcategory"), categoryId: null })
       .$returningId();
 
     const res = await app.handle(jsonRequest("/bookmarks", "POST", {
       url: uniqueUrl("create-success"),
       title: "Atomic create",
       tags: [tagId],
-      classificationIds: [classificationId],
+      subcategoryIds: [subcategoryId],
     }));
 
     expect(res.status).toBe(201);
@@ -357,13 +359,13 @@ describe("bookmark write transactions", () => {
       .select()
       .from(schema.bookmarkTags)
       .where(eq(schema.bookmarkTags.bookmarkId, created.id));
-    const [bookmarkClassification] = await db
+    const [bookmarkSubcategory] = await db
       .select()
-      .from(schema.bookmarkClassifications)
-      .where(eq(schema.bookmarkClassifications.bookmarkId, created.id));
+      .from(schema.bookmarkSubcategories)
+      .where(eq(schema.bookmarkSubcategories.bookmarkId, created.id));
 
     expect(bookmarkTag?.tagId).toBe(tagId);
-    expect(bookmarkClassification?.classificationId).toBe(classificationId);
+    expect(bookmarkSubcategory?.subcategoryId).toBe(subcategoryId);
   });
 
   it("rolls back bookmark creation when tag association insert fails", async () => {
@@ -385,12 +387,12 @@ describe("bookmark write transactions", () => {
     expect(createdBookmarks).toHaveLength(0);
   });
 
-  it("rolls back bookmark updates when classification replacement fails", async () => {
+  it("rolls back bookmark updates when subcategory replacement fails", async () => {
     const [{ id: originalTagId }] = await db.insert(schema.tags).values({ name: uniqueName("tag-old") }).$returningId();
     const [{ id: replacementTagId }] = await db.insert(schema.tags).values({ name: uniqueName("tag-new") }).$returningId();
-    const [{ id: originalClassificationId }] = await db
-      .insert(schema.classifications)
-      .values({ name: uniqueName("classification-old"), groupId: null })
+    const [{ id: originalSubcategoryId }] = await db
+      .insert(schema.subcategories)
+      .values({ name: uniqueName("subcategory-old"), categoryId: null })
       .$returningId();
     const [{ id: bookmarkId }] = await db
       .insert(schema.bookmarks)
@@ -398,15 +400,15 @@ describe("bookmark write transactions", () => {
       .$returningId();
 
     await db.insert(schema.bookmarkTags).values({ bookmarkId, tagId: originalTagId });
-    await db.insert(schema.bookmarkClassifications).values({
+    await db.insert(schema.bookmarkSubcategories).values({
       bookmarkId,
-      classificationId: originalClassificationId,
+      subcategoryId: originalSubcategoryId,
     });
 
     const res = await app.handle(jsonRequest(`/bookmarks/${bookmarkId}`, "PATCH", {
       title: "After rollback",
       tagIds: [replacementTagId],
-      classificationIds: [FAILING_CLASSIFICATION_ID],
+      subcategoryIds: [FAILING_CLASSIFICATION_ID],
     }));
 
     expect(res.status).toBeGreaterThanOrEqual(500);
@@ -419,26 +421,26 @@ describe("bookmark write transactions", () => {
       .select()
       .from(schema.bookmarkTags)
       .where(eq(schema.bookmarkTags.bookmarkId, bookmarkId));
-    const bookmarkClassifications = await db
+    const bookmarkSubcategories = await db
       .select()
-      .from(schema.bookmarkClassifications)
-      .where(eq(schema.bookmarkClassifications.bookmarkId, bookmarkId));
+      .from(schema.bookmarkSubcategories)
+      .where(eq(schema.bookmarkSubcategories.bookmarkId, bookmarkId));
 
     expect(bookmark?.title).toBe("Before rollback");
     expect(bookmarkTags.map((row) => row.tagId)).toEqual([originalTagId]);
-    expect(bookmarkClassifications.map((row) => row.classificationId)).toEqual([originalClassificationId]);
+    expect(bookmarkSubcategories.map((row) => row.subcategoryId)).toEqual([originalSubcategoryId]);
   });
 
   it("archives removed associations and restores them when re-added", async () => {
     const [{ id: originalTagId }] = await db.insert(schema.tags).values({ name: uniqueName("tag-archive-old") }).$returningId();
     const [{ id: replacementTagId }] = await db.insert(schema.tags).values({ name: uniqueName("tag-archive-new") }).$returningId();
-    const [{ id: originalClassificationId }] = await db
-      .insert(schema.classifications)
-      .values({ name: uniqueName("classification-archive-old"), groupId: null })
+    const [{ id: originalSubcategoryId }] = await db
+      .insert(schema.subcategories)
+      .values({ name: uniqueName("subcategory-archive-old"), categoryId: null })
       .$returningId();
-    const [{ id: replacementClassificationId }] = await db
-      .insert(schema.classifications)
-      .values({ name: uniqueName("classification-archive-new"), groupId: null })
+    const [{ id: replacementSubcategoryId }] = await db
+      .insert(schema.subcategories)
+      .values({ name: uniqueName("subcategory-archive-new"), categoryId: null })
       .$returningId();
     const [{ id: bookmarkId }] = await db
       .insert(schema.bookmarks)
@@ -446,14 +448,14 @@ describe("bookmark write transactions", () => {
       .$returningId();
 
     await db.insert(schema.bookmarkTags).values({ bookmarkId, tagId: originalTagId });
-    await db.insert(schema.bookmarkClassifications).values({
+    await db.insert(schema.bookmarkSubcategories).values({
       bookmarkId,
-      classificationId: originalClassificationId,
+      subcategoryId: originalSubcategoryId,
     });
 
     const replaceRes = await app.handle(jsonRequest(`/bookmarks/${bookmarkId}`, "PATCH", {
       tagIds: [replacementTagId],
-      classificationIds: [replacementClassificationId],
+      subcategoryIds: [replacementSubcategoryId],
     }));
 
     expect(replaceRes.status).toBe(200);
@@ -462,24 +464,24 @@ describe("bookmark write transactions", () => {
       .select({ tagId: schema.bookmarkTags.tagId, archivedAt: schema.bookmarkTags.archivedAt })
       .from(schema.bookmarkTags)
       .where(eq(schema.bookmarkTags.bookmarkId, bookmarkId));
-    const classificationLinksAfterReplace = await db
+    const subcategoryLinksAfterReplace = await db
       .select({
-        classificationId: schema.bookmarkClassifications.classificationId,
-        archivedAt: schema.bookmarkClassifications.archivedAt,
+        subcategoryId: schema.bookmarkSubcategories.subcategoryId,
+        archivedAt: schema.bookmarkSubcategories.archivedAt,
       })
-      .from(schema.bookmarkClassifications)
-      .where(eq(schema.bookmarkClassifications.bookmarkId, bookmarkId));
+      .from(schema.bookmarkSubcategories)
+      .where(eq(schema.bookmarkSubcategories.bookmarkId, bookmarkId));
 
     expect(tagLinksAfterReplace).toHaveLength(2);
     expect(tagLinksAfterReplace.find((row) => row.tagId === originalTagId)?.archivedAt).not.toBeNull();
     expect(tagLinksAfterReplace.find((row) => row.tagId === replacementTagId)?.archivedAt).toBeNull();
-    expect(classificationLinksAfterReplace).toHaveLength(2);
-    expect(classificationLinksAfterReplace.find((row) => row.classificationId === originalClassificationId)?.archivedAt).not.toBeNull();
-    expect(classificationLinksAfterReplace.find((row) => row.classificationId === replacementClassificationId)?.archivedAt).toBeNull();
+    expect(subcategoryLinksAfterReplace).toHaveLength(2);
+    expect(subcategoryLinksAfterReplace.find((row) => row.subcategoryId === originalSubcategoryId)?.archivedAt).not.toBeNull();
+    expect(subcategoryLinksAfterReplace.find((row) => row.subcategoryId === replacementSubcategoryId)?.archivedAt).toBeNull();
 
     const restoreRes = await app.handle(jsonRequest(`/bookmarks/${bookmarkId}`, "PATCH", {
       tagIds: [originalTagId, replacementTagId],
-      classificationIds: [originalClassificationId, replacementClassificationId],
+      subcategoryIds: [originalSubcategoryId, replacementSubcategoryId],
     }));
 
     expect(restoreRes.status).toBe(200);
@@ -488,15 +490,60 @@ describe("bookmark write transactions", () => {
       .select({ archivedAt: schema.bookmarkTags.archivedAt })
       .from(schema.bookmarkTags)
       .where(eq(schema.bookmarkTags.bookmarkId, bookmarkId));
-    const classificationLinksAfterRestore = await db
-      .select({ archivedAt: schema.bookmarkClassifications.archivedAt })
-      .from(schema.bookmarkClassifications)
-      .where(eq(schema.bookmarkClassifications.bookmarkId, bookmarkId));
+    const subcategoryLinksAfterRestore = await db
+      .select({ archivedAt: schema.bookmarkSubcategories.archivedAt })
+      .from(schema.bookmarkSubcategories)
+      .where(eq(schema.bookmarkSubcategories.bookmarkId, bookmarkId));
 
     expect(tagLinksAfterRestore).toHaveLength(2);
     expect(tagLinksAfterRestore.every((row) => row.archivedAt === null)).toBe(true);
-    expect(classificationLinksAfterRestore).toHaveLength(2);
-    expect(classificationLinksAfterRestore.every((row) => row.archivedAt === null)).toBe(true);
+    expect(subcategoryLinksAfterRestore).toHaveLength(2);
+    expect(subcategoryLinksAfterRestore.every((row) => row.archivedAt === null)).toBe(true);
+  });
+
+  it("does not keep removed subcategories in bookmark filters or payloads", async () => {
+    const [{ id: originalSubcategoryId }] = await db
+      .insert(schema.subcategories)
+      .values({ name: uniqueName("subcategory-filter-old"), categoryId: null })
+      .$returningId();
+    const [{ id: remainingSubcategoryId }] = await db
+      .insert(schema.subcategories)
+      .values({ name: uniqueName("subcategory-filter-remaining"), categoryId: null })
+      .$returningId();
+
+    const createRes = await app.handle(jsonRequest("/bookmarks", "POST", {
+      url: uniqueUrl("subcategory-filter-removal"),
+      title: "Subcategory filter removal",
+      subcategoryIds: [originalSubcategoryId, remainingSubcategoryId],
+    }));
+    expect(createRes.status).toBe(201);
+    const created = await createRes.json() as { id: number };
+
+    const patchRes = await app.handle(jsonRequest(`/bookmarks/${created.id}`, "PATCH", {
+      subcategoryIds: [remainingSubcategoryId],
+    }));
+    expect(patchRes.status).toBe(200);
+
+    const listRes = await app.handle(request(`/bookmarks?subcategoryId=${originalSubcategoryId}`));
+    expect(listRes.status).toBe(200);
+    const listBody = await listRes.json() as {
+      items: Array<{ id: number; subcategories: Array<{ id: number }> }>;
+    };
+
+    expect(listBody.items.some((bookmark) => bookmark.id === created.id)).toBe(false);
+
+    const remainingRes = await app.handle(request(`/bookmarks?subcategoryId=${remainingSubcategoryId}`));
+    expect(remainingRes.status).toBe(200);
+    const remainingBody = await remainingRes.json() as {
+      items: Array<{ id: number; subcategories: Array<{ id: number }> }>;
+    };
+
+    expect(remainingBody.items).toEqual([
+      expect.objectContaining({
+        id: created.id,
+        subcategories: [expect.objectContaining({ id: remainingSubcategoryId })],
+      }),
+    ]);
   });
 
   it("refreshes updatedAt when only associations change", async () => {
@@ -619,92 +666,92 @@ describe("bookmark write transactions", () => {
   });
 });
 
-describe("classification group listing", () => {
-  it("returns only active classifications for active groups by default", async () => {
+describe("subcategory category listing", () => {
+  it("returns only active subcategories for active categories by default", async () => {
     const archivedAt = new Date();
-    const [{ id: activeGroupId }] = await db
-      .insert(schema.classificationGroups)
-      .values({ name: uniqueName("group-active-default"), order: 10 })
+    const [{ id: activeCategoryId }] = await db
+      .insert(schema.categories)
+      .values({ name: uniqueName("category-active-default"), order: 10 })
       .$returningId();
-    const [{ id: otherGroupId }] = await db
-      .insert(schema.classificationGroups)
-      .values({ name: uniqueName("group-other-default"), order: 20 })
+    const [{ id: otherCategoryId }] = await db
+      .insert(schema.categories)
+      .values({ name: uniqueName("category-other-default"), order: 20 })
       .$returningId();
-    const [{ id: archivedGroupId }] = await db
-      .insert(schema.classificationGroups)
-      .values({ name: uniqueName("group-archived-default"), order: 30, archivedAt })
+    const [{ id: archivedCategoryId }] = await db
+      .insert(schema.categories)
+      .values({ name: uniqueName("category-archived-default"), order: 30, archivedAt })
       .$returningId();
 
-    const activeClassificationName = uniqueName("classification-active-default");
-    const archivedClassificationName = uniqueName("classification-archived-default");
-    const otherClassificationName = uniqueName("classification-other-default");
-    const archivedGroupClassificationName = uniqueName("classification-archived-group-default");
+    const activeSubcategoryName = uniqueName("subcategory-active-default");
+    const archivedSubcategoryName = uniqueName("subcategory-archived-default");
+    const otherSubcategoryName = uniqueName("subcategory-other-default");
+    const archivedCategorySubcategoryName = uniqueName("subcategory-archived-category-default");
 
-    await db.insert(schema.classifications).values([
-      { name: activeClassificationName, groupId: activeGroupId, order: 1 },
-      { name: archivedClassificationName, groupId: activeGroupId, order: 2, archivedAt },
-      { name: otherClassificationName, groupId: otherGroupId, order: 1 },
-      { name: archivedGroupClassificationName, groupId: archivedGroupId, order: 1 },
+    await db.insert(schema.subcategories).values([
+      { name: activeSubcategoryName, categoryId: activeCategoryId, order: 1 },
+      { name: archivedSubcategoryName, categoryId: activeCategoryId, order: 2, archivedAt },
+      { name: otherSubcategoryName, categoryId: otherCategoryId, order: 1 },
+      { name: archivedCategorySubcategoryName, categoryId: archivedCategoryId, order: 1 },
     ]);
 
-    const res = await app.handle(request("/classifications/groups"));
+    const res = await app.handle(request("/categories"));
 
     expect(res.status).toBe(200);
     const body = await res.json() as {
       items: Array<{
         id: number;
-        classifications: Array<{ name: string }>;
+        subcategories: Array<{ name: string }>;
       }>;
     };
 
-    const activeGroup = body.items.find((group) => group.id === activeGroupId);
-    const otherGroup = body.items.find((group) => group.id === otherGroupId);
+    const activeCategory = body.items.find((category) => category.id === activeCategoryId);
+    const otherCategory = body.items.find((category) => category.id === otherCategoryId);
 
-    expect(body.items.some((group) => group.id === archivedGroupId)).toBe(false);
-    expect(activeGroup?.classifications.map((classification) => classification.name)).toEqual([activeClassificationName]);
-    expect(otherGroup?.classifications.map((classification) => classification.name)).toEqual([otherClassificationName]);
+    expect(body.items.some((category) => category.id === archivedCategoryId)).toBe(false);
+    expect(activeCategory?.subcategories.map((subcategory) => subcategory.name)).toEqual([activeSubcategoryName]);
+    expect(otherCategory?.subcategories.map((subcategory) => subcategory.name)).toEqual([otherSubcategoryName]);
   });
 
-  it("includes archived groups and classifications when archived=true", async () => {
+  it("includes archived categories and subcategories when archived=true", async () => {
     const archivedAt = new Date();
-    const [{ id: activeGroupId }] = await db
-      .insert(schema.classificationGroups)
-      .values({ name: uniqueName("group-active-archived-view"), order: 40 })
+    const [{ id: activeCategoryId }] = await db
+      .insert(schema.categories)
+      .values({ name: uniqueName("category-active-archived-view"), order: 40 })
       .$returningId();
-    const [{ id: archivedGroupId }] = await db
-      .insert(schema.classificationGroups)
-      .values({ name: uniqueName("group-archived-archived-view"), order: 50, archivedAt })
+    const [{ id: archivedCategoryId }] = await db
+      .insert(schema.categories)
+      .values({ name: uniqueName("category-archived-archived-view"), order: 50, archivedAt })
       .$returningId();
 
-    const activeClassificationName = uniqueName("classification-active-archived-view");
-    const archivedClassificationName = uniqueName("classification-archived-archived-view");
-    const archivedGroupClassificationName = uniqueName("classification-archived-group-archived-view");
+    const activeSubcategoryName = uniqueName("subcategory-active-archived-view");
+    const archivedSubcategoryName = uniqueName("subcategory-archived-archived-view");
+    const archivedCategorySubcategoryName = uniqueName("subcategory-archived-category-archived-view");
 
-    await db.insert(schema.classifications).values([
-      { name: activeClassificationName, groupId: activeGroupId, order: 1 },
-      { name: archivedClassificationName, groupId: activeGroupId, order: 2, archivedAt },
-      { name: archivedGroupClassificationName, groupId: archivedGroupId, order: 1, archivedAt },
+    await db.insert(schema.subcategories).values([
+      { name: activeSubcategoryName, categoryId: activeCategoryId, order: 1 },
+      { name: archivedSubcategoryName, categoryId: activeCategoryId, order: 2, archivedAt },
+      { name: archivedCategorySubcategoryName, categoryId: archivedCategoryId, order: 1, archivedAt },
     ]);
 
-    const res = await app.handle(request("/classifications/groups?archived=true"));
+    const res = await app.handle(request("/categories?archived=true"));
 
     expect(res.status).toBe(200);
     const body = await res.json() as {
       items: Array<{
         id: number;
-        classifications: Array<{ name: string }>;
+        subcategories: Array<{ name: string }>;
       }>;
     };
 
-    const activeGroup = body.items.find((group) => group.id === activeGroupId);
-    const archivedGroup = body.items.find((group) => group.id === archivedGroupId);
+    const activeCategory = body.items.find((category) => category.id === activeCategoryId);
+    const archivedCategory = body.items.find((category) => category.id === archivedCategoryId);
 
-    expect(activeGroup?.classifications.map((classification) => classification.name)).toEqual([
-      activeClassificationName,
-      archivedClassificationName,
+    expect(activeCategory?.subcategories.map((subcategory) => subcategory.name)).toEqual([
+      activeSubcategoryName,
+      archivedSubcategoryName,
     ]);
-    expect(archivedGroup?.classifications.map((classification) => classification.name)).toEqual([
-      archivedGroupClassificationName,
+    expect(archivedCategory?.subcategories.map((subcategory) => subcategory.name)).toEqual([
+      archivedCategorySubcategoryName,
     ]);
   });
 });
@@ -758,8 +805,8 @@ describe("bookmark request validation", () => {
     ["/bookmarks?limit=abc", "limit must be an integer between 1 and 100"],
     ["/bookmarks?offset=-1", "offset must be a non-negative integer"],
     ["/bookmarks?offset=abc", "offset must be a non-negative integer"],
-    ["/bookmarks?classificationId=0", "classificationId must be a positive integer"],
-    ["/bookmarks?classificationId=abc", "classificationId must be a positive integer"],
+    ["/bookmarks?subcategoryId=0", "subcategoryId must be a positive integer"],
+    ["/bookmarks?subcategoryId=abc", "subcategoryId must be a positive integer"],
     ["/bookmarks?tagId=0", "tagId must be a positive integer"],
     ["/bookmarks?tagId=abc", "tagId must be a positive integer"],
     ["/bookmarks?flag=unknown", "flag must be one of: readLater, hotTopic, cheatsheets, forReview"],
@@ -800,13 +847,21 @@ describe("bookmark request validation", () => {
 function jsonRequest(path: string, method: string, body: unknown): Request {
   return new Request(`http://localhost${path}`, {
     method,
-    headers: { "content-type": "application/json" },
+    headers: {
+      "content-type": "application/json",
+      authorization: `Bearer ${process.env.API_TOKEN ?? "test-api-token"}`,
+    },
     body: JSON.stringify(body),
   });
 }
 
 function request(path: string, method = "GET"): Request {
-  return new Request(`http://localhost${path}`, { method });
+  return new Request(`http://localhost${path}`, {
+    method,
+    headers: {
+      authorization: `Bearer ${process.env.API_TOKEN ?? "test-api-token"}`,
+    },
+  });
 }
 
 function uniqueName(prefix: string): string {

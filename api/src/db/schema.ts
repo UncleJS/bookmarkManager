@@ -12,25 +12,27 @@ import {
 import { sql } from "drizzle-orm";
 
 // ---------------------------------------------------------------------------
-// classification_groups
+// categories
 // ---------------------------------------------------------------------------
-export const classificationGroups = mysqlTable("classification_groups", {
+export const categories = mysqlTable("categories", {
   id: int("id").autoincrement().primaryKey(),
   name: varchar("name", { length: 255 }).notNull(),
+  description: text("description"),
   order: int("order").default(0),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`),
   archivedAt: datetime("archived_at"),
 });
 
 // ---------------------------------------------------------------------------
-// classifications
+// subcategories
 // ---------------------------------------------------------------------------
-export const classifications = mysqlTable(
-  "classifications",
+export const subcategories = mysqlTable(
+  "subcategories",
   {
     id: int("id").autoincrement().primaryKey(),
-    groupId: int("group_id"),
+    categoryId: int("category_id"),
     name: varchar("name", { length: 255 }).notNull(),
+    description: text("description"),
     order: int("order").default(0),
     createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`),
     archivedAt: datetime("archived_at"),
@@ -41,8 +43,8 @@ export const classifications = mysqlTable(
     ),
   },
   (t) => [
-    // Uniqueness only among active rows (within a group)
-    uniqueIndex("uniq_active_group_name").on(t.groupId, t.nameActive),
+    // Uniqueness only among active rows (within a category)
+    uniqueIndex("uniq_active_category_name").on(t.categoryId, t.nameActive),
   ]
 );
 
@@ -126,28 +128,28 @@ export const bookmarkTags = mysqlTable(
 );
 
 // ---------------------------------------------------------------------------
-// bookmark_classifications  (many-to-many)
+// bookmark_subcategories  (many-to-many)
 // ---------------------------------------------------------------------------
-export const bookmarkClassifications = mysqlTable(
-  "bookmark_classifications",
+export const bookmarkSubcategories = mysqlTable(
+  "bookmark_subcategories",
   {
     id: int("id").autoincrement().primaryKey(),
     bookmarkId: int("bookmark_id").notNull().references(() => bookmarks.id),
-    classificationId: int("classification_id").notNull().references(() => classifications.id),
+    subcategoryId: int("subcategory_id").notNull().references(() => subcategories.id),
     createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`),
     archivedAt: datetime("archived_at"),
     bookmarkIdActive: int("bookmark_id_active").generatedAlwaysAs(
       sql`CASE WHEN archived_at IS NULL THEN bookmark_id ELSE NULL END`,
       { mode: "stored" }
     ),
-    classificationIdActive: int("classification_id_active").generatedAlwaysAs(
-      sql`CASE WHEN archived_at IS NULL THEN classification_id ELSE NULL END`,
+    subcategoryIdActive: int("subcategory_id_active").generatedAlwaysAs(
+      sql`CASE WHEN archived_at IS NULL THEN subcategory_id ELSE NULL END`,
       { mode: "stored" }
     ),
   },
   (t) => [
-    uniqueIndex("uniq_active_bookmark_classification").on(t.bookmarkIdActive, t.classificationIdActive),
+    uniqueIndex("uniq_active_bookmark_subcategory").on(t.bookmarkIdActive, t.subcategoryIdActive),
     index("idx_bc_bookmark").on(t.bookmarkId),
-    index("idx_bc_classification").on(t.classificationId),
+    index("idx_bs_subcategory").on(t.subcategoryId),
   ]
 );

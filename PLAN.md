@@ -47,7 +47,7 @@ A precise description of what is built, how it works, and how to extend it.
 
 - Goals
   - Chrome extension to capture bookmarks and send them to a Bun/Elysia API backed by MariaDB.
-  - Rich capture form (URL, Title, Description, Classification, Tags, Flags) with data pulled from the API.
+  - Rich capture form (URL, Title, Description, Sub-category, Tags, Flags) with data pulled from the API.
   - Quick-save and full-save via context menu.
   - Simple extension implementation: vanilla HTML/CSS/JS.
 
@@ -68,11 +68,11 @@ A precise description of what is built, how it works, and how to extend it.
   - Background Service Worker for context menus, tab info, API calls, and messaging.
   - Options page for configuring API base URL.
 - Bun/Elysia API + MariaDB
-  - Endpoints for bookmarks, tags, classifications, and authenticated backups.
+  - Endpoints for bookmarks, tags, subcategories, and authenticated backups.
   - No auth or CORS for bookmark-management routes; `GET /backup` requires a Bearer token.
   - Swagger UI at `/docs`; OpenAPI spec at `/openapi.json`.
 - Data Flow
-  1) Popup opens ➜ background fetches classifications/tags ➜ UI populates dropdowns.
+  1) Popup opens ➜ background fetches subcategories/tags ➜ UI populates dropdowns.
   2) User submits ➜ popup sends message to background ➜ background POSTs to API ➜ background returns success/error to popup ➜ UI feedback.
   3) Context menu "Quick Save" ➜ background captures active tab (url/title) ➜ POST to API with defaults ➜ notification.
   4) Context menu "Full Save" ➜ background opens the popup, pre-filled with url/title.
@@ -87,7 +87,7 @@ A precise description of what is built, how it works, and how to extend it.
   - URL: read-only, pre-filled with current tab URL.
   - Title: editable, pre-filled with current tab title.
   - Description: multiline textarea.
-  - Classifications: multi-select with grouped suggestions and removable chips. Options loaded from API. Ability to create a new classification on the fly.
+  - Sub-categories: multi-select with category-grouped suggestions and removable chips. Options loaded from API. Ability to create a new sub-category on the fly (name + optional description).
   - Tags: multi-select (vanilla JS). Options loaded from API with search/autocomplete. Ability to create new tags on the fly.
   - Flags (checkboxes): readLater, hotTopic, cheatsheets, forReview.
   - Save button submits to API. Show success/error message.
@@ -98,7 +98,7 @@ A precise description of what is built, how it works, and how to extend it.
   - Access to active tab (url/title), context menus, notifications, storage, scripting for on-demand toast injection, and API host permissions.
   - Handle network errors with clear user feedback.
 - API
-  - Endpoints to list/create classifications and tags, create/edit/archive bookmarks, and download backups.
+  - Endpoints to list/create subcategories and tags, create/edit/archive bookmarks, and download backups.
   - No auth or CORS for bookmark-management routes; `GET /backup` requires `Authorization: Bearer <BACKUP_TOKEN>`.
 - Detect existing bookmarks with the same URL, show the existing entries, and avoid creating a second active bookmark with that URL.
 
@@ -159,10 +159,10 @@ extension/
 [↑ Table of Contents](#table-of-contents)
 
 ### 5.4 Popup UI Behavior
-- On load: read active tab, fetch classifications and tag suggestions, populate form.
-- Classifications multi-select: grouped suggestions, removable chips, create new on the fly.
+- On load: read active tab, fetch subcategories and tag suggestions, populate form.
+- Sub-categories multi-select: category-grouped suggestions, removable chips, create new on the fly.
 - Tags multi-select: input + listbox, debounced API calls (250ms), removable chips, create new on the fly.
-- Classification creation: inline affordance → POST /classifications → refresh dropdown.
+- Sub-category creation: inline affordance → name + optional description inputs → POST /subcategories → refresh dropdown.
 - Submission: validate, construct payload, send via background message, disable button + loader, show success/error.
 
 [↑ Table of Contents](#table-of-contents)
@@ -172,7 +172,7 @@ extension/
 - Quick Save: captures active tab → POST /bookmarks → notification.
 - Full Save: opens popup programmatically (fallback to window if blocked).
 - Centralises all API calls (reads base URL from storage, fetch with timeouts, error mapping).
-- Message types: `getInitialData`, `createTag`, `createClassification`, `saveBookmark`, `searchTags`.
+- Message types: `fetchInitialData`, `createTag`, `createSubcategory`, `createBookmark`, `searchTags`.
 
 [↑ Table of Contents](#table-of-contents)
 
@@ -208,7 +208,7 @@ api/
 │   │   └── migrations/         # Drizzle-generated SQL
 │   ├── ui/
 │   │   ├── app.html            # Bookmark viewer UI (served at /app)
-│   │   └── categories.html     # Category management UI (served at /categories)
+│   │   └── categories.html     # Category management UI (served at /manage-categories)
 │   └── smoke/
 │       └── health.ts           # No-DB smoke test
 ├── drizzle.config.ts
@@ -246,8 +246,8 @@ api/
 [↑ Table of Contents](#table-of-contents)
 
 ### 6.4 Authentication
-- All bookmark-management routes (`/bookmarks*`, `/tags*`, `/classifications*`) require `Authorization: Bearer <API_TOKEN>` (set `API_TOKEN` in `api/.env` to a strong random value; e.g. `openssl rand -hex 32`).
-- Health probes (`/health`, `/ready`), static UI pages (`/app`, `/categories`), and the API docs (`/docs`) are exempt.
+- All bookmark-management routes (`/bookmarks*`, `/tags*`, `/subcategories*`) require `Authorization: Bearer <API_TOKEN>` (set `API_TOKEN` in `api/.env` to a strong random value; e.g. `openssl rand -hex 32`).
+- Health probes (`/health`, `/ready`), static UI pages (`/app`, `/manage-categories`), and the API docs (`/docs`) are exempt.
 - The pod binds the API port to `127.0.0.1` only, blocking all LAN access at the network level.
 - The Chrome extension reads the token from the Options page and sends it as a Bearer header on every API call.
 - `GET /backup` additionally requires its own `Authorization: Bearer <BACKUP_TOKEN>` (a separate credential).
@@ -267,7 +267,7 @@ Interactive docs always available at **`http://localhost:11650/docs`**.
 | `GET` | `/docs` | Swagger UI |
 | `GET` | `/openapi.json` | OpenAPI spec |
 | `GET` | `/app` | Bookmark viewer UI |
-| `GET` | `/categories` | Category management UI |
+| `GET` | `/manage-categories` | Category management UI |
 | `GET` | `/flag-counts` | Count of active bookmarks per flag |
 | `GET` | `/backup` | Download a gzipped MariaDB dump (requires `Authorization: Bearer` header) |
 
@@ -275,9 +275,9 @@ Interactive docs always available at **`http://localhost:11650/docs`**.
 
 | Method | Path | Description |
 |---|---|---|
-| `GET` | `/bookmarks` | List/filter bookmarks (`?limit=&offset=&classificationId=&tagId=&flag=&sortBy=&archived=`) |
+| `GET` | `/bookmarks` | List/filter bookmarks (`?limit=&offset=&subcategoryId=&tagId=&flag=&sortBy=&archived=`) |
 | `POST` | `/bookmarks` | Create bookmark |
-| `PATCH` | `/bookmarks/:id` | Edit title, description, flags, tags, classifications |
+| `PATCH` | `/bookmarks/:id` | Edit title, description, flags, tags, subcategories |
 | `PATCH` | `/bookmarks/:id/archive` | Soft-delete (sets `archivedAt`) |
 | `PATCH` | `/bookmarks/:id/restore` | Restore archived bookmark |
 
@@ -290,27 +290,27 @@ Interactive docs always available at **`http://localhost:11650/docs`**.
 | `PATCH` | `/tags/:id/archive` | Archive tag |
 | `PATCH` | `/tags/:id/restore` | Restore archived tag |
 
-#### Classifications
+#### Sub-categories
 
 | Method | Path | Description |
 |---|---|---|
-| `GET` | `/classifications` | All active classifications, nested by group |
-| `POST` | `/classifications` | Create classification (optionally with new group) |
-| `PATCH` | `/classifications/:id` | Rename classification |
-| `PATCH` | `/classifications/:id/reorder` | Set display order |
-| `PATCH` | `/classifications/:id/archive` | Archive classification |
-| `PATCH` | `/classifications/:id/restore` | Restore archived classification |
+| `GET` | `/subcategories` | All active subcategories, nested by category |
+| `POST` | `/subcategories` | Create subcategory with optional `description` (and optionally a new category) |
+| `PATCH` | `/subcategories/:id` | Rename subcategory and/or update its `description` |
+| `PATCH` | `/subcategories/:id/reorder` | Set display order |
+| `PATCH` | `/subcategories/:id/archive` | Archive subcategory |
+| `PATCH` | `/subcategories/:id/restore` | Restore archived subcategory |
 
-#### Classification Groups
+#### Categories
 
 | Method | Path | Description |
 |---|---|---|
-| `GET` | `/classifications/groups` | List groups with nested classifications (management view) |
-| `POST` | `/classifications/groups` | Create group |
-| `PATCH` | `/classifications/groups/:id` | Rename group |
-| `PATCH` | `/classifications/groups/:id/reorder` | Set display order |
-| `PATCH` | `/classifications/groups/:id/archive` | Archive group |
-| `PATCH` | `/classifications/groups/:id/restore` | Restore archived group |
+| `GET` | `/categories` | List categories with nested subcategories (management view) |
+| `POST` | `/categories` | Create category with optional `description` |
+| `PATCH` | `/categories/:id` | Rename category and/or update its `description` |
+| `PATCH` | `/categories/:id/reorder` | Set display order |
+| `PATCH` | `/categories/:id/archive` | Archive category |
+| `PATCH` | `/categories/:id/restore` | Restore archived category |
 
 **POST /bookmarks duplicate detection:**
 - Returns `409` with a `duplicates` array if an active bookmark with the same URL already exists.
@@ -321,18 +321,18 @@ Interactive docs always available at **`http://localhost:11650/docs`**.
 
 ### 6.6 Database Schema
 
-All tables include `archived_at DATETIME NULL`. `NULL` = active. "Delete" sets `archived_at = NOW()`. Replacing bookmark tags/classifications archives removed junction rows and reactivates them when the same link is added again.
+All tables include `archived_at DATETIME NULL`. `NULL` = active. "Delete" sets `archived_at = NOW()`. Replacing bookmark tags/subcategories archives removed junction rows and reactivates them when the same link is added again.
 
 | Table | Purpose |
 |---|---|
 | `bookmarks` | Core bookmark store |
-| `classification_groups` | Groups for organizing classifications |
-| `classifications` | Individual categories; many-to-many with bookmarks |
+| `categories` | Parent categories for organizing sub-categories; each category has an optional `description TEXT NULL` |
+| `subcategories` | Child items assigned to bookmarks; each sub-category has an optional `description TEXT NULL` |
 | `tags` | Flexible labels; many-to-many with bookmarks |
 | `bookmark_tags` | Junction table |
-| `bookmark_classifications` | Junction table |
+| `bookmark_subcategories` | Junction table |
 
-**Uniqueness among active rows** — `tags` and `classifications` use a generated column (`name_active`) that is `NULL` when archived, with a unique index. Archived rows may share names with active rows.
+**Uniqueness among active rows** — `tags` and `subcategories` use a generated column (`name_active`) that is `NULL` when archived, with a unique index. Archived rows may share names with active rows.
 
 [↑ Table of Contents](#table-of-contents)
 
@@ -452,7 +452,7 @@ POST /bookmarks request:
   "url": "https://example.com/article",
   "title": "Great Article",
   "description": "Why this is useful…",
-  "classificationIds": [3],
+  "subcategoryIds": [3],
   "tags": [1, 4, 7],
   "flags": { "readLater": true, "hotTopic": false, "cheatsheets": false, "forReview": false },
   "faviconUrl": "https://example.com/favicon.ico"
@@ -464,12 +464,18 @@ POST /bookmarks 201 response:
 { "id": 123, "url": "https://example.com/article", "title": "Great Article", "createdAt": "2026-02-21T07:05:28Z" }
 ```
 
-GET /classifications response:
+GET /subcategories response:
 ```json
 {
-  "groups": [
-    { "id": 1, "name": "Personal", "order": 1, "classifications": [ { "id": 10, "name": "Learning" } ] },
-    { "id": 2, "name": "Technology", "order": 2, "classifications": [ { "id": 20, "name": "Database" } ] }
+  "categories": [
+    {
+      "id": 1, "name": "Personal", "description": null, "order": 1,
+      "subcategories": [ { "id": 10, "name": "Learning", "description": "Books, courses, and tutorials" } ]
+    },
+    {
+      "id": 2, "name": "Technology", "description": "Tech-related bookmarks", "order": 2,
+      "subcategories": [ { "id": 20, "name": "Database", "description": null } ]
+    }
   ]
 }
 ```
@@ -497,9 +503,9 @@ GET /tags response:
 
 ## 10) Glossary
 
-- **Quick Save**: one-click save of url/title with default flags; no description, tags, or classification.
+- **Quick Save**: one-click save of url/title with default flags; no description, tags, or subcategory.
 - **Full Save**: user completes the form in the popup before saving.
-- **Classification**: a single category; grouped under a Classification Group for UI optgroup display.
+- **Sub-category**: a child item with an optional description, grouped under a Category in the UI.
 - **Tags**: multiple labels that can be attached to bookmarks.
 - **Archive**: soft-delete — sets `archived_at = NOW()`; row remains in DB and can be restored.
 

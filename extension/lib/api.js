@@ -13,17 +13,17 @@
  * This is the primary method for popup to request API operations, as the
  * background script handles all external HTTP requests.
  *
- * @param {string} type - Message type identifier (e.g., 'getInitialData', 'saveBookmark')
+ * @param {string} type - Message type identifier (e.g., 'fetchInitialData', 'createBookmark')
  * @param {any} [payload] - Optional message payload data
  * @returns {Promise<Object>} Promise resolving to background script response
  *
  * @example
  * // Get initial popup data
- * const response = await send('getInitialData');
+ * const response = await send('fetchInitialData');
  *
  * @example
  * // Save a bookmark
- * const response = await send('saveBookmark', {
+ * const response = await send('createBookmark', {
  *   url: 'https://example.com',
  *   title: 'Example Site'
  * });

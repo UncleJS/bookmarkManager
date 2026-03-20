@@ -152,12 +152,14 @@ body {
   color: #93c5fd;
 }
 
-.chip-classification {
+.chip-classification,
+.chip-subcategory {
   background-color: #dcfce7;
   color: #166534;
 }
 
-.dark .chip-classification {
+.dark .chip-classification,
+.dark .chip-subcategory {
   background-color: rgba(34, 197, 94, 0.3);
   color: #86efac;
 }

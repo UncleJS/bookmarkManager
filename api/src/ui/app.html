@@ -124,17 +124,17 @@
       transform: rotate(90deg);
     }
 
-    .nav-group-items {
+    .nav-category-items {
       overflow: hidden;
       max-height: 0;
       transition: max-height 0.2s ease;
     }
 
-    .nav-group-items.open {
+    .nav-category-items.open {
       max-height: 600px;
     }
 
-    /* indent category items under their group label */
+    /* indent category items under their category label */
     .nav-item.cat-item {
       padding-left: 24px;
     }
@@ -192,7 +192,7 @@
       color: var(--text);
     }
 
-    .nav-group-heading {
+    .nav-category-heading {
       font-size: 10px;
       font-weight: 700;
       color: var(--accent);
@@ -207,7 +207,7 @@
       gap: 6px;
     }
 
-    .nav-group-heading-label {
+    .nav-category-heading-label {
       flex: 1;
     }
 
@@ -489,7 +489,7 @@
       padding: 2px 7px;
     }
 
-    .classification-badge {
+    .subcategory-badge {
       font-size: 11px;
       background: #1a2a1a;
       color: #6ee06e;
@@ -497,7 +497,7 @@
       padding: 2px 7px;
     }
 
-    .classification-group {
+    .subcategory-category {
       font-size: 10px;
       opacity: 0.7;
       margin-right: 2px;
@@ -599,7 +599,7 @@
     }
     .flag-toggle input { accent-color: var(--accent); cursor: pointer; }
 
-    /* tag/classification picker */
+    /* tag/subcategory picker */
     .picker-search {
       width: 100%;
       background: var(--surface2);
@@ -671,7 +671,7 @@
     }
     .btn-cancel:hover { border-color: var(--text-muted); color: var(--text); }
 
-    /* ── Create-classification sub-modal ─────────────────────────────────── */
+    /* ── Create-subcategory sub-modal ─────────────────────────────────── */
     #create-class-overlay {
       display: none;
       position: fixed;
@@ -901,7 +901,7 @@
       <p id="sidebar-subtitle">Loading…</p>
     </div>
     <nav id="sidebar-nav">
-      <button class="nav-item active" data-id="" onclick="selectCategory(null, 'All bookmarks', this)">
+      <button class="nav-item active" data-id="" onclick="selectSubcategory(null, 'All bookmarks', this)">
         <span class="nav-item-label">All bookmarks</span>
       </button>
     </nav>
@@ -917,7 +917,7 @@
         <input type="text" id="search-q" placeholder="Search title, URL, description…" autocomplete="off" />
         <button id="search-clear" onclick="clearSearch()" title="Clear search" tabindex="-1">×</button>
       </div>
-      <a href="/categories" class="nav-btn">⚙ Categories</a>
+      <a href="/manage-categories" class="nav-btn">⚙ Categories</a>
       <button class="nav-btn" onclick="triggerBackup()">⬇ Backup</button>
       <div id="archive-toggle">
         <button class="toggle-btn active" id="btn-active"   onclick="setArchived(false)">Active</button>
@@ -975,10 +975,10 @@
     </div>
 
     <div class="modal-field">
-      <label>Classifications</label>
-      <input type="text" class="picker-search" id="class-search" placeholder="Filter…" oninput="filterChips('class')" />
-      <div class="picker-list" id="class-chips"></div>
-      <button type="button" class="btn-add-new-class" onclick="openCreateClassModal()">+ Add New Classification</button>
+      <label>Sub-categories</label>
+      <input type="text" class="picker-search" id="subcategory-search" placeholder="Filter…" oninput="filterChips('class')" />
+      <div class="picker-list" id="subcategory-chips"></div>
+      <button type="button" class="btn-add-new-class" onclick="openCreateSubcategoryModal()">+ Add New Sub-category</button>
     </div>
 
     <div class="modal-field">
@@ -994,10 +994,10 @@
   </div>
 </div>
 
-<!-- ── Create-classification sub-modal ──────────────────────────────────── -->
+<!-- ── Create sub-category sub-modal ─────────────────────────────────── -->
 <div id="create-class-overlay" role="dialog" aria-modal="true" aria-labelledby="create-class-title">
   <div id="create-class-modal">
-    <h3 id="create-class-title">New Classification</h3>
+    <h3 id="create-class-title">New Sub-category</h3>
 
     <div class="create-class-field">
       <label for="cc-name">Name</label>
@@ -1005,40 +1005,45 @@
     </div>
 
     <div class="create-class-field">
-      <label>Group</label>
+      <label for="cc-description">Description <span style="opacity:0.5;font-weight:400;text-transform:none">(optional)</span></label>
+      <textarea id="cc-description" rows="2" placeholder="Short description of this sub-category..." style="width:100%;background:var(--surface2);border:1px solid var(--border2);border-radius:4px;color:var(--text);font-family:inherit;font-size:13px;padding:6px 9px;outline:none;resize:vertical;" onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border2)'"></textarea>
+    </div>
+
+    <div class="create-class-field">
+      <label>Category</label>
       <div class="create-class-radios">
         <label class="create-class-radio-label">
-          <input type="radio" name="cc-group-option" value="none" checked onchange="updateCCGroupSections()" />
-          No group
+          <input type="radio" name="cc-category-option" value="none" checked onchange="updateCCCategorySections()" />
+          No category
         </label>
         <label class="create-class-radio-label" id="cc-existing-radio-label">
-          <input type="radio" name="cc-group-option" value="existing" onchange="updateCCGroupSections()" />
-          Existing group
+          <input type="radio" name="cc-category-option" value="existing" onchange="updateCCCategorySections()" />
+          Existing category
         </label>
         <label class="create-class-radio-label">
-          <input type="radio" name="cc-group-option" value="new" onchange="updateCCGroupSections()" />
-          New group
+          <input type="radio" name="cc-category-option" value="new" onchange="updateCCCategorySections()" />
+          New category
         </label>
       </div>
     </div>
 
     <div class="create-class-field" id="cc-existing-section" style="display:none">
-      <label for="cc-existing-select">Select group</label>
+      <label for="cc-existing-select">Select category</label>
       <select id="cc-existing-select">
         <option value="">— choose —</option>
       </select>
     </div>
 
     <div class="create-class-field" id="cc-new-section" style="display:none">
-      <label for="cc-new-group-name">New group name</label>
-      <input type="text" id="cc-new-group-name" placeholder="e.g. Languages" autocomplete="off" />
+      <label for="cc-new-category-name">New category name</label>
+      <input type="text" id="cc-new-category-name" placeholder="e.g. Languages" autocomplete="off" />
     </div>
 
     <div id="create-class-error"></div>
 
     <div class="modal-actions">
       <button class="btn-cancel" onclick="closeCreateClassModal()">Cancel</button>
-      <button class="btn-primary" id="cc-create-btn" onclick="handleCreateClassification()">Create</button>
+      <button class="btn-primary" id="cc-create-btn" onclick="handleCreateSubcategory()">Create</button>
     </div>
   </div>
 </div>
@@ -1105,7 +1110,7 @@
   // ── State ──────────────────────────────────────────────────────────────────
   const PAGE_SIZE = 20;
   let state = {
-    classificationId: null,   // null = all
+    subcategoryId: null,   // null = all
     filterTagId:      null,   // null = all
     filterFlag:       null,   // null | 'readLater' | 'hotTopic' | 'cheatsheets' | 'forReview'
     categoryLabel: 'All bookmarks',
@@ -1115,7 +1120,7 @@
     total: 0,
     lastItems: [],            // cached for edit modal
     tagSortOrder: 'count',    // 'count' | 'alpha'
-    openCatGroups: new Set(), // set of group IDs that are expanded
+    openCategories: new Set(), // set of category IDs that are expanded
     searchQuery: '',          // full-text search term
   };
 
@@ -1129,12 +1134,12 @@
   async function loadSidebar() {
     try {
       const [classRes, tagRes, flagRes] = await Promise.all([
-        apiFetch('/classifications'),
+        apiFetch('/subcategories'),
         apiFetch('/tags?limit=200'),
         apiFetch('/flag-counts'),
       ]);
       if (!classRes.ok) throw new Error(classRes.statusText);
-      const { groups } = await classRes.json();
+      const { categories } = await classRes.json();
       const { items: tagItems } = tagRes.ok ? await tagRes.json() : { items: [] };
       const flagCounts = flagRes.ok ? await flagRes.json() : {};
 
@@ -1142,13 +1147,13 @@
 
       // ── subtitle ─────────────────────────────────────────────────────────
       let totalCats = 0;
-      groups.forEach(g => totalCats += g.classifications.length);
+      categories.forEach(g => totalCats += g.subcategories.length);
       document.getElementById('sidebar-subtitle').textContent =
         `${totalCats} categories · ${tagItems.length} tags`;
 
       // ── Flags ─────────────────────────────────────────────────────────────
       const flagHeading = document.createElement('div');
-      flagHeading.className = 'nav-group-heading';
+      flagHeading.className = 'nav-category-heading';
       flagHeading.textContent = 'Flags';
       nav.appendChild(flagHeading);
 
@@ -1179,22 +1184,22 @@
 
       // ── Categories ───────────────────────────────────────────────────────
       const catHeading = document.createElement('div');
-      catHeading.className = 'nav-group-heading';
+      catHeading.className = 'nav-category-heading';
       catHeading.textContent = 'Categories';
       nav.appendChild(catHeading);
 
-      groups.forEach(group => {
-        if (!group.classifications.length) return;
+      categories.forEach(category => {
+        if (!category.subcategories.length) return;
 
-        const groupId = `cat-group-${group.name.replace(/\s+/g, '-').toLowerCase()}`;
-        const isOpen = state.openCatGroups && state.openCatGroups.has(groupId);
+        const categoryId = `cat-category-${category.name.replace(/\s+/g, '-').toLowerCase()}`;
+        const isOpen = state.openCategories && state.openCategories.has(categoryId);
 
         const heading = document.createElement('div');
         heading.className = 'nav-section-label' + (isOpen ? ' open' : '');
-        heading.dataset.groupId = groupId;
+        heading.dataset.categoryId = categoryId;
 
         const labelSpan = document.createElement('span');
-        labelSpan.textContent = group.name;
+        labelSpan.textContent = category.name;
 
         const chevron = document.createElement('span');
         chevron.className = 'nav-section-chevron';
@@ -1205,15 +1210,15 @@
         nav.appendChild(heading);
 
         const itemsContainer = document.createElement('div');
-        itemsContainer.className = 'nav-group-items' + (isOpen ? ' open' : '');
-        itemsContainer.dataset.groupId = groupId;
+        itemsContainer.className = 'nav-category-items' + (isOpen ? ' open' : '');
+        itemsContainer.dataset.categoryId = categoryId;
 
-        group.classifications.forEach(c => {
+        category.subcategories.forEach(c => {
           const btn = document.createElement('button');
           btn.className = 'nav-item cat-item';
           btn.dataset.id = String(c.id);
           btn.title = c.name;
-          btn.onclick = () => selectCategory(c.id, c.name, btn);
+          btn.onclick = () => selectSubcategory(c.id, c.name, btn);
 
           const label = document.createElement('span');
           label.className = 'nav-item-label';
@@ -1233,20 +1238,20 @@
         heading.onclick = () => {
           const open = heading.classList.toggle('open');
           itemsContainer.classList.toggle('open', open);
-          if (!state.openCatGroups) state.openCatGroups = new Set();
-          if (open) state.openCatGroups.add(groupId);
-          else state.openCatGroups.delete(groupId);
+          if (!state.openCategories) state.openCategories = new Set();
+          if (open) state.openCategories.add(categoryId);
+          else state.openCategories.delete(categoryId);
         };
       });
 
       // ── Tags ──────────────────────────────────────────────────────────────
       if (tagItems.length > 0) {
         const tagHeading = document.createElement('div');
-        tagHeading.className = 'nav-group-heading';
+        tagHeading.className = 'nav-category-heading';
         tagHeading.id = 'tag-section-heading';
 
         const headingLabel = document.createElement('span');
-        headingLabel.className = 'nav-group-heading-label';
+        headingLabel.className = 'nav-category-heading-label';
         headingLabel.textContent = 'Tags';
 
         const sortToggle = document.createElement('div');
@@ -1336,7 +1341,7 @@
       const [flagRes, tagRes, classRes] = await Promise.all([
         apiFetch('/flag-counts'),
         apiFetch(`/tags?limit=200&sort=${state.tagSortOrder}`),
-        apiFetch('/classifications'),
+        apiFetch('/subcategories'),
       ]);
 
       if (flagRes.ok) {
@@ -1373,9 +1378,9 @@
       }
 
       if (classRes.ok) {
-        const { groups } = await classRes.json();
-        groups.forEach(group => {
-          group.classifications.forEach(c => {
+        const { categories } = await classRes.json();
+        categories.forEach(category => {
+          category.subcategories.forEach(c => {
             const btn = document.querySelector(`.nav-item[data-id="${c.id}"]`);
             if (btn) {
               const cnt = btn.querySelector('.nav-item-count');
@@ -1393,10 +1398,10 @@
     document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
   }
 
-  function selectCategory(id, label, btnEl) {
+  function selectSubcategory(id, label, btnEl) {
     clearNavActive();
     btnEl.classList.add('active');
-    state.classificationId = id;
+    state.subcategoryId = id;
     state.filterTagId      = null;
     state.filterFlag       = null;
     state.categoryLabel    = label;
@@ -1408,7 +1413,7 @@
   function selectFlag(flag, label, btnEl) {
     clearNavActive();
     btnEl.classList.add('active');
-    state.classificationId = null;
+    state.subcategoryId = null;
     state.filterTagId      = null;
     state.filterFlag       = flag;
     state.categoryLabel    = label;
@@ -1420,7 +1425,7 @@
   function selectTag(id, label, btnEl) {
     clearNavActive();
     btnEl.classList.add('active');
-    state.classificationId = null;
+    state.subcategoryId = null;
     state.filterTagId      = id;
     state.filterFlag       = null;
     state.categoryLabel    = label;
@@ -1490,7 +1495,7 @@
       sortBy: state.sortBy,
     });
     if (state.searchQuery)      params.set('q', state.searchQuery);
-    if (state.classificationId) params.set('classificationId', String(state.classificationId));
+    if (state.subcategoryId) params.set('subcategoryId', String(state.subcategoryId));
     if (state.filterTagId)      params.set('tagId', String(state.filterTagId));
     if (state.filterFlag)       params.set('flag', state.filterFlag);
     if (state.showArchived)     params.set('archived', 'true');
@@ -1547,10 +1552,10 @@
       .map(t => `<span class="tag">#${esc(t.name)}</span>`)
       .join('');
 
-    const classes = (b.classifications || [])
+    const classes = (b.subcategories || [])
       .map(c => {
-        const grp = c.groupName ? `<span class="classification-group">${esc(c.groupName)} ›</span>` : '';
-        return `<span class="classification-badge">${grp}${esc(c.name)}</span>`;
+        const grp = c.categoryName ? `<span class="subcategory-category">${esc(c.categoryName)} ›</span>` : '';
+        return `<span class="subcategory-badge">${grp}${esc(c.name)}</span>`;
       })
       .join('');
 
@@ -1659,35 +1664,39 @@
   // ── Edit modal ─────────────────────────────────────────────────────────────
   let modalState = {
     bookmarkId: null,
-    allClasses: [],   // [{id, name, groupName}]
-    allGroups:  [],   // [{id, name}]  — for the create-classification sub-modal
+    allSubcategories: [],   // [{id, name, categoryName}]
+    allCategories:  [],   // [{id, name}]  — for the create-subcategory sub-modal
     allTags:    [],   // [{id, name}]
-    selClassIds: new Set(),
+    selSubcategoryIds: new Set(),
     selTagIds:   new Set(),
   };
 
-  // Pre-load classifications & tags for the modal (shared data, refreshed on open)
+  // Pre-load subcategories & tags for the modal (shared data, refreshed on open)
   async function loadModalData() {
     const [cRes, tRes] = await Promise.all([
-      apiFetch('/classifications'),
+      apiFetch('/subcategories'),
       apiFetch('/tags?limit=200'),
     ]);
-    const { groups } = await cRes.json();
+    const { categories } = await cRes.json();
     const { items: tagItems } = await tRes.json();
 
-    // Flatten all active classifications with group info
-    const flatClasses = [];
-    const flatGroups = [];
-    groups.forEach(g => {
-      if (g.name !== 'Ungrouped') {
-        flatGroups.push({ id: g.id, name: g.name });
+    // Flatten all active subcategories with category info
+    const flatSubcategories = [];
+    const flatCategories = [];
+    categories.forEach(category => {
+      if (category.name !== 'Uncategorized') {
+        flatCategories.push({ id: category.id, name: category.name });
       }
-      g.classifications.forEach(c => {
-        flatClasses.push({ id: c.id, name: c.name, groupName: g.name !== 'Ungrouped' ? g.name : null });
+      category.subcategories.forEach(subcategory => {
+        flatSubcategories.push({
+          id: subcategory.id,
+          name: subcategory.name,
+          categoryName: category.name !== 'Uncategorized' ? category.name : null,
+        });
       });
     });
-    modalState.allClasses = flatClasses;
-    modalState.allGroups  = flatGroups;
+    modalState.allSubcategories = flatSubcategories;
+    modalState.allCategories  = flatCategories;
     modalState.allTags = tagItems;
   }
 
@@ -1695,7 +1704,7 @@
     await loadModalData();
 
     modalState.bookmarkId = bm.id;
-    modalState.selClassIds = new Set((bm.classifications || []).map(c => c.id));
+    modalState.selSubcategoryIds = new Set((bm.subcategories || []).map(c => c.id));
     modalState.selTagIds   = new Set((bm.tags || []).map(t => t.id));
 
     document.getElementById('edit-title').value = bm.title || '';
@@ -1706,7 +1715,7 @@
     document.getElementById('flag-cheatsheets').checked = !!bm.cheatsheets;
     document.getElementById('flag-forReview').checked   = !!bm.forReview;
 
-    document.getElementById('class-search').value = '';
+    document.getElementById('subcategory-search').value = '';
     document.getElementById('tag-search').value   = '';
     renderChips('class');
     renderChips('tag');
@@ -1740,15 +1749,15 @@
 
   function renderChips(type) {
     const isClass = type === 'class';
-    const query = (document.getElementById(isClass ? 'class-search' : 'tag-search').value || '').toLowerCase();
-    const list  = document.getElementById(isClass ? 'class-chips' : 'tag-chips');
-    const items = isClass ? modalState.allClasses : modalState.allTags;
-    const selSet = isClass ? modalState.selClassIds : modalState.selTagIds;
+    const query = (document.getElementById(isClass ? 'subcategory-search' : 'tag-search').value || '').toLowerCase();
+    const list  = document.getElementById(isClass ? 'subcategory-chips' : 'tag-chips');
+    const items = isClass ? modalState.allSubcategories : modalState.allTags;
+    const selSet = isClass ? modalState.selSubcategoryIds : modalState.selTagIds;
 
     const filtered = items.filter(item => item.name.toLowerCase().includes(query));
 
     list.innerHTML = filtered.map(item => {
-      const label = isClass && item.groupName ? `${item.groupName} › ${item.name}` : item.name;
+      const label = isClass && item.categoryName ? `${item.categoryName} › ${item.name}` : item.name;
       const sel = selSet.has(item.id) ? ' selected' : '';
       return `<span class="picker-chip${sel}" data-id="${item.id}" data-type="${type}">${esc(label)}</span>`;
     }).join('');
@@ -1760,35 +1769,36 @@
   }
 
   // Chip click — toggle selection or create tag
-  document.getElementById('class-chips').addEventListener('click', e => {
+  document.getElementById('subcategory-chips').addEventListener('click', e => {
     const chip = e.target.closest('.picker-chip');
     if (!chip) return;
     const id = Number(chip.dataset.id);
-    if (modalState.selClassIds.has(id)) modalState.selClassIds.delete(id);
-    else modalState.selClassIds.add(id);
+    if (modalState.selSubcategoryIds.has(id)) modalState.selSubcategoryIds.delete(id);
+    else modalState.selSubcategoryIds.add(id);
     renderChips('class');
   });
 
-  // ── Create-classification sub-modal ────────────────────────────────────────
-  function openCreateClassModal() {
+  // ── Create-subcategory sub-modal ────────────────────────────────────────
+  function openCreateSubcategoryModal() {
     // Reset form
     document.getElementById('cc-name').value = '';
-    document.getElementById('cc-new-group-name').value = '';
+    document.getElementById('cc-description').value = '';
+    document.getElementById('cc-new-category-name').value = '';
     document.getElementById('create-class-error').textContent = '';
-    document.querySelector('input[name="cc-group-option"][value="none"]').checked = true;
-    updateCCGroupSections();
+    document.querySelector('input[name="cc-category-option"][value="none"]').checked = true;
+    updateCCCategorySections();
 
-    // Populate existing-groups dropdown
+    // Populate existing-categories dropdown
     const sel = document.getElementById('cc-existing-select');
     sel.innerHTML = '<option value="">— choose —</option>';
     const existingRadioLabel = document.getElementById('cc-existing-radio-label');
-    if (modalState.allGroups.length === 0) {
+    if (modalState.allCategories.length === 0) {
       existingRadioLabel.style.opacity = '0.4';
       existingRadioLabel.querySelector('input').disabled = true;
     } else {
       existingRadioLabel.style.opacity = '1';
       existingRadioLabel.querySelector('input').disabled = false;
-      modalState.allGroups.forEach(g => {
+      modalState.allCategories.forEach(g => {
         const opt = document.createElement('option');
         opt.value = String(g.id);
         opt.textContent = g.name;
@@ -1804,42 +1814,44 @@
     document.getElementById('create-class-overlay').classList.remove('open');
   }
 
-  function updateCCGroupSections() {
-    const val = document.querySelector('input[name="cc-group-option"]:checked')?.value;
+  function updateCCCategorySections() {
+    const val = document.querySelector('input[name="cc-category-option"]:checked')?.value;
     document.getElementById('cc-existing-section').style.display = val === 'existing' ? '' : 'none';
     document.getElementById('cc-new-section').style.display     = val === 'new'      ? '' : 'none';
   }
 
-  async function handleCreateClassification() {
+  async function handleCreateSubcategory() {
     const errEl  = document.getElementById('create-class-error');
     const btn    = document.getElementById('cc-create-btn');
     const name   = document.getElementById('cc-name').value.trim();
 
     errEl.textContent = '';
-    if (!name) { errEl.textContent = 'Classification name is required.'; return; }
+    if (!name) { errEl.textContent = 'Sub-category name is required.'; return; }
 
-    const groupOption = document.querySelector('input[name="cc-group-option"]:checked')?.value;
-    let groupId   = null;
-    let groupName = null;
+    const categoryOption = document.querySelector('input[name="cc-category-option"]:checked')?.value;
+    let categoryId   = null;
+    let categoryName = null;
 
-    if (groupOption === 'existing') {
+    if (categoryOption === 'existing') {
       const v = document.getElementById('cc-existing-select').value;
-      groupId = v ? Number(v) : null;
-      if (!groupId) { errEl.textContent = 'Please select an existing group.'; return; }
-    } else if (groupOption === 'new') {
-      groupName = document.getElementById('cc-new-group-name').value.trim() || null;
-      if (!groupName) { errEl.textContent = 'Please enter a name for the new group.'; return; }
+      categoryId = v ? Number(v) : null;
+      if (!categoryId) { errEl.textContent = 'Please select an existing category.'; return; }
+    } else if (categoryOption === 'new') {
+      categoryName = document.getElementById('cc-new-category-name').value.trim() || null;
+      if (!categoryName) { errEl.textContent = 'Please enter a name for the new category.'; return; }
     }
 
     btn.disabled = true;
     btn.textContent = 'Creating…';
 
     try {
+      const description = (document.getElementById('cc-description').value || '').trim();
       const payload = { name };
-      if (groupId   != null) payload.groupId   = groupId;
-      if (groupName != null) payload.groupName = groupName;
+      if (categoryId   != null) payload.categoryId   = categoryId;
+      if (categoryName != null) payload.categoryName = categoryName;
+      if (description)       payload.description = description;
 
-      const res  = await apiFetch('/classifications', {
+      const res  = await apiFetch('/subcategories', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify(payload),
@@ -1847,33 +1859,33 @@
       const data = await res.json().catch(() => ({}));
 
       if (!res.ok) {
-        errEl.textContent = data.error || 'Failed to create classification.';
+        errEl.textContent = data.error || 'Failed to create sub-category.';
         return;
       }
 
-      // Resolve the group name for display
-      let resolvedGroupName = null;
-      if (groupOption === 'existing') {
-        resolvedGroupName = modalState.allGroups.find(g => g.id === groupId)?.name ?? null;
-      } else if (groupOption === 'new') {
-        resolvedGroupName = groupName;
-        // If the API returned a new groupId, add it to allGroups so the dropdown stays current
-        if (data.groupId) {
-          const already = modalState.allGroups.some(g => g.id === data.groupId);
-          if (!already) modalState.allGroups.push({ id: data.groupId, name: groupName });
+      // Resolve the category name for display
+      let resolvedCategoryName = null;
+      if (categoryOption === 'existing') {
+        resolvedCategoryName = modalState.allCategories.find(g => g.id === categoryId)?.name ?? null;
+      } else if (categoryOption === 'new') {
+        resolvedCategoryName = categoryName;
+        // If the API returned a new categoryId, add it to allCategories so the dropdown stays current
+        if (data.categoryId) {
+          const already = modalState.allCategories.some(g => g.id === data.categoryId);
+          if (!already) modalState.allCategories.push({ id: data.categoryId, name: categoryName });
         }
       }
 
       // Add to local state and auto-select
-      const newClass = { id: data.id, name: data.name, groupName: resolvedGroupName };
-      modalState.allClasses.push(newClass);
-      modalState.selClassIds.add(data.id);
+      const newClass = { id: data.id, name: data.name, categoryName: resolvedCategoryName };
+      modalState.allSubcategories.push(newClass);
+      modalState.selSubcategoryIds.add(data.id);
 
       closeCreateClassModal();
-      document.getElementById('class-search').value = '';
+      document.getElementById('subcategory-search').value = '';
       renderChips('class');
     } catch (err) {
-      errEl.textContent = 'Failed to create classification: ' + err.message;
+      errEl.textContent = 'Failed to create sub-category: ' + err.message;
     } finally {
       btn.disabled = false;
       btn.textContent = 'Create';
@@ -1887,7 +1899,7 @@
 
   // Enter in cc-name submits the form
   document.getElementById('cc-name').addEventListener('keydown', e => {
-    if (e.key === 'Enter') { e.preventDefault(); handleCreateClassification(); }
+    if (e.key === 'Enter') { e.preventDefault(); handleCreateSubcategory(); }
   });
 
   async function createOrSelectTag(name) {
@@ -1950,7 +1962,7 @@
       title:             document.getElementById('edit-title').value.trim(),
       url:               document.getElementById('edit-url').value.trim() || undefined,
       description:       document.getElementById('edit-description').value.trim() || null,
-      classificationIds: [...modalState.selClassIds],
+      subcategoryIds: [...modalState.selSubcategoryIds],
       tagIds:            [...modalState.selTagIds],
       flags: {
         readLater:   document.getElementById('flag-readLater').checked,

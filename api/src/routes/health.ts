@@ -59,7 +59,7 @@ export function createHealthRoutes({ checkReadiness }: HealthRoutesOptions = {})
       }
     )
     .get(
-      "/categories",
+      "/manage-categories",
       () =>
         new Response(readUI("categories.html"), {
           headers: {
@@ -72,8 +72,8 @@ export function createHealthRoutes({ checkReadiness }: HealthRoutesOptions = {})
           tags: ["health"],
           summary: "Category management web UI",
           description:
-            "Serves the static category/classification management page. " +
-            "Allows users to create, rename, reorder, archive, and restore classifications and groups.",
+            "Serves the static category and sub-category management page. " +
+            "Allows users to create, rename, reorder, archive, and restore categories and sub-categories.",
           responses: {
             200: { description: "HTML page" },
           },

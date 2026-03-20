@@ -77,7 +77,7 @@ async function handleQuickSave(tab) {
       url: t.url,
       title: t.title || t.url,
       description: '',
-      classificationIds: [],
+      subcategoryIds: [],
       tags: [],
       flags: {
         forReview: true,      // Mark for later review
@@ -235,21 +235,21 @@ function apiPost(path, body, opts) { return apiFetch(path, { method: 'POST', bod
  * Messaging API for popup
  *
  * Listens for messages from other parts of the extension (e.g., popup).
- * Handles various requests like fetching initial data, creating tags/classifications, and saving bookmarks.
+ * Handles various requests like fetching initial data, creating tags/sub-categories, and creating bookmarks.
  */
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   (async () => {
     try {
       switch (message?.type) {
-        case 'getInitialData': {
-          const [tab, classifications, tags] = await Promise.all([
+        case 'fetchInitialData': {
+          const [tab, subcategories, tags] = await Promise.all([
             getActiveTab(),
-            apiGet('/classifications', { timeoutMs: 5000 }),
+            apiGet('/subcategories', { timeoutMs: 5000 }),
             apiGet('/tags?limit=20', { timeoutMs: 5000 }),
           ]);
           sendResponse({ ok: true, data: {
             tab: { url: tab?.url || '', title: tab?.title || '', faviconUrl: tab?.favIconUrl || '' },
-            classifications,
+            subcategories,
             tags,
           }});
           break;
@@ -259,12 +259,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           sendResponse({ ok: true, data: res });
           break;
         }
-        case 'createClassification': {
-          const res = await apiPost('/classifications', message.payload, { timeoutMs: 8000 });
+        case 'createSubcategory': {
+          const res = await apiPost('/subcategories', message.payload, { timeoutMs: 8000 });
           sendResponse({ ok: true, data: res });
           break;
         }
-        case 'saveBookmark': {
+        case 'createBookmark': {
           const res = await apiPost('/bookmarks', message.payload, { timeoutMs: 8000 });
           sendResponse({ ok: true, data: res });
           break;

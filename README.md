@@ -28,8 +28,8 @@ Everything is implemented in JavaScript (no TypeScript) for the extension; the A
   - [Health & UI](#health--ui)
   - [Bookmarks](#bookmarks)
   - [Tags](#tags)
-  - [Classifications](#classifications)
-  - [Classification Groups](#classification-groups)
+  - [Sub-categories](#subcategories)
+  - [Categories](#categories)
 - [Chrome Extension](#chrome-extension)
 - [Backup](#backup)
 - [Troubleshooting](#troubleshooting)
@@ -105,7 +105,7 @@ curl http://localhost:11650/ready
 | Swagger UI | `http://localhost:11650/docs` |
 | OpenAPI JSON | `http://localhost:11650/openapi.json` |
 | Bookmark viewer | `http://localhost:11650/app` |
-| Category manager | `http://localhost:11650/categories` |
+| Category manager | `http://localhost:11650/manage-categories` |
 | phpMyAdmin | `http://localhost:11651` |
 
 ### 4. Load the Chrome extension
@@ -153,7 +153,7 @@ bookmarkManager/
 │   ├── src/
 │   │   ├── server.ts       # Elysia app + routes
 │   │   ├── db/             # Drizzle schema, client, migrations
-│   │   ├── ui/             # Served HTML pages (/app, /categories)
+│   │   ├── ui/             # Served HTML pages (/app, /manage-categories)
 │   │   └── smoke/          # No-DB health smoke test
 │   ├── Dockerfile
 │   ├── drizzle.config.ts
@@ -206,7 +206,7 @@ Interactive docs always available at **`http://localhost:11650/docs`**.
 | `GET` | `/docs` | Swagger UI |
 | `GET` | `/openapi.json` | OpenAPI spec |
 | `GET` | `/app` | Bookmark viewer UI |
-| `GET` | `/categories` | Category management UI |
+| `GET` | `/manage-categories` | Category management UI |
 | `GET` | `/flag-counts` | Count of active bookmarks per flag |
 | `GET` | `/backup` | Download a gzipped MariaDB dump (requires `Authorization: Bearer` header) |
 
@@ -216,9 +216,9 @@ Interactive docs always available at **`http://localhost:11650/docs`**.
 
 | Method | Path | Description |
 |---|---|---|
-| `GET` | `/bookmarks` | List/filter bookmarks (`?limit=&offset=&classificationId=&tagId=&flag=&sortBy=&archived=`) |
+| `GET` | `/bookmarks` | List/filter bookmarks (`?limit=&offset=&subcategoryId=&tagId=&flag=&sortBy=&archived=`) |
 | `POST` | `/bookmarks` | Create bookmark |
-| `PATCH` | `/bookmarks/:id` | Edit title, description, flags, tags, classifications |
+| `PATCH` | `/bookmarks/:id` | Edit title, description, flags, tags, sub-categories |
 | `PATCH` | `/bookmarks/:id/archive` | Soft-delete (sets `archivedAt`) |
 | `PATCH` | `/bookmarks/:id/restore` | Restore archived bookmark |
 
@@ -235,31 +235,31 @@ Interactive docs always available at **`http://localhost:11650/docs`**.
 
 [↑ Table of Contents](#table-of-contents)
 
-### Classifications
+### Sub-categories
 
 | Method | Path | Description |
 |---|---|---|
-| `GET` | `/classifications` | All active classifications, nested by group |
-| `POST` | `/classifications` | Create classification (optionally with new group) |
-| `PATCH` | `/classifications/:id` | Rename classification |
-| `PATCH` | `/classifications/:id/reorder` | Set display order |
-| `PATCH` | `/classifications/:id/archive` | Archive classification |
-| `PATCH` | `/classifications/:id/restore` | Restore archived classification |
+| `GET` | `/subcategories` | All active sub-categories, nested by category |
+| `POST` | `/subcategories` | Create sub-category with optional description and category |
+| `PATCH` | `/subcategories/:id` | Rename sub-category and/or update its description |
+| `PATCH` | `/subcategories/:id/reorder` | Set display order |
+| `PATCH` | `/subcategories/:id/archive` | Archive sub-category |
+| `PATCH` | `/subcategories/:id/restore` | Restore archived sub-category |
 
 [↑ Table of Contents](#table-of-contents)
 
-### Classification Groups
+### Categories
 
 | Method | Path | Description |
 |---|---|---|
-| `GET` | `/classifications/groups` | List groups with nested classifications (management view) |
-| `POST` | `/classifications/groups` | Create group |
-| `PATCH` | `/classifications/groups/:id` | Rename group |
-| `PATCH` | `/classifications/groups/:id/reorder` | Set display order |
-| `PATCH` | `/classifications/groups/:id/archive` | Archive group |
-| `PATCH` | `/classifications/groups/:id/restore` | Restore archived group |
+| `GET` | `/categories` | List categories with nested sub-categories (management view) |
+| `POST` | `/categories` | Create category with optional description |
+| `PATCH` | `/categories/:id` | Rename category and/or update its description |
+| `PATCH` | `/categories/:id/reorder` | Set display order |
+| `PATCH` | `/categories/:id/archive` | Archive category |
+| `PATCH` | `/categories/:id/restore` | Restore archived category |
 
-**Data lifecycle:** nothing is hard-deleted. Entity records and bookmark association rows are archived via `archivedAt`, and replacing bookmark tags/classifications archives removed links instead of deleting them.
+**Data lifecycle:** nothing is hard-deleted. Entity records and bookmark association rows are archived via `archivedAt`, and replacing bookmark tags/sub-categories archives removed links instead of deleting them.
 
 **Duplicate URL detection:** `POST /bookmarks` returns `409` with existing bookmark metadata when an active bookmark already has that URL. This is enforced by the database, so concurrent creates cannot produce duplicate active URLs, while archived bookmarks can still share the same URL.
 

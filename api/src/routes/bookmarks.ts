@@ -1,12 +1,12 @@
 import { Elysia, t } from "elysia";
-import { and, asc, desc, eq, inArray, isNotNull, isNull, like, ne, notInArray, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, isNull, like, or, sql } from "drizzle-orm";
 import { db } from "../db/client.ts";
 import {
-  bookmarkClassifications,
+  bookmarkSubcategories,
   bookmarks,
   bookmarkTags,
-  classificationGroups,
-  classifications,
+  categories,
+  subcategories,
   tags,
 } from "../db/schema.ts";
 import {
@@ -21,13 +21,6 @@ import {
   S,
   type BookmarkFlagColumnMap,
 } from "./shared.ts";
-
-// MariaDB/mysql2 driver does not handle NOT IN (?) with a single value correctly.
-// Use ne() for a single exclusion and notInArray() only for multiple.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function notInList(col: any, ids: number[]) {
-  return ids.length === 1 ? ne(col, ids[0]) : notInArray(col, ids);
-}
 
 export const bookmarkRoutes = new Elysia()
   .post(
@@ -51,7 +44,7 @@ export const bookmarkRoutes = new Elysia()
 
       const flags = body.flags ?? {};
       const tagIds = [...new Set(body.tags ?? [])].filter(Boolean);
-      const classIds = [...new Set(body.classificationIds ?? [])].filter(Boolean);
+      const subcategoryIds = [...new Set(body.subcategoryIds ?? [])].filter(Boolean);
 
       let bookmarkId: number;
       try {
@@ -79,10 +72,10 @@ export const bookmarkRoutes = new Elysia()
               .values(tagIds.map((tagId) => ({ bookmarkId: id, tagId })));
           }
 
-          if (classIds.length > 0) {
+          if (subcategoryIds.length > 0) {
             await tx
-              .insert(bookmarkClassifications)
-              .values(classIds.map((classificationId) => ({ bookmarkId: id, classificationId })));
+              .insert(bookmarkSubcategories)
+              .values(subcategoryIds.map((subcategoryId) => ({ bookmarkId: id, subcategoryId })));
           }
 
           return id;
@@ -115,7 +108,7 @@ export const bookmarkRoutes = new Elysia()
         url: t.String({ description: "Full URL of the page to bookmark. Whitespace is trimmed. Required." }),
         title: t.String({ description: "Page title. Whitespace is trimmed. Required." }),
         description: t.Optional(t.String({ description: "Optional freeform notes or description for the bookmark." })),
-        classificationIds: t.Optional(t.Array(t.Number(), { description: "IDs of classifications to attach. Duplicates are deduplicated automatically." })),
+        subcategoryIds: t.Optional(t.Array(t.Number(), { description: "IDs of sub-categories to attach. Duplicates are deduplicated automatically." })),
         tags: t.Optional(t.Array(t.Number(), { description: "IDs of tags to attach. Duplicates are deduplicated automatically." })),
         flags: t.Optional(
           t.Object({
@@ -133,13 +126,13 @@ export const bookmarkRoutes = new Elysia()
         tags: ["bookmarks"],
         summary: "Create a bookmark",
         description:
-          "Saves a new bookmark with optional tags, classifications, and flags.\n\n" +
+          "Saves a new bookmark with optional tags, sub-categories, and flags.\n\n" +
           "**Duplicate detection:** by default, if an active bookmark with the same URL already exists " +
           "a `409` is returned with a `duplicates` array listing the existing records. " +
           "Pass `allowDuplicate: true` to skip the preflight lookup and rely on the database uniqueness constraint instead; " +
           "active duplicate URLs still return `409`.\n\n" +
-          "**Tags and classifications** must already exist; pass their integer IDs in `tags` and " +
-          "`classificationIds`. Duplicates in those arrays are silently deduplicated.\n\n" +
+          "**Tags and sub-categories** must already exist; pass their integer IDs in `tags` and " +
+          "`subcategoryIds`. Duplicates in those arrays are silently deduplicated.\n\n" +
           "**Flags** are all `false` by default. The special `flags.archived` field allows the " +
           "Chrome extension to save a bookmark directly into the archived state (e.g. when importing " +
           "historical data).",
@@ -259,16 +252,16 @@ export const bookmarkRoutes = new Elysia()
         offset = n;
       }
 
-      // --- classificationId ---
-      const rawClassificationId = query.classificationId;
-      let classificationId: number | null = null;
-      if (rawClassificationId !== undefined) {
-        const n = Number(rawClassificationId);
+      // --- subcategoryId ---
+      const rawSubcategoryId = query.subcategoryId;
+      let subcategoryId: number | null = null;
+      if (rawSubcategoryId !== undefined) {
+        const n = Number(rawSubcategoryId);
         if (!Number.isInteger(n) || n < 1) {
           set.status = 400;
-          return { error: "classificationId must be a positive integer" };
+          return { error: "subcategoryId must be a positive integer" };
         }
-        classificationId = n;
+        subcategoryId = n;
       }
 
       // --- tagId ---
@@ -336,12 +329,13 @@ export const bookmarkRoutes = new Elysia()
         conditions.push(eq(flagColMap[flag], 1));
       }
 
-      if (classificationId) {
+      if (subcategoryId) {
         const matchingIds = db
-          .select({ bookmarkId: bookmarkClassifications.bookmarkId })
-          .from(bookmarkClassifications)
+          .select({ bookmarkId: bookmarkSubcategories.bookmarkId })
+          .from(bookmarkSubcategories)
           .where(and(
-            eq(bookmarkClassifications.classificationId, classificationId),
+            eq(bookmarkSubcategories.subcategoryId, subcategoryId),
+            isNull(bookmarkSubcategories.archivedAt),
           ));
         conditions.push(inArray(bookmarks.id, matchingIds));
       }
@@ -352,6 +346,7 @@ export const bookmarkRoutes = new Elysia()
           .from(bookmarkTags)
           .where(and(
             eq(bookmarkTags.tagId, tagId),
+            isNull(bookmarkTags.archivedAt),
           ));
         conditions.push(inArray(bookmarks.id, matchingIds));
       }
@@ -396,18 +391,18 @@ export const bookmarkRoutes = new Elysia()
                 )),
               db
                 .select({
-                  bookmarkId: bookmarkClassifications.bookmarkId,
-                  classId: classifications.id,
-                  className: classifications.name,
-                  groupId: classificationGroups.id,
-                  groupName: classificationGroups.name,
+                  bookmarkId: bookmarkSubcategories.bookmarkId,
+                  classId: subcategories.id,
+                  className: subcategories.name,
+                  categoryId: categories.id,
+                  categoryName: categories.name,
                 })
-                .from(bookmarkClassifications)
-                .innerJoin(classifications, eq(bookmarkClassifications.classificationId, classifications.id))
-                .leftJoin(classificationGroups, eq(classifications.groupId, classificationGroups.id))
+                .from(bookmarkSubcategories)
+                .innerJoin(subcategories, eq(bookmarkSubcategories.subcategoryId, subcategories.id))
+                .leftJoin(categories, eq(subcategories.categoryId, categories.id))
                 .where(and(
-                  inArray(bookmarkClassifications.bookmarkId, ids),
-                  isNull(bookmarkClassifications.archivedAt),
+                  inArray(bookmarkSubcategories.bookmarkId, ids),
+                  isNull(bookmarkSubcategories.archivedAt),
                 )),
             ])
           : [[], []];
@@ -417,9 +412,9 @@ export const bookmarkRoutes = new Elysia()
         tags: tagRows
           .filter((tagRow) => tagRow.bookmarkId === b.id)
           .map((tagRow) => ({ id: tagRow.tagId, name: tagRow.tagName })),
-        classifications: classRows
+        subcategories: classRows
           .filter((classRow) => classRow.bookmarkId === b.id)
-          .map((classRow) => ({ id: classRow.classId, name: classRow.className, groupId: classRow.groupId ?? null, groupName: classRow.groupName ?? null })),
+          .map((classRow) => ({ id: classRow.classId, name: classRow.className, categoryId: classRow.categoryId ?? null, categoryName: classRow.categoryName ?? null })),
       }));
 
       return { items, total: Number(total) };
@@ -429,7 +424,7 @@ export const bookmarkRoutes = new Elysia()
         limit: t.Optional(t.String({ description: "Maximum number of bookmarks to return. Integer 1–100. Default: 20." })),
         offset: t.Optional(t.String({ description: "Zero-based pagination offset. Non-negative integer. Default: 0." })),
         q: t.Optional(t.String({ description: "Full-text search query. Matches against title, URL, and description using a case-insensitive LIKE search. Combinable with all other filters." })),
-        classificationId: t.Optional(t.String({ description: "Filter to bookmarks assigned to this classification ID. Must be a positive integer." })),
+        subcategoryId: t.Optional(t.String({ description: "Filter to bookmarks assigned to this subcategory ID. Must be a positive integer." })),
         tagId: t.Optional(t.String({ description: "Filter to bookmarks that have this tag ID attached. Must be a positive integer." })),
         flag: t.Optional(t.String({ description: "Filter to bookmarks with a specific flag set. Allowed values: `readLater`, `hotTopic`, `cheatsheets`, `forReview`." })),
         sortBy: t.Optional(t.String({ description: "Sort order by creation date. `newest` (default) or `oldest`." })),
@@ -439,16 +434,16 @@ export const bookmarkRoutes = new Elysia()
         tags: ["bookmarks"],
         summary: "List bookmarks",
         description:
-          "Returns a paginated list of bookmarks with their full tag and classification associations.\n\n" +
+          "Returns a paginated list of bookmarks with their full tag and sub-category associations.\n\n" +
           "**Default behaviour:** returns active (non-archived) bookmarks, newest first, 20 per page.\n\n" +
           "**Filters (all combinable with AND logic):**\n" +
           "- `q` - full-text search on title, URL, and description (case-insensitive LIKE)\n" +
-          "- `classificationId` - bookmarks assigned to that classification\n" +
+          "- `subcategoryId` - bookmarks assigned to that subcategory\n" +
           "- `tagId` - bookmarks that have that tag\n" +
           "- `flag` - bookmarks with that flag set (`readLater` | `hotTopic` | `cheatsheets` | `forReview`)\n" +
           "- `archived=true` - show archived bookmarks (mutually exclusive with active)\n\n" +
-          "Each bookmark item includes a fully resolved `tags` array and `classifications` array " +
-          "(with parent group name). Flags are returned as `0`/`1` integers.",
+          "Each bookmark item includes a fully resolved `tags` array and `subcategories` array " +
+          "(with parent category name). Flags are returned as `0`/`1` integers.",
         responses: {
           200: {
             description: "Paginated bookmark list",
@@ -472,11 +467,11 @@ export const bookmarkRoutes = new Elysia()
                       id: S.num("Tag ID"),
                       name: S.str("Tag name"),
                     })),
-                    classifications: S.arr("Attached classifications", S.obj("Classification", {
-                      id: S.num("Classification ID"),
-                      name: S.str("Classification name"),
-                      groupId: S.nullable(S.num("Parent group ID")),
-                      groupName: S.nullable(S.str("Parent group name")),
+                    subcategories: S.arr("Attached sub-categories", S.obj("Sub-category", {
+                      id: S.num("Sub-category ID"),
+                      name: S.str("Sub-category name"),
+                      categoryId: S.nullable(S.num("Parent category ID")),
+                      categoryName: S.nullable(S.str("Parent category name")),
                     })),
                   })),
                   total: S.num("Total matching bookmarks (ignoring limit/offset)"),
@@ -516,7 +511,7 @@ export const bookmarkRoutes = new Elysia()
         if (flags.forReview !== undefined) updates.forReview = flags.forReview ? 1 : 0;
       }
 
-      const hasAssociationChanges = body.tagIds !== undefined || body.classificationIds !== undefined;
+      const hasAssociationChanges = body.tagIds !== undefined || body.subcategoryIds !== undefined;
 
       await db.transaction(async (tx) => {
         // Always touch updatedAt when anything changes (scalar or associations)
@@ -529,87 +524,83 @@ export const bookmarkRoutes = new Elysia()
         if (body.tagIds !== undefined) {
           const uniqueTagIds = [...new Set(body.tagIds)].filter(Boolean);
 
-          // Soft-archive removed associations
-          if (uniqueTagIds.length > 0) {
+          const existingTagLinks = await tx
+            .select({ id: bookmarkTags.id, tagId: bookmarkTags.tagId, archivedAt: bookmarkTags.archivedAt })
+            .from(bookmarkTags)
+            .where(eq(bookmarkTags.bookmarkId, id));
+
+          const desiredTagIds = new Set(uniqueTagIds);
+          const tagsToArchive = existingTagLinks
+            .filter((link) => link.archivedAt === null && !desiredTagIds.has(link.tagId))
+            .map((link) => link.id);
+
+          if (tagsToArchive.length > 0) {
             await tx.update(bookmarkTags)
               .set({ archivedAt: sql`NOW()` })
-              .where(and(
-                eq(bookmarkTags.bookmarkId, id),
-                notInList(bookmarkTags.tagId, uniqueTagIds),
-                isNull(bookmarkTags.archivedAt),
-              ));
-          } else {
-            // Archiving all
-            await tx.update(bookmarkTags)
-              .set({ archivedAt: sql`NOW()` })
-              .where(and(
-                eq(bookmarkTags.bookmarkId, id),
-                isNull(bookmarkTags.archivedAt),
-              ));
+              .where(inArray(bookmarkTags.id, tagsToArchive));
           }
 
-          if (uniqueTagIds.length > 0) {
-            for (const tagId of uniqueTagIds) {
-              // Try to un-archive an existing row first; if none exists, insert
-              const [existing] = await tx
-                .select({ id: bookmarkTags.id, archivedAt: bookmarkTags.archivedAt })
-                .from(bookmarkTags)
-                .where(and(eq(bookmarkTags.bookmarkId, id), eq(bookmarkTags.tagId, tagId)));
+          const existingTagById = new Map<number, Array<typeof existingTagLinks[number]>>();
+          for (const link of existingTagLinks) {
+            const bucket = existingTagById.get(link.tagId);
+            if (bucket) bucket.push(link);
+            else existingTagById.set(link.tagId, [link]);
+          }
 
-              if (existing) {
-                if (existing.archivedAt !== null) {
-                  await tx.update(bookmarkTags)
-                    .set({ archivedAt: null })
-                    .where(eq(bookmarkTags.id, existing.id));
-                }
-                // already active — nothing to do
-              } else {
-                await tx.insert(bookmarkTags).values({ bookmarkId: id, tagId });
-              }
+          for (const tagId of uniqueTagIds) {
+            const matchingLinks = existingTagById.get(tagId) ?? [];
+            const activeLink = matchingLinks.find((link) => link.archivedAt === null);
+            if (activeLink) continue;
+
+            const archivedLink = matchingLinks.find((link) => link.archivedAt !== null);
+            if (archivedLink) {
+              await tx.update(bookmarkTags)
+                .set({ archivedAt: null })
+                .where(eq(bookmarkTags.id, archivedLink.id));
+            } else {
+              await tx.insert(bookmarkTags).values({ bookmarkId: id, tagId });
             }
           }
         }
 
-        if (body.classificationIds !== undefined) {
-          const uniqueClassIds = [...new Set(body.classificationIds)].filter(Boolean);
+        if (body.subcategoryIds !== undefined) {
+          const uniqueSubcategoryIds = [...new Set(body.subcategoryIds)].filter(Boolean);
 
-          // Soft-archive removed associations
-          if (uniqueClassIds.length > 0) {
-            await tx.update(bookmarkClassifications)
+          const existingSubcategoryLinks = await tx
+            .select({ id: bookmarkSubcategories.id, subcategoryId: bookmarkSubcategories.subcategoryId, archivedAt: bookmarkSubcategories.archivedAt })
+            .from(bookmarkSubcategories)
+            .where(eq(bookmarkSubcategories.bookmarkId, id));
+
+          const desiredSubcategoryIds = new Set(uniqueSubcategoryIds);
+          const subcategoriesToArchive = existingSubcategoryLinks
+            .filter((link) => link.archivedAt === null && !desiredSubcategoryIds.has(link.subcategoryId))
+            .map((link) => link.id);
+
+          if (subcategoriesToArchive.length > 0) {
+            await tx.update(bookmarkSubcategories)
               .set({ archivedAt: sql`NOW()` })
-              .where(and(
-                eq(bookmarkClassifications.bookmarkId, id),
-                notInList(bookmarkClassifications.classificationId, uniqueClassIds),
-                isNull(bookmarkClassifications.archivedAt),
-              ));
-          } else {
-            await tx.update(bookmarkClassifications)
-              .set({ archivedAt: sql`NOW()` })
-              .where(and(
-                eq(bookmarkClassifications.bookmarkId, id),
-                isNull(bookmarkClassifications.archivedAt),
-              ));
+              .where(inArray(bookmarkSubcategories.id, subcategoriesToArchive));
           }
 
-          if (uniqueClassIds.length > 0) {
-            for (const classificationId of uniqueClassIds) {
-              const [existing] = await tx
-                .select({ id: bookmarkClassifications.id, archivedAt: bookmarkClassifications.archivedAt })
-                .from(bookmarkClassifications)
-                .where(and(
-                  eq(bookmarkClassifications.bookmarkId, id),
-                  eq(bookmarkClassifications.classificationId, classificationId),
-                ));
+          const existingSubcategoryById = new Map<number, Array<typeof existingSubcategoryLinks[number]>>();
+          for (const link of existingSubcategoryLinks) {
+            const bucket = existingSubcategoryById.get(link.subcategoryId);
+            if (bucket) bucket.push(link);
+            else existingSubcategoryById.set(link.subcategoryId, [link]);
+          }
 
-              if (existing) {
-                if (existing.archivedAt !== null) {
-                  await tx.update(bookmarkClassifications)
-                    .set({ archivedAt: null })
-                    .where(eq(bookmarkClassifications.id, existing.id));
-                }
-              } else {
-                await tx.insert(bookmarkClassifications).values({ bookmarkId: id, classificationId });
-              }
+          for (const subcategoryId of uniqueSubcategoryIds) {
+            const matchingLinks = existingSubcategoryById.get(subcategoryId) ?? [];
+            const activeLink = matchingLinks.find((link) => link.archivedAt === null);
+            if (activeLink) continue;
+
+            const archivedLink = matchingLinks.find((link) => link.archivedAt !== null);
+            if (archivedLink) {
+              await tx.update(bookmarkSubcategories)
+                .set({ archivedAt: null })
+                .where(eq(bookmarkSubcategories.id, archivedLink.id));
+            } else {
+              await tx.insert(bookmarkSubcategories).values({ bookmarkId: id, subcategoryId });
             }
           }
         }
@@ -624,7 +615,7 @@ export const bookmarkRoutes = new Elysia()
         url: t.Optional(t.String({ description: "New URL. Whitespace is trimmed. Cannot be set to an empty string." })),
         description: t.Optional(t.Nullable(t.String({ description: "New description. Pass null to clear the existing description." }))),
         tagIds: t.Optional(t.Array(t.Number(), { description: "Replacement tag ID list. When provided, ALL existing tag associations are replaced with this set. Pass an empty array to remove all tags." })),
-        classificationIds: t.Optional(t.Array(t.Number(), { description: "Replacement classification ID list. When provided, ALL existing classification associations are replaced with this set. Pass an empty array to remove all classifications." })),
+        subcategoryIds: t.Optional(t.Array(t.Number(), { description: "Replacement sub-category ID list. When provided, ALL existing sub-category associations are replaced with this set. Pass an empty array to remove all sub-categories." })),
         flags: t.Optional(t.Object({
           readLater: t.Optional(t.Boolean({ description: "Set or clear the Read Later flag." })),
           hotTopic: t.Optional(t.Boolean({ description: "Set or clear the Hot Topic flag." })),
@@ -638,10 +629,10 @@ export const bookmarkRoutes = new Elysia()
         description:
           "Partially updates a bookmark. Only fields present in the request body are changed - " +
           "omitting a field leaves its current value untouched.\n\n" +
-          "**Tag and classification replacement:** when `tagIds` or `classificationIds` are provided, " +
+          "**Tag and sub-category replacement:** when `tagIds` or `subcategoryIds` are provided, " +
           "the existing associations are **fully replaced** (not merged). " +
           "Removed associations are soft-archived; re-adding a previously removed association restores it. " +
-          "Send an empty array to detach all tags or classifications.\n\n" +
+          "Send an empty array to detach all tags or sub-categories.\n\n" +
           "**Flags:** each flag is independent. Omitting a flag key leaves it unchanged. " +
           "Pass `false` to clear a flag that was previously set.\n\n" +
           "**URL:** when provided, whitespace is trimmed and an empty string is rejected with 400.\n\n" +
@@ -674,7 +665,7 @@ export const bookmarkRoutes = new Elysia()
           "Soft-deletes a bookmark by setting its `archivedAt` timestamp to the current UTC time. " +
           "The bookmark record is preserved and can be fully restored via `PATCH /bookmarks/:id/restore`.\n\n" +
           "Archived bookmarks are excluded from `GET /bookmarks` by default and do not appear in flag counts. " +
-          "Tag and classification associations are retained during archiving.",
+          "Tag and subcategory associations are retained during archiving.",
         responses: {
           200: { ...OkResp, description: "Bookmark archived" },
           400: { ...ErrorResp, description: "id must be a positive integer" },
@@ -703,7 +694,7 @@ export const bookmarkRoutes = new Elysia()
         description:
           "Reverses an archive operation by clearing the `archivedAt` timestamp (sets it to `null`). " +
           "The bookmark immediately becomes active again and reappears in standard queries.\n\n" +
-          "All tag and classification associations that were present at archive time are still intact.",
+          "All tag and subcategory associations that were present at archive time are still intact.",
         responses: {
           200: { ...OkResp, description: "Bookmark restored to active" },
           400: { ...ErrorResp, description: "id must be a positive integer" },

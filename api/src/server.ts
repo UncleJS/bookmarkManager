@@ -4,10 +4,10 @@ import { swagger } from "@elysiajs/swagger";
 import { pool } from "./db/client.ts";
 import { backupRoutes } from "./routes/backup.ts";
 import { bookmarkRoutes } from "./routes/bookmarks.ts";
-import { classificationRoutes } from "./routes/classifications.ts";
-import { groupRoutes } from "./routes/groups.ts";
+import { categoryRoutes } from "./routes/categories.ts";
 import { createHealthRoutes } from "./routes/health.ts";
 import { getValidationErrorMessage } from "./routes/shared.ts";
+import { subcategoryRoutes } from "./routes/subcategories.ts";
 import { tagRoutes } from "./routes/tags.ts";
 
 const PORT = Number(process.env.API_PORT ?? 11650);
@@ -21,7 +21,7 @@ function isAuthExempt(path: string): boolean {
     path === "/health" ||
     path === "/ready" ||
     path === "/app" ||
-    path === "/categories" ||
+    path === "/manage-categories" ||
     path === "/config" ||
     path === "/openapi.json" ||
     path === "/backup" ||
@@ -73,18 +73,18 @@ export function buildApp({ checkReadiness }: BuildAppOptions = {}) {
         path: "/docs",
         documentation: {
           info: {
-            title: "Bookmark Manager API",
-            version: "0.1.0",
-            description:
-              "REST API for the Bookmark Manager Chrome extension.\n\n" +
-              "Manages bookmarks, tags, classifications, and classification groups.\n\n" +
-              "**Auth model:** all bookmark-management routes require `Authorization: Bearer <API_TOKEN>` " +
-              "(set `API_TOKEN` in `api/.env`). " +
-              "Health probes (`/health`, `/ready`), static UI pages (`/app`, `/categories`), " +
-              "and the API docs (`/docs`) are exempt. " +
-              "The `GET /backup` endpoint additionally requires its own `Authorization: Bearer <BACKUP_TOKEN>`.\n\n" +
-              "**Data lifecycle:** records are never hard-deleted. Entity rows and bookmark association rows " +
-              "use `archivedAt` for archive-only lifecycle, and archived associations are reactivated when re-attached.\n\n" +
+              title: "Bookmark Manager API",
+              version: "0.1.0",
+              description:
+                "REST API for the Bookmark Manager Chrome extension.\n\n" +
+               "Manages bookmarks, tags, categories, and sub-categories.\n\n" +
+               "**Auth model:** all bookmark-management routes require `Authorization: Bearer <API_TOKEN>` " +
+               "(set `API_TOKEN` in `api/.env`). " +
+               "Health probes (`/health`, `/ready`), static UI pages (`/app`, `/manage-categories`), " +
+               "and the API docs (`/docs`) are exempt. " +
+               "The `GET /backup` endpoint additionally requires its own `Authorization: Bearer <BACKUP_TOKEN>`.\n\n" +
+               "**Data lifecycle:** records are never hard-deleted. Entity rows and bookmark association rows " +
+               "use `archivedAt` for archive-only lifecycle, and archived associations are reactivated when re-attached.\n\n" +
               "**Timestamps:** stored and returned as UTC. The `archivedAt` field is `null` " +
               "while a record is active and set to a UTC datetime when archived.",
           },
@@ -92,8 +92,8 @@ export function buildApp({ checkReadiness }: BuildAppOptions = {}) {
             { name: "health", description: "Health check and UI entry points" },
             { name: "bookmarks", description: "Create, read, update, archive, and restore bookmarks" },
             { name: "tags", description: "Manage tags and attach them to bookmarks" },
-            { name: "classifications", description: "Manage classifications (categories) and assign them to bookmarks" },
-            { name: "groups", description: "Manage classification groups that organise classifications" },
+            { name: "categories", description: "Manage categories that organise sub-categories" },
+            { name: "subcategories", description: "Manage sub-categories and assign them to bookmarks" },
             { name: "backup", description: "Generate authenticated MariaDB backup downloads" },
           ],
         },
@@ -107,9 +107,9 @@ export function buildApp({ checkReadiness }: BuildAppOptions = {}) {
       })
     )
     .use(tagRoutes)
-    .use(classificationRoutes)
+    .use(subcategoryRoutes)
     .use(bookmarkRoutes)
-    .use(groupRoutes)
+    .use(categoryRoutes)
     .use(backupRoutes);
 }
 

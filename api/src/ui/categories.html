@@ -94,8 +94,8 @@
       padding: 24px 20px 60px;
     }
 
-    /* ── Group card ──────────────────────────────────────────────────────── */
-    .group-card {
+    /* ── Category card ──────────────────────────────────────────────────────── */
+    .category-card {
       background: var(--surface);
       border: 1px solid var(--border);
       border-radius: 8px;
@@ -104,11 +104,11 @@
       transition: opacity 0.2s;
     }
 
-    .group-card.archived-row {
+    .category-card.archived-row {
       opacity: 0.6;
     }
 
-    .group-header {
+    .category-header {
       display: flex;
       align-items: center;
       gap: 10px;
@@ -142,11 +142,27 @@
     .btn-order:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
     .btn-order:disabled { opacity: 0.25; cursor: not-allowed; }
 
-    .group-name {
+    .category-name {
       flex: 1;
       font-size: 14px;
       font-weight: 700;
       color: var(--text);
+    }
+
+    .category-name-wrap {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+    }
+
+    .category-desc {
+      font-size: 11px;
+      color: var(--text-muted);
+      opacity: 0.65;
+      font-weight: 400;
+      margin-top: 1px;
+      line-height: 1.3;
     }
 
     .inline-edit-wrap {
@@ -167,6 +183,22 @@
       border-radius: 4px;
       outline: none;
     }
+
+    .inline-desc-input {
+      width: 100%;
+      background: var(--surface3);
+      border: 1px solid var(--border2);
+      color: var(--text);
+      font-family: inherit;
+      font-size: 12px;
+      padding: 3px 8px;
+      border-radius: 4px;
+      outline: none;
+      resize: none;
+      transition: border-color 0.1s;
+      margin-top: 4px;
+    }
+    .inline-desc-input:focus { border-color: var(--accent); }
 
     .badge-archived {
       font-size: 10px;
@@ -196,25 +228,40 @@
     .btn-icon.confirm { border-color: var(--accent); color: var(--accent); }
     .btn-icon.cancel  { border-color: var(--border2); color: var(--text-muted); }
 
-    /* ── Classification list ─────────────────────────────────────────────── */
-    .class-list {
+    /* ── Sub-category list ─────────────────────────────────────────────── */
+    .subcategory-list {
       padding: 8px 16px 12px;
     }
 
-    .class-row {
+    .subcategory-row {
       display: flex;
       align-items: center;
       gap: 8px;
       padding: 5px 0;
       border-bottom: 1px solid var(--border);
     }
-    .class-row:last-child { border-bottom: none; }
-    .class-row.archived-row { opacity: 0.55; }
+    .subcategory-row:last-child { border-bottom: none; }
+    .subcategory-row.archived-row { opacity: 0.55; }
 
-    .class-name {
+    .subcategory-name {
       flex: 1;
       font-size: 13px;
       color: var(--text);
+    }
+
+    .subcategory-desc {
+      font-size: 11px;
+      color: var(--text-muted);
+      opacity: 0.65;
+      margin-top: 1px;
+      line-height: 1.3;
+    }
+
+    .subcategory-name-wrap {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
     }
 
     .count-badge {
@@ -228,13 +275,19 @@
       flex-shrink: 0;
     }
 
-    /* ── Add classification row ──────────────────────────────────────────── */
-    .add-class-row {
+    /* ── Add subcategory row ──────────────────────────────────────────── */
+    .add-subcategory-row {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      padding: 8px 0 0;
+      margin-top: 4px;
+    }
+
+    .add-class-inputs {
       display: flex;
       align-items: center;
       gap: 8px;
-      padding: 8px 0 0;
-      margin-top: 4px;
     }
 
     .add-input {
@@ -251,6 +304,21 @@
     }
     .add-input:focus { border-color: var(--accent); }
 
+    .add-desc-input {
+      width: 100%;
+      background: var(--surface3);
+      border: 1px solid var(--border2);
+      color: var(--text);
+      font-family: inherit;
+      font-size: 12px;
+      padding: 4px 10px;
+      border-radius: 4px;
+      outline: none;
+      transition: border-color 0.1s;
+      resize: none;
+    }
+    .add-desc-input:focus { border-color: var(--accent); }
+
     .btn-add {
       background: var(--accent-dim);
       border: 1px solid var(--accent);
@@ -266,15 +334,15 @@
     .btn-add:hover { background: #254f8a; }
     .btn-add:disabled { opacity: 0.45; cursor: not-allowed; }
 
-    /* ── Add group footer ────────────────────────────────────────────────── */
-    #add-group-section {
+    /* ── Add category footer ────────────────────────────────────────────────── */
+    #add-category-section {
       margin-bottom: 20px;
       display: flex;
       gap: 10px;
       align-items: center;
     }
 
-    #add-group-input {
+    #add-category-input {
       flex: 1;
       background: var(--surface);
       border: 1px solid var(--border2);
@@ -286,9 +354,9 @@
       outline: none;
       transition: border-color 0.1s;
     }
-    #add-group-input:focus { border-color: var(--accent); }
+    #add-category-input:focus { border-color: var(--accent); }
 
-    #btn-add-group {
+    #btn-add-category {
       background: var(--accent-dim);
       border: 1px solid var(--accent);
       color: var(--accent);
@@ -300,8 +368,8 @@
       white-space: nowrap;
       transition: background 0.1s;
     }
-    #btn-add-group:hover { background: #254f8a; }
-    #btn-add-group:disabled { opacity: 0.45; cursor: not-allowed; }
+    #btn-add-category:hover { background: #254f8a; }
+    #btn-add-category:disabled { opacity: 0.45; cursor: not-allowed; }
 
     /* ── Toast ───────────────────────────────────────────────────────────── */
     #toast {
@@ -350,13 +418,17 @@
 
   <div id="page">
 
-    <div id="add-group-section" style="display:none">
-      <input id="add-group-input" type="text" placeholder="New group name…" maxlength="255"
-             onkeydown="if(event.key==='Enter') addGroup()" />
-      <button id="btn-add-group" onclick="addGroup()">+ Add Group</button>
+    <div id="add-category-section" style="display:none">
+      <input id="add-category-input" type="text" placeholder="New category name…" maxlength="255"
+             onkeydown="if(event.key==='Enter') addCategory()" />
+      <input id="add-category-desc" type="text" placeholder="Description (optional)…" maxlength="1000"
+             style="flex:1.5;background:var(--surface);border:1px solid var(--border2);color:var(--text);font-family:inherit;font-size:13px;padding:8px 12px;border-radius:6px;outline:none;transition:border-color 0.1s;"
+             onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border2)'"
+             onkeydown="if(event.key==='Enter') addCategory()" />
+      <button id="btn-add-category" onclick="addCategory()">+ Add Category</button>
     </div>
 
-    <div id="groups-container">
+    <div id="categories-container">
       <div class="state-box">⏳ Loading…</div>
     </div>
 
@@ -380,7 +452,7 @@
       if (!apiToken) throw new Error('apiToken missing in /config response');
       window.__apiToken = apiToken;
     } catch (e) {
-      document.getElementById('groups-container').innerHTML =
+      document.getElementById('categories-container').innerHTML =
         `<div style="padding:2rem;text-align:center;color:#ef4444;">` +
         `Failed to load API configuration: ${e.message}</div>`;
       throw e;
@@ -394,7 +466,7 @@
 
   // ── State ──────────────────────────────────────────────────────────────────
   let viewMode = 'active'; // 'active' | 'archived'
-  let groups = [];         // [{id, name, order, archivedAt, classifications:[]}]
+  let categories = [];         // [{id, name, order, archivedAt, subcategories:[]}]
 
   // ── Boot ───────────────────────────────────────────────────────────────────
   bootstrapToken().then(() => loadAll());
@@ -404,60 +476,60 @@
     viewMode = mode;
     document.getElementById('btn-active').classList.toggle('active', mode === 'active');
     document.getElementById('btn-archived').classList.toggle('active', mode === 'archived');
-    document.getElementById('add-group-section').style.display = mode === 'active' ? 'flex' : 'none';
-    renderGroups();
+    document.getElementById('add-category-section').style.display = mode === 'active' ? 'flex' : 'none';
+    renderCategories();
   }
 
   // ── Load all data ──────────────────────────────────────────────────────────
   async function loadAll() {
     try {
-      // GET /classifications/groups?archived=true returns all groups with their
-      // classifications (active + archived) and bookmarkCount already embedded.
-      const res = await apiFetch('/classifications/groups?archived=true');
+      // GET /categories?archived=true returns all categories with their
+      // subcategories (active + archived) and bookmarkCount already embedded.
+      const res = await apiFetch('/categories?archived=true');
       if (!res.ok) throw new Error('Failed to fetch');
-      const { items: allGroups } = await res.json();
+      const { items: allCategories } = await res.json();
 
-      // Attach ungrouped classifications (groupId === null) as a virtual group
-      // They come embedded in groups where id matches; collect those with no group
-      // by fetching active classifications separately only for the ungrouped case.
-      const clsRes = await apiFetch('/classifications');
-      if (!clsRes.ok) throw new Error('Failed to fetch classifications');
-      const { groups: activeGrouped } = await clsRes.json();
-      const ungroupedGroup = activeGrouped.find(g => g.id === 0);
+      // Attach uncategorized subcategories (categoryId === null) as a virtual category
+      // They come embedded in categories where id matches; collect those with no category
+      // by fetching active subcategories separately only for the uncategorized case.
+      const clsRes = await apiFetch('/subcategories');
+      if (!clsRes.ok) throw new Error('Failed to fetch sub-categories');
+      const { categories: activeCategoryed } = await clsRes.json();
+      const uncategorizedCategory = activeCategoryed.find(g => g.id === 0);
 
-      groups = allGroups.map(g => ({
+      categories = allCategories.map(g => ({
         ...g,
-        // classifications already include bookmarkCount from the groups endpoint
-        classifications: g.classifications || [],
+        // subcategories already include bookmarkCount from the categories endpoint
+        subcategories: g.subcategories || [],
       }));
 
-      if (ungroupedGroup && ungroupedGroup.classifications.length > 0) {
-        groups.push({
+      if (uncategorizedCategory && uncategorizedCategory.subcategories.length > 0) {
+        categories.push({
           id: 0,
-          name: 'Ungrouped',
+          name: 'Uncategorized',
           order: 999,
           archivedAt: null,
-          classifications: ungroupedGroup.classifications,
+          subcategories: uncategorizedCategory.subcategories,
         });
       }
 
-      renderGroups();
-      document.getElementById('add-group-section').style.display = viewMode === 'active' ? 'flex' : 'none';
+      renderCategories();
+      document.getElementById('add-category-section').style.display = viewMode === 'active' ? 'flex' : 'none';
 
     } catch (e) {
-      document.getElementById('groups-container').innerHTML =
+      document.getElementById('categories-container').innerHTML =
         `<div class="state-box">⚠️ Failed to load categories.<br><small>${esc(e.message)}</small></div>`;
       console.error(e);
     }
   }
 
   // ── Render ─────────────────────────────────────────────────────────────────
-  function renderGroups() {
-    const container = document.getElementById('groups-container');
+  function renderCategories() {
+    const container = document.getElementById('categories-container');
 
     const visible = viewMode === 'archived'
-      ? groups.filter(g => g.archivedAt || g.classifications.some(c => c.archivedAt))
-      : groups.filter(g => !g.archivedAt);
+      ? categories.filter(g => g.archivedAt || g.subcategories.some(c => c.archivedAt))
+      : categories.filter(g => !g.archivedAt);
 
     if (visible.length === 0) {
       container.innerHTML = viewMode === 'archived'
@@ -466,78 +538,86 @@
       return;
     }
 
-    container.innerHTML = visible.map((g, idx) => renderGroupCard(g, idx, visible)).join('');
+    container.innerHTML = visible.map((g, idx) => renderCategoryCard(g, idx, visible)).join('');
   }
 
-  function renderGroupCard(g, idx, allVisible) {
-    const isVirtual = g.id === 0; // ungrouped pseudo-group
+  function renderCategoryCard(g, idx, allVisible) {
+    const isVirtual = g.id === 0; // uncategorized pseudo-category
     const isArchived = !!g.archivedAt;
 
     const orderControls = !isVirtual ? `
       <div class="order-controls">
         <button class="btn-order" title="Move up"
           ${idx === 0 ? 'disabled' : ''}
-          onclick="reorderGroup(${g.id}, ${g.order - 1}, event)">▲</button>
+          onclick="reorderCategory(${g.id}, ${g.order - 1}, event)">▲</button>
         <button class="btn-order" title="Move down"
           ${idx === allVisible.length - 1 ? 'disabled' : ''}
-          onclick="reorderGroup(${g.id}, ${g.order + 1}, event)">▼</button>
+          onclick="reorderCategory(${g.id}, ${g.order + 1}, event)">▼</button>
       </div>` : '';
 
-    const nameSection = `<span class="group-name">${esc(g.name)}</span>`;
+    const nameSection = `
+      <div class="category-name-wrap">
+        <span class="category-name">${esc(g.name)}</span>
+        ${g.description ? `<span class="category-desc">${esc(g.description)}</span>` : ''}
+      </div>`;
 
     const archivedBadge = isArchived ? `<span class="badge-archived">ARCHIVED</span>` : '';
 
     let actionBtns = '';
     if (!isVirtual) {
       if (isArchived) {
-        actionBtns = `<button class="btn-icon success" onclick="restoreGroup(${g.id}, event)">↩ Restore</button>`;
+        actionBtns = `<button class="btn-icon success" onclick="restoreCategory(${g.id}, event)">↩ Restore</button>`;
       } else {
         actionBtns = `
-          <button class="btn-icon" onclick="startRenameGroup(${g.id}, event)">Rename</button>
-          <button class="btn-icon danger" onclick="archiveGroup(${g.id}, event)">Archive</button>`;
+          <button class="btn-icon" onclick="startRenameCategory(${g.id}, event)">Rename</button>
+          <button class="btn-icon danger" onclick="archiveCategory(${g.id}, event)">Archive</button>`;
       }
     }
 
-    // Classifications within this group
+    // Sub-categories within this category
     const visibleClasses = viewMode === 'archived'
-      ? g.classifications.filter(c => c.archivedAt)
-      : g.classifications.filter(c => !c.archivedAt);
+      ? g.subcategories.filter(c => c.archivedAt)
+      : g.subcategories.filter(c => !c.archivedAt);
 
-    const classRows = visibleClasses.map((c, ci) => renderClassRow(c, ci, visibleClasses)).join('');
+    const classRows = visibleClasses.map((c, ci) => renderSubcategoryRow(c, ci, visibleClasses)).join('');
 
     const addClassRow = (!isArchived && viewMode === 'active') ? `
-      <div class="add-class-row">
-        <input class="add-input" type="text" placeholder="New classification…" maxlength="255"
-               data-group-id="${g.id}"
-               onkeydown="if(event.key==='Enter') addClassification(${g.id}, this)" />
-        <button class="btn-add" onclick="addClassification(${g.id}, this.previousElementSibling)">+ Add</button>
+      <div class="add-subcategory-row">
+        <div class="add-class-inputs">
+          <input class="add-input" type="text" placeholder="New sub-category…" maxlength="255"
+                 data-category-id="${g.id}"
+                 onkeydown="if(event.key==='Enter') addSubcategory(${g.id}, this)" />
+          <button class="btn-add" onclick="addSubcategory(${g.id}, this.closest('.add-subcategory-row').querySelector('.add-input'))">+ Add</button>
+        </div>
+        <textarea class="add-desc-input" rows="1" placeholder="Description (optional)…" maxlength="1000"
+                  data-desc-for="${g.id}"></textarea>
       </div>` : '';
 
     return `
-    <div class="group-card ${isArchived ? 'archived-row' : ''}" data-group-id="${g.id}">
-      <div class="group-header" id="group-header-${g.id}">
+    <div class="category-card ${isArchived ? 'archived-row' : ''}" data-category-id="${g.id}">
+      <div class="category-header" id="category-header-${g.id}">
         ${orderControls}
         ${nameSection}
         ${archivedBadge}
         ${actionBtns}
       </div>
-      <div class="class-list">
-        ${classRows || (viewMode === 'archived' ? '' : '<div style="color:var(--text-muted);font-size:12px;padding:4px 0">No classifications yet.</div>')}
+      <div class="subcategory-list">
+        ${classRows || (viewMode === 'archived' ? '' : '<div style="color:var(--text-muted);font-size:12px;padding:4px 0">No sub-categories yet.</div>')}
         ${addClassRow}
       </div>
     </div>`;
   }
 
-  function renderClassRow(c, idx, allVisible) {
+  function renderSubcategoryRow(c, idx, allVisible) {
     const isArchived = !!c.archivedAt;
     const orderControls = `
       <div class="order-controls">
         <button class="btn-order" title="Move up"
           ${idx === 0 ? 'disabled' : ''}
-          onclick="reorderClass(${c.id}, ${c.order - 1}, event)">▲</button>
+          onclick="reorderSubcategory(${c.id}, ${c.order - 1}, event)">▲</button>
         <button class="btn-order" title="Move down"
           ${idx === allVisible.length - 1 ? 'disabled' : ''}
-          onclick="reorderClass(${c.id}, ${c.order + 1}, event)">▼</button>
+          onclick="reorderSubcategory(${c.id}, ${c.order + 1}, event)">▼</button>
       </div>`;
 
     const archivedBadge = isArchived ? `<span class="badge-archived">ARCHIVED</span>` : '';
@@ -547,41 +627,49 @@
 
     let actionBtns = '';
     if (isArchived) {
-      actionBtns = `<button class="btn-icon success" onclick="restoreClass(${c.id}, event)">↩ Restore</button>`;
+      actionBtns = `<button class="btn-icon success" onclick="restoreSubcategory(${c.id}, event)">↩ Restore</button>`;
     } else {
       actionBtns = `
-        <button class="btn-icon" onclick="startRenameClass(${c.id}, event)">Rename</button>
-        <button class="btn-icon danger" onclick="archiveClass(${c.id}, event)">Archive</button>`;
+        <button class="btn-icon" onclick="startRenameSubcategory(${c.id}, event)">Rename</button>
+        <button class="btn-icon danger" onclick="archiveSubcategory(${c.id}, event)">Archive</button>`;
     }
 
     return `
-    <div class="class-row ${isArchived ? 'archived-row' : ''}" data-class-id="${c.id}" id="class-row-${c.id}">
+    <div class="subcategory-row ${isArchived ? 'archived-row' : ''}" data-class-id="${c.id}" id="subcategory-row-${c.id}">
       ${orderControls}
-      <span class="class-name">${esc(c.name)}</span>
+      <div class="subcategory-name-wrap">
+        <span class="subcategory-name">${esc(c.name)}</span>
+        ${c.description ? `<span class="subcategory-desc">${esc(c.description)}</span>` : ''}
+      </div>
       ${countBadge}
       ${archivedBadge}
       ${actionBtns}
     </div>`;
   }
 
-  // ── Add Group ──────────────────────────────────────────────────────────────
-  async function addGroup() {
-    const input = document.getElementById('add-group-input');
+  // ── Add Category ──────────────────────────────────────────────────────────────
+  async function addCategory() {
+    const input = document.getElementById('add-category-input');
+    const descInput = document.getElementById('add-category-desc');
     const name = input.value.trim();
     if (!name) return;
-    const btn = document.getElementById('btn-add-group');
+    const description = descInput ? descInput.value.trim() : '';
+    const btn = document.getElementById('btn-add-category');
     btn.disabled = true;
     try {
-      const maxOrder = groups.reduce((m, g) => Math.max(m, g.order ?? 0), 0);
-      const res = await apiFetch('/classifications/groups', {
+      const maxOrder = categories.reduce((m, g) => Math.max(m, g.order ?? 0), 0);
+      const body = { name, order: maxOrder + 1 };
+      if (description) body.description = description;
+      const res = await apiFetch('/categories', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, order: maxOrder + 1 }),
+        body: JSON.stringify(body),
       });
       const data = await res.json();
-      if (!res.ok) { toast(data.error || 'Failed to add group', 'error'); return; }
+      if (!res.ok) { toast(data.error || 'Failed to add category', 'error'); return; }
       input.value = '';
-      toast(`Group "${name}" created`, 'ok');
+      if (descInput) descInput.value = '';
+      toast(`Category "${name}" created`, 'ok');
       await loadAll();
     } catch (e) {
       toast(e.message, 'error');
@@ -590,23 +678,28 @@
     }
   }
 
-  // ── Add Classification ─────────────────────────────────────────────────────
-  async function addClassification(groupId, inputEl) {
+  // ── Add Sub-category ─────────────────────────────────────────────────────
+  async function addSubcategory(categoryId, inputEl) {
     const name = inputEl.value.trim();
     if (!name) return;
-    const btn = inputEl.nextElementSibling;
+    const addRow = inputEl.closest('.add-subcategory-row');
+    const descEl = addRow ? addRow.querySelector('.add-desc-input') : null;
+    const description = descEl ? descEl.value.trim() : '';
+    const btn = addRow ? addRow.querySelector('.btn-add') : inputEl.nextElementSibling;
     btn.disabled = true;
     try {
       const body = { name };
-      if (groupId !== 0) body.groupId = groupId;
-      const res = await apiFetch('/classifications', {
+      if (categoryId !== 0) body.categoryId = categoryId;
+      if (description) body.description = description;
+      const res = await apiFetch('/subcategories', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
       const data = await res.json();
-      if (!res.ok) { toast(data.error || 'Failed to add classification', 'error'); return; }
+      if (!res.ok) { toast(data.error || 'Failed to add sub-category', 'error'); return; }
       inputEl.value = '';
+      if (descEl) descEl.value = '';
       toast(`"${name}" added`, 'ok');
       await loadAll();
     } catch (e) {
@@ -616,19 +709,39 @@
     }
   }
 
-  // ── Rename Group ───────────────────────────────────────────────────────────
-  function startRenameGroup(groupId, e) {
+  // ── Rename Category ───────────────────────────────────────────────────────────
+  function startRenameCategory(categoryId, e) {
     e.stopPropagation();
-    const header = document.getElementById(`group-header-${groupId}`);
-    const nameSpan = header.querySelector('.group-name');
+    const header = document.getElementById(`category-header-${categoryId}`);
+    const nameWrap = header.querySelector('.category-name-wrap');
+    const nameSpan = nameWrap.querySelector('.category-name');
+    const descSpan = nameWrap.querySelector('.category-desc');
     const currentName = nameSpan.textContent;
+    const currentDesc = descSpan ? descSpan.textContent : '';
 
-    const wrap = document.createElement('div');
-    wrap.className = 'inline-edit-wrap';
+    // Build inline edit container replacing the name-wrap
+    const editWrap = document.createElement('div');
+    editWrap.style.flex = '1';
+    editWrap.style.display = 'flex';
+    editWrap.style.flexDirection = 'column';
+    editWrap.style.gap = '4px';
+
     const inp = document.createElement('input');
     inp.className = 'inline-input';
     inp.value = currentName;
     inp.maxLength = 255;
+
+    const descInp = document.createElement('textarea');
+    descInp.className = 'inline-desc-input';
+    descInp.value = currentDesc;
+    descInp.maxLength = 1000;
+    descInp.rows = 2;
+    descInp.placeholder = 'Description (optional)…';
+
+    editWrap.appendChild(inp);
+    editWrap.appendChild(descInp);
+    nameWrap.replaceWith(editWrap);
+
     const saveBtn = document.createElement('button');
     saveBtn.className = 'btn-icon confirm';
     saveBtn.textContent = 'Save';
@@ -636,54 +749,77 @@
     cancelBtn.className = 'btn-icon cancel';
     cancelBtn.textContent = 'Cancel';
 
-    wrap.appendChild(inp);
-    wrap.appendChild(saveBtn);
-    wrap.appendChild(cancelBtn);
-
-    nameSpan.replaceWith(wrap);
+    // Remove existing action buttons (Rename, Archive)
+    const existingBtns = header.querySelectorAll('.btn-icon');
+    existingBtns.forEach(b => b.remove());
+    header.appendChild(saveBtn);
+    header.appendChild(cancelBtn);
 
     inp.focus();
     inp.select();
 
-    saveBtn.onclick = () => commitRenameGroup(groupId, inp.value);
-    cancelBtn.onclick = () => renderGroups();
+    saveBtn.onclick = () => commitRenameCategory(categoryId, inp.value, descInp.value);
+    cancelBtn.onclick = () => renderCategories();
     inp.onkeydown = (ev) => {
-      if (ev.key === 'Enter') commitRenameGroup(groupId, inp.value);
-      if (ev.key === 'Escape') renderGroups();
+      if (ev.key === 'Enter') { ev.preventDefault(); commitRenameCategory(categoryId, inp.value, descInp.value); }
+      if (ev.key === 'Escape') renderCategories();
     };
   }
 
-  async function commitRenameGroup(groupId, newName) {
+  async function commitRenameCategory(categoryId, newName, newDesc) {
     newName = newName.trim();
     if (!newName) return;
+    newDesc = (newDesc || '').trim();
     try {
-      const res = await apiFetch(`/classifications/groups/${groupId}`, {
+      const body = { name: newName, description: newDesc || null };
+      const res = await apiFetch(`/categories/${categoryId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: newName }),
+        body: JSON.stringify(body),
       });
       const data = await res.json();
-      if (!res.ok) { toast(data.error || 'Failed to rename', 'error'); renderGroups(); return; }
+      if (!res.ok) { toast(data.error || 'Failed to rename', 'error'); renderCategories(); return; }
       toast(`Renamed to "${newName}"`, 'ok');
       await loadAll();
     } catch (e) {
       toast(e.message, 'error');
-      renderGroups();
+      renderCategories();
     }
   }
 
-  // ── Rename Classification ──────────────────────────────────────────────────
-  function startRenameClass(classId, e) {
+  // ── Rename Sub-category ──────────────────────────────────────────────────
+  function startRenameSubcategory(subcategoryId, e) {
     e.stopPropagation();
-    const row = document.getElementById(`class-row-${classId}`);
-    const nameSpan = row.querySelector('.class-name');
+    const row = document.getElementById(`subcategory-row-${subcategoryId}`);
+    const nameWrap = row.querySelector('.subcategory-name-wrap');
+    const nameSpan = nameWrap.querySelector('.subcategory-name');
+    const descSpan = nameWrap.querySelector('.subcategory-desc');
     const currentName = nameSpan.textContent;
+    const currentDesc = descSpan ? descSpan.textContent : '';
+
+    // Build inline edit container
+    const editWrap = document.createElement('div');
+    editWrap.style.flex = '1';
+    editWrap.style.display = 'flex';
+    editWrap.style.flexDirection = 'column';
+    editWrap.style.gap = '4px';
 
     const inp = document.createElement('input');
     inp.className = 'inline-input';
     inp.value = currentName;
     inp.maxLength = 255;
-    inp.style.flex = '1';
+
+    const descInp = document.createElement('textarea');
+    descInp.className = 'inline-desc-input';
+    descInp.value = currentDesc;
+    descInp.maxLength = 1000;
+    descInp.rows = 2;
+    descInp.placeholder = 'Description (optional)…';
+
+    editWrap.appendChild(inp);
+    editWrap.appendChild(descInp);
+    nameWrap.replaceWith(editWrap);
+
     const saveBtn = document.createElement('button');
     saveBtn.className = 'btn-icon confirm';
     saveBtn.textContent = 'Save';
@@ -691,8 +827,7 @@
     cancelBtn.className = 'btn-icon cancel';
     cancelBtn.textContent = 'Cancel';
 
-    nameSpan.replaceWith(inp);
-    // Insert save/cancel after input — find existing action buttons and replace
+    // Remove existing action buttons
     const existingBtns = row.querySelectorAll('.btn-icon');
     existingBtns.forEach(b => b.remove());
     row.appendChild(saveBtn);
@@ -701,38 +836,42 @@
     inp.focus();
     inp.select();
 
-    saveBtn.onclick = () => commitRenameClass(classId, inp.value);
-    cancelBtn.onclick = () => renderGroups();
+    saveBtn.onclick = () => commitRenameSubcategory(subcategoryId, inp.value, descInp.value);
+    cancelBtn.onclick = () => renderCategories();
     inp.onkeydown = (ev) => {
-      if (ev.key === 'Enter') commitRenameClass(classId, inp.value);
-      if (ev.key === 'Escape') renderGroups();
+      if (ev.key === 'Enter') { ev.preventDefault(); commitRenameSubcategory(subcategoryId, inp.value, descInp.value); }
+      if (ev.key === 'Escape') renderCategories();
     };
   }
 
-  async function commitRenameClass(classId, newName) {
+  async function commitRenameSubcategory(subcategoryId, newName, newDesc) {
     newName = newName.trim();
     if (!newName) return;
+    newDesc = (newDesc || '').trim();
     try {
-      const res = await apiFetch(`/classifications/${classId}`, {
+      const body = { name: newName };
+      if (newDesc !== '') body.description = newDesc;
+      else body.description = null; // explicitly clear if emptied
+      const res = await apiFetch(`/subcategories/${subcategoryId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: newName }),
+        body: JSON.stringify(body),
       });
       const data = await res.json();
-      if (!res.ok) { toast(data.error || 'Failed to rename', 'error'); renderGroups(); return; }
+      if (!res.ok) { toast(data.error || 'Failed to rename', 'error'); renderCategories(); return; }
       toast(`Renamed to "${newName}"`, 'ok');
       await loadAll();
     } catch (e) {
       toast(e.message, 'error');
-      renderGroups();
+      renderCategories();
     }
   }
 
-  // ── Reorder Group ──────────────────────────────────────────────────────────
-  async function reorderGroup(groupId, newOrder, e) {
+  // ── Reorder Category ──────────────────────────────────────────────────────────
+  async function reorderCategory(categoryId, newOrder, e) {
     e.stopPropagation();
     try {
-      await apiFetch(`/classifications/groups/${groupId}/reorder`, {
+      await apiFetch(`/categories/${categoryId}/reorder`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ order: newOrder }),
@@ -741,11 +880,11 @@
     } catch (e) { toast(e.message, 'error'); }
   }
 
-  // ── Reorder Classification ─────────────────────────────────────────────────
-  async function reorderClass(classId, newOrder, e) {
+  // ── Reorder Sub-category ─────────────────────────────────────────────────
+  async function reorderSubcategory(subcategoryId, newOrder, e) {
     e.stopPropagation();
     try {
-      await apiFetch(`/classifications/${classId}/reorder`, {
+      await apiFetch(`/subcategories/${subcategoryId}/reorder`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ order: newOrder }),
@@ -754,50 +893,50 @@
     } catch (e) { toast(e.message, 'error'); }
   }
 
-  // ── Archive / Restore Group ────────────────────────────────────────────────
-  async function archiveGroup(groupId, e) {
+  // ── Archive / Restore Category ────────────────────────────────────────────────
+  async function archiveCategory(categoryId, e) {
     e.stopPropagation();
-    if (!confirm('Archive this group? Its classifications will still exist but the group will be hidden.')) return;
+    if (!confirm('Archive this category? Its sub-categories will still exist but the category will be hidden.')) return;
     try {
-      const res = await apiFetch(`/classifications/groups/${groupId}/archive`, { method: 'PATCH' });
+      const res = await apiFetch(`/categories/${categoryId}/archive`, { method: 'PATCH' });
       const data = await res.json();
       if (!res.ok) { toast(data.error || 'Failed', 'error'); return; }
-      toast('Group archived', 'ok');
+      toast('Category archived', 'ok');
       await loadAll();
     } catch (e) { toast(e.message, 'error'); }
   }
 
-  async function restoreGroup(groupId, e) {
+  async function restoreCategory(categoryId, e) {
     e.stopPropagation();
     try {
-      const res = await apiFetch(`/classifications/groups/${groupId}/restore`, { method: 'PATCH' });
+      const res = await apiFetch(`/categories/${categoryId}/restore`, { method: 'PATCH' });
       const data = await res.json();
       if (!res.ok) { toast(data.error || 'Failed', 'error'); return; }
-      toast('Group restored', 'ok');
+      toast('Category restored', 'ok');
       await loadAll();
     } catch (e) { toast(e.message, 'error'); }
   }
 
-  // ── Archive / Restore Classification ──────────────────────────────────────
-  async function archiveClass(classId, e) {
+  // ── Archive / Restore Sub-category ──────────────────────────────────────
+  async function archiveSubcategory(subcategoryId, e) {
     e.stopPropagation();
-    if (!confirm('Archive this classification?')) return;
+    if (!confirm('Archive this sub-category?')) return;
     try {
-      const res = await apiFetch(`/classifications/${classId}/archive`, { method: 'PATCH' });
+      const res = await apiFetch(`/subcategories/${subcategoryId}/archive`, { method: 'PATCH' });
       const data = await res.json();
       if (!res.ok) { toast(data.error || 'Failed', 'error'); return; }
-      toast('Classification archived', 'ok');
+      toast('Sub-category archived', 'ok');
       await loadAll();
     } catch (e) { toast(e.message, 'error'); }
   }
 
-  async function restoreClass(classId, e) {
+  async function restoreSubcategory(subcategoryId, e) {
     e.stopPropagation();
     try {
-      const res = await apiFetch(`/classifications/${classId}/restore`, { method: 'PATCH' });
+      const res = await apiFetch(`/subcategories/${subcategoryId}/restore`, { method: 'PATCH' });
       const data = await res.json();
       if (!res.ok) { toast(data.error || 'Failed', 'error'); return; }
-      toast('Classification restored', 'ok');
+      toast('Sub-category restored', 'ok');
       await loadAll();
     } catch (e) { toast(e.message, 'error'); }
   }

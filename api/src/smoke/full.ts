@@ -115,8 +115,8 @@ section("UI Pages");
 }
 
 {
-  const r = await req("GET", "/categories");
-  check("GET /categories → 200", r.status, 200, r.body);
+  const r = await req("GET", "/manage-categories");
+  check("GET /manage-categories → 200", r.status, 200, r.body);
 }
 
 {
@@ -147,92 +147,92 @@ section("Auth Enforcement");
   check("GET /bookmarks (wrong token) → 401", r.status, 401, r.body);
 }
 
-// ── 4. Classification Groups ──────────────────────────────────────────────────
-section("Classification Groups");
+// ── 4. Categories ──────────────────────────────────────────────────
+section("Categories");
 
-let groupId: number;
+let categoryId: number;
 
 {
-  const r = await req("POST", "/classifications/groups", {
+  const r = await req("POST", "/categories", {
     token: API_TOKEN,
-    body: { name: "Smoke Test Group" },
+    body: { name: "Smoke Test Category" },
   });
-  check("POST /classifications/groups → 201", r.status, 201, r.body);
-  groupId = (r.body as any)?.id;
-  if (!groupId) fail("group id in response", `got: ${JSON.stringify(r.body)}`);
-  else pass("group id returned");
+  check("POST /categories → 201", r.status, 201, r.body);
+  categoryId = (r.body as any)?.id;
+  if (!categoryId) fail("category id in response", `got: ${JSON.stringify(r.body)}`);
+  else pass("category id returned");
 }
 
 {
-  // GET /classifications/groups returns { items: [...] }
-  const r = await req("GET", "/classifications/groups", { token: API_TOKEN });
-  check("GET /classifications/groups → 200", r.status, 200, r.body);
+  // GET /categories returns { items: [...] }
+  const r = await req("GET", "/categories", { token: API_TOKEN });
+  check("GET /categories → 200", r.status, 200, r.body);
   const items = (r.body as any)?.items;
-  const found = Array.isArray(items) && items.some((g: any) => g.id === groupId);
-  found ? pass("new group present in list") : fail("new group present in list", `id ${groupId} not in items`);
+  const found = Array.isArray(items) && items.some((g: any) => g.id === categoryId);
+  found ? pass("new category present in list") : fail("new category present in list", `id ${categoryId} not in items`);
 }
 
 {
-  const r = await req("PATCH", `/classifications/groups/${groupId}`, {
+  const r = await req("PATCH", `/categories/${categoryId}`, {
     token: API_TOKEN,
-    body: { name: "Smoke Test Group (renamed)" },
+    body: { name: "Smoke Test Category (renamed)" },
   });
-  check(`PATCH /classifications/groups/${groupId} (rename) → 200`, r.status, 200, r.body);
+  check(`PATCH /categories/${categoryId} (rename) → 200`, r.status, 200, r.body);
 }
 
 {
-  const r = await req("PATCH", `/classifications/groups/${groupId}/reorder`, {
+  const r = await req("PATCH", `/categories/${categoryId}/reorder`, {
     token: API_TOKEN,
     body: { order: 99 },
   });
-  check(`PATCH /classifications/groups/${groupId}/reorder → 200`, r.status, 200, r.body);
+  check(`PATCH /categories/${categoryId}/reorder → 200`, r.status, 200, r.body);
 }
 
-// ── 5. Classifications ────────────────────────────────────────────────────────
-section("Classifications");
+// ── 5. Sub-categories ────────────────────────────────────────────────────────
+section("Sub-categories");
 
-let classificationId: number;
+let subcategoryId: number;
 
 {
-  const r = await req("POST", "/classifications", {
+  const r = await req("POST", "/subcategories", {
     token: API_TOKEN,
-    body: { name: "Smoke Test Classification", groupId },
+    body: { name: "Smoke Test Sub-category", categoryId },
   });
-  check("POST /classifications → 201", r.status, 201, r.body);
-  classificationId = (r.body as any)?.id;
-  if (!classificationId) fail("classification id in response", `got: ${JSON.stringify(r.body)}`);
-  else pass("classification id returned");
+  check("POST /subcategories → 201", r.status, 201, r.body);
+  subcategoryId = (r.body as any)?.id;
+  if (!subcategoryId) fail("subcategory id in response", `got: ${JSON.stringify(r.body)}`);
+  else pass("subcategory id returned");
 }
 
 {
-  // GET /classifications returns { groups: [...] } — each group has classifications[]
-  const r = await req("GET", "/classifications", { token: API_TOKEN });
-  check("GET /classifications → 200", r.status, 200, r.body);
-  const groups = (r.body as any)?.groups;
+  // GET /subcategories returns { categories: [...] } — each category has subcategories[]
+  const r = await req("GET", "/subcategories", { token: API_TOKEN });
+  check("GET /subcategories → 200", r.status, 200, r.body);
+  const categories = (r.body as any)?.categories;
   const found =
-    Array.isArray(groups) &&
-    groups.some((g: any) =>
-      Array.isArray(g.classifications) && g.classifications.some((c: any) => c.id === classificationId)
+    Array.isArray(categories) &&
+    categories.some((g: any) =>
+      Array.isArray(g.subcategories) && g.subcategories.some((c: any) => c.id === subcategoryId)
     );
   found
-    ? pass("new classification present in list")
-    : fail("new classification present in list", `id ${classificationId} not found in any group`);
+    ? pass("new subcategory present in list")
+    : fail("new subcategory present in list", `id ${subcategoryId} not found in any category`);
 }
 
 {
-  const r = await req("PATCH", `/classifications/${classificationId}`, {
+  const r = await req("PATCH", `/subcategories/${subcategoryId}`, {
     token: API_TOKEN,
-    body: { name: "Smoke Test Classification (renamed)" },
+    body: { name: "Smoke Test Sub-category (renamed)" },
   });
-  check(`PATCH /classifications/${classificationId} (rename) → 200`, r.status, 200, r.body);
+  check(`PATCH /subcategories/${subcategoryId} (rename) → 200`, r.status, 200, r.body);
 }
 
 {
-  const r = await req("PATCH", `/classifications/${classificationId}/reorder`, {
+  const r = await req("PATCH", `/subcategories/${subcategoryId}/reorder`, {
     token: API_TOKEN,
     body: { order: 99 },
   });
-  check(`PATCH /classifications/${classificationId}/reorder → 200`, r.status, 200, r.body);
+  check(`PATCH /subcategories/${subcategoryId}/reorder → 200`, r.status, 200, r.body);
 }
 
 // ── 6. Tags ───────────────────────────────────────────────────────────────────
@@ -340,7 +340,7 @@ section("Bookmarks — Read & Filter");
   found ? pass("search by title found bookmark") : fail("search by title found bookmark", `id ${bookmarkId} not in results`);
 }
 
-// ── 9. Bookmarks — Edit (flags, tag, classification) ─────────────────────────
+// ── 9. Bookmarks — Edit (flags, tag, subcategory) ─────────────────────────
 section("Bookmarks — Edit");
 
 {
@@ -351,7 +351,7 @@ section("Bookmarks — Edit");
       title: "Smoke Test Bookmark (edited)",
       flags: { readLater: true },
       tagIds: [tagId],
-      classificationIds: [classificationId],
+      subcategoryIds: [subcategoryId],
     },
   });
   check(`PATCH /bookmarks/${bookmarkId} (edit title+flags+tag+class) → 200`, r.status, 200, r.body);
@@ -370,8 +370,8 @@ section("Bookmarks — Edit");
     b.readLater === 1 ? pass("readLater flag set") : fail("readLater flag set", `readLater=${b.readLater}`);
     const hasTag = Array.isArray(b.tags) && b.tags.some((t: any) => t.id === tagId);
     hasTag ? pass("tag attached to bookmark") : fail("tag attached to bookmark", JSON.stringify(b.tags));
-    const hasClass = Array.isArray(b.classifications) && b.classifications.some((c: any) => c.id === classificationId);
-    hasClass ? pass("classification attached to bookmark") : fail("classification attached to bookmark", JSON.stringify(b.classifications));
+    const hasClass = Array.isArray(b.subcategories) && b.subcategories.some((c: any) => c.id === subcategoryId);
+    hasClass ? pass("subcategory attached to bookmark") : fail("subcategory attached to bookmark", JSON.stringify(b.subcategories));
   }
 }
 
@@ -384,11 +384,11 @@ section("Bookmarks — Edit");
 }
 
 {
-  const r = await req("GET", `/bookmarks?classificationId=${classificationId}`, { token: API_TOKEN });
-  check("GET /bookmarks?classificationId= → 200", r.status, 200, r.body);
+  const r = await req("GET", `/bookmarks?subcategoryId=${subcategoryId}`, { token: API_TOKEN });
+  check("GET /bookmarks?subcategoryId= → 200", r.status, 200, r.body);
   const items = (r.body as any)?.items ?? [];
   const found = Array.isArray(items) && items.some((b: any) => b.id === bookmarkId);
-  found ? pass("filter by classificationId finds bookmark") : fail("filter by classificationId finds bookmark", `id ${bookmarkId} not found`);
+  found ? pass("filter by subcategoryId finds bookmark") : fail("filter by subcategoryId finds bookmark", `id ${bookmarkId} not found`);
 }
 
 {
@@ -419,10 +419,10 @@ section("Flag Counts");
 section("Bookmarks — Archive & Restore");
 
 {
-  // Detach tag and classification before archive/restore cycle (so they can be archived later)
+  // Detach tag and subcategory before archive/restore cycle (so they can be archived later)
   await req("PATCH", `/bookmarks/${bookmarkId}`, {
     token: API_TOKEN,
-    body: { tagIds: [], classificationIds: [] },
+    body: { tagIds: [], subcategoryIds: [] },
   });
 
   const r = await req("PATCH", `/bookmarks/${bookmarkId}/archive`, { token: API_TOKEN });
@@ -472,34 +472,34 @@ section("Tags — Archive & Restore");
   check(`PATCH /tags/${tagId}/restore → 200`, r.status, 200, r.body);
 }
 
-// ── 13. Classifications — Archive & Restore ───────────────────────────────────
-section("Classifications — Archive & Restore");
+// ── 13. Sub-categories — Archive & Restore ───────────────────────────────────
+section("Sub-categories — Archive & Restore");
 
 {
   // No active bookmarks linked — should archive cleanly
-  const r = await req("PATCH", `/classifications/${classificationId}/archive`, { token: API_TOKEN });
-  check(`PATCH /classifications/${classificationId}/archive → 200`, r.status, 200, r.body);
+  const r = await req("PATCH", `/subcategories/${subcategoryId}/archive`, { token: API_TOKEN });
+  check(`PATCH /subcategories/${subcategoryId}/archive → 200`, r.status, 200, r.body);
 }
 
 {
-  const r = await req("PATCH", `/classifications/${classificationId}/restore`, { token: API_TOKEN });
-  check(`PATCH /classifications/${classificationId}/restore → 200`, r.status, 200, r.body);
+  const r = await req("PATCH", `/subcategories/${subcategoryId}/restore`, { token: API_TOKEN });
+  check(`PATCH /subcategories/${subcategoryId}/restore → 200`, r.status, 200, r.body);
 }
 
-// ── 14. Groups — Archive & Restore ───────────────────────────────────────────
-section("Groups — Archive & Restore");
+// ── 14. Categories — Archive & Restore ────────────────────────────────────────
+section("Categories — Archive & Restore");
 
 {
-  // Archive classification first so group can be archived (no active classifications with active bookmarks)
-  await req("PATCH", `/classifications/${classificationId}/archive`, { token: API_TOKEN });
+  // Archive subcategory first so category can be archived (no active subcategories with active bookmarks)
+  await req("PATCH", `/subcategories/${subcategoryId}/archive`, { token: API_TOKEN });
 
-  const r = await req("PATCH", `/classifications/groups/${groupId}/archive`, { token: API_TOKEN });
-  check(`PATCH /classifications/groups/${groupId}/archive → 200`, r.status, 200, r.body);
+  const r = await req("PATCH", `/categories/${categoryId}/archive`, { token: API_TOKEN });
+  check(`PATCH /categories/${categoryId}/archive → 200`, r.status, 200, r.body);
 }
 
 {
-  const r = await req("PATCH", `/classifications/groups/${groupId}/restore`, { token: API_TOKEN });
-  check(`PATCH /classifications/groups/${groupId}/restore → 200`, r.status, 200, r.body);
+  const r = await req("PATCH", `/categories/${categoryId}/restore`, { token: API_TOKEN });
+  check(`PATCH /categories/${categoryId}/restore → 200`, r.status, 200, r.body);
 }
 
 // ── 15. Backup ────────────────────────────────────────────────────────────────
