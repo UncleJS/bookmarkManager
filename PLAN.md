@@ -297,7 +297,6 @@ Interactive docs always available at **`http://localhost:11650/docs`**.
 | `GET` | `/subcategories` | All active subcategories, nested by category |
 | `POST` | `/subcategories` | Create subcategory with optional `description` (and optionally a new category) |
 | `PATCH` | `/subcategories/:id` | Rename subcategory and/or update its `description` |
-| `PATCH` | `/subcategories/:id/reorder` | Set display order |
 | `PATCH` | `/subcategories/:id/archive` | Archive subcategory |
 | `PATCH` | `/subcategories/:id/restore` | Restore archived subcategory |
 
@@ -308,7 +307,6 @@ Interactive docs always available at **`http://localhost:11650/docs`**.
 | `GET` | `/categories` | List categories with nested subcategories (management view) |
 | `POST` | `/categories` | Create category with optional `description` |
 | `PATCH` | `/categories/:id` | Rename category and/or update its `description` |
-| `PATCH` | `/categories/:id/reorder` | Set display order |
 | `PATCH` | `/categories/:id/archive` | Archive category |
 | `PATCH` | `/categories/:id/restore` | Restore archived category |
 

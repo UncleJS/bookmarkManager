@@ -24,6 +24,55 @@ import {
   type BookmarkFlagColumnMap,
 } from "./shared.ts";
 
+function uniqueIds(ids?: number[]): number[] {
+  return [...new Set(ids ?? [])].filter(Boolean);
+}
+
+async function getActiveClassificationIds(bookmarkId: number): Promise<{
+  subcategoryIds: number[];
+  subSubcategoryIds: number[];
+}> {
+  const [subcategoryRows, subSubcategoryRows] = await Promise.all([
+    db
+      .select({ subcategoryId: bookmarkSubcategories.subcategoryId })
+      .from(bookmarkSubcategories)
+      .where(and(
+        eq(bookmarkSubcategories.bookmarkId, bookmarkId),
+        isNull(bookmarkSubcategories.archivedAt),
+      )),
+    db
+      .select({ subSubcategoryId: bookmarkSubSubcategories.subSubcategoryId })
+      .from(bookmarkSubSubcategories)
+      .where(and(
+        eq(bookmarkSubSubcategories.bookmarkId, bookmarkId),
+        isNull(bookmarkSubSubcategories.archivedAt),
+      )),
+  ]);
+
+  return {
+    subcategoryIds: subcategoryRows.map((row) => row.subcategoryId),
+    subSubcategoryIds: subSubcategoryRows.map((row) => row.subSubcategoryId),
+  };
+}
+
+async function findClassificationOverlapError(subcategoryIds: number[], subSubcategoryIds: number[]): Promise<string | null> {
+  if (subcategoryIds.length === 0 || subSubcategoryIds.length === 0) return null;
+
+  const selectedSubcategoryIds = new Set(subcategoryIds);
+  const childRows = await db
+    .select({
+      id: subSubcategories.id,
+      subcategoryId: subSubcategories.subcategoryId,
+    })
+    .from(subSubcategories)
+    .where(inArray(subSubcategories.id, subSubcategoryIds));
+
+  const hasOverlap = childRows.some((row) => selectedSubcategoryIds.has(row.subcategoryId));
+  return hasOverlap
+    ? "Cannot assign a bookmark to both a sub-category and one of its nested sub-sub-categories in the same branch"
+    : null;
+}
+
 export const bookmarkRoutes = new Elysia()
   .post(
     "/bookmarks",
@@ -45,9 +94,15 @@ export const bookmarkRoutes = new Elysia()
       }
 
       const flags = body.flags ?? {};
-      const tagIds = [...new Set(body.tags ?? [])].filter(Boolean);
-      const subcategoryIds = [...new Set(body.subcategoryIds ?? [])].filter(Boolean);
-      const subSubcategoryIds = [...new Set(body.subSubcategoryIds ?? [])].filter(Boolean);
+      const tagIds = uniqueIds(body.tags);
+      const subcategoryIds = uniqueIds(body.subcategoryIds);
+      const subSubcategoryIds = uniqueIds(body.subSubcategoryIds);
+
+      const overlapError = await findClassificationOverlapError(subcategoryIds, subSubcategoryIds);
+      if (overlapError) {
+        set.status = 409;
+        return { error: overlapError };
+      }
 
       let bookmarkId: number;
       try {
@@ -162,7 +217,7 @@ export const bookmarkRoutes = new Elysia()
           },
           400: { ...ErrorResp, description: "Validation error - url or title is blank after trimming" },
           409: {
-            description: "Duplicate URL detected. The response body includes the existing active bookmarks with that URL.",
+            description: "Duplicate URL detected, or the request linked the bookmark to both a sub-category and one of its nested sub-sub-categories.",
             content: {
               "application/json": {
                 schema: S.obj("Duplicate conflict", {
@@ -594,6 +649,23 @@ export const bookmarkRoutes = new Elysia()
         if (flags.forReview !== undefined) updates.forReview = flags.forReview ? 1 : 0;
       }
 
+      const nextTagIds = body.tagIds !== undefined ? uniqueIds(body.tagIds) : null;
+      const nextSubcategoryIds = body.subcategoryIds !== undefined ? uniqueIds(body.subcategoryIds) : null;
+      const nextSubSubcategoryIds = body.subSubcategoryIds !== undefined ? uniqueIds(body.subSubcategoryIds) : null;
+
+      if (nextSubcategoryIds !== null || nextSubSubcategoryIds !== null) {
+        const currentClassificationIds = await getActiveClassificationIds(id);
+        const overlapError = await findClassificationOverlapError(
+          nextSubcategoryIds ?? currentClassificationIds.subcategoryIds,
+          nextSubSubcategoryIds ?? currentClassificationIds.subSubcategoryIds,
+        );
+
+        if (overlapError) {
+          set.status = 409;
+          return { error: overlapError };
+        }
+      }
+
       const hasAssociationChanges = body.tagIds !== undefined || body.subcategoryIds !== undefined || body.subSubcategoryIds !== undefined;
 
       await db.transaction(async (tx) => {
@@ -604,8 +676,8 @@ export const bookmarkRoutes = new Elysia()
             .where(eq(bookmarks.id, id));
         }
 
-        if (body.tagIds !== undefined) {
-          const uniqueTagIds = [...new Set(body.tagIds)].filter(Boolean);
+        if (nextTagIds !== null) {
+          const uniqueTagIds = nextTagIds;
 
           const existingTagLinks = await tx
             .select({ id: bookmarkTags.id, tagId: bookmarkTags.tagId, archivedAt: bookmarkTags.archivedAt })
@@ -646,8 +718,8 @@ export const bookmarkRoutes = new Elysia()
           }
         }
 
-        if (body.subcategoryIds !== undefined) {
-          const uniqueSubcategoryIds = [...new Set(body.subcategoryIds)].filter(Boolean);
+        if (nextSubcategoryIds !== null) {
+          const uniqueSubcategoryIds = nextSubcategoryIds;
 
           const existingSubcategoryLinks = await tx
             .select({ id: bookmarkSubcategories.id, subcategoryId: bookmarkSubcategories.subcategoryId, archivedAt: bookmarkSubcategories.archivedAt })
@@ -688,8 +760,8 @@ export const bookmarkRoutes = new Elysia()
           }
         }
 
-        if (body.subSubcategoryIds !== undefined) {
-          const uniqueSubSubcategoryIds = [...new Set(body.subSubcategoryIds)].filter(Boolean);
+        if (nextSubSubcategoryIds !== null) {
+          const uniqueSubSubcategoryIds = nextSubSubcategoryIds;
 
           const existingSubSubcategoryLinks = await tx
             .select({ id: bookmarkSubSubcategories.id, subSubcategoryId: bookmarkSubSubcategories.subSubcategoryId, archivedAt: bookmarkSubSubcategories.archivedAt })
@@ -767,6 +839,7 @@ export const bookmarkRoutes = new Elysia()
           200: { ...OkResp, description: "Bookmark updated successfully" },
           400: { ...ErrorResp, description: "Validation error - invalid id, or title/url is blank after trimming" },
           404: { ...ErrorResp, description: "Bookmark not found" },
+          409: { ...ErrorResp, description: "Conflicting sub-category and nested sub-sub-category assignments" },
         },
       },
     }

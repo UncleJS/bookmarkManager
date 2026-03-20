@@ -287,7 +287,6 @@ Interactive docs always available at **`http://localhost:11650/docs`**.
 | `GET` | `/subcategories` | All active sub-categories, nested by category |
 | `POST` | `/subcategories` | Create sub-category with optional description and category |
 | `PATCH` | `/subcategories/:id` | Rename sub-category and/or update its description |
-| `PATCH` | `/subcategories/:id/reorder` | Set display order |
 | `PATCH` | `/subcategories/:id/archive` | Archive sub-category |
 | `PATCH` | `/subcategories/:id/restore` | Restore archived sub-category |
 
@@ -300,7 +299,6 @@ Third-level taxonomy nested under a sub-category. Bookmarks can be linked to sub
 | `GET` | `/subSubcategories` | All active sub-sub-categories, grouped by sub-category |
 | `POST` | `/subSubcategories` | Create sub-sub-category with optional description |
 | `PATCH` | `/subSubcategories/:id` | Rename sub-sub-category and/or update its description |
-| `PATCH` | `/subSubcategories/:id/reorder` | Set display order |
 | `PATCH` | `/subSubcategories/:id/archive` | Archive sub-sub-category |
 | `PATCH` | `/subSubcategories/:id/restore` | Restore archived sub-sub-category |
 
@@ -313,7 +311,6 @@ Third-level taxonomy nested under a sub-category. Bookmarks can be linked to sub
 | `GET` | `/categories` | List categories with nested sub-categories and sub-sub-categories (management view) |
 | `POST` | `/categories` | Create category with optional description |
 | `PATCH` | `/categories/:id` | Rename category and/or update its description |
-| `PATCH` | `/categories/:id/reorder` | Set display order |
 | `PATCH` | `/categories/:id/archive` | Archive category |
 | `PATCH` | `/categories/:id/restore` | Restore archived category |
 

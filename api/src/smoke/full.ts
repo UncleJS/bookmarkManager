@@ -180,14 +180,6 @@ let categoryId: number;
   check(`PATCH /categories/${categoryId} (rename) → 200`, r.status, 200, r.body);
 }
 
-{
-  const r = await req("PATCH", `/categories/${categoryId}/reorder`, {
-    token: API_TOKEN,
-    body: { order: 99 },
-  });
-  check(`PATCH /categories/${categoryId}/reorder → 200`, r.status, 200, r.body);
-}
-
 // ── 5. Sub-categories ────────────────────────────────────────────────────────
 section("Sub-categories");
 
@@ -225,14 +217,6 @@ let subcategoryId: number;
     body: { name: "Smoke Test Sub-category (renamed)" },
   });
   check(`PATCH /subcategories/${subcategoryId} (rename) → 200`, r.status, 200, r.body);
-}
-
-{
-  const r = await req("PATCH", `/subcategories/${subcategoryId}/reorder`, {
-    token: API_TOKEN,
-    body: { order: 99 },
-  });
-  check(`PATCH /subcategories/${subcategoryId}/reorder → 200`, r.status, 200, r.body);
 }
 
 // ── 6. Tags ───────────────────────────────────────────────────────────────────

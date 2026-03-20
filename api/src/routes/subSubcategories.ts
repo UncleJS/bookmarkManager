@@ -21,23 +21,21 @@ export const subSubcategoryRoutes = new Elysia()
             name: subcategories.name,
             categoryId: subcategories.categoryId,
             categoryName: categories.name,
-            order: subcategories.order,
           })
           .from(subcategories)
           .leftJoin(categories, eq(subcategories.categoryId, categories.id))
           .where(isNull(subcategories.archivedAt))
-          .orderBy(subcategories.order, subcategories.name),
+          .orderBy(subcategories.name),
         db
           .select({
             id: subSubcategories.id,
             name: subSubcategories.name,
             description: subSubcategories.description,
-            order: subSubcategories.order,
             subcategoryId: subSubcategories.subcategoryId,
           })
           .from(subSubcategories)
           .where(isNull(subSubcategories.archivedAt))
-          .orderBy(subSubcategories.order, subSubcategories.name),
+          .orderBy(subSubcategories.name),
         db
           .select({
             subSubcategoryId: bookmarkSubSubcategories.subSubcategoryId,
@@ -71,7 +69,7 @@ export const subSubcategoryRoutes = new Elysia()
         summary: "List all active sub-sub-categories, grouped by sub-category",
         description:
           "Returns all active (non-archived) sub-sub-categories nested inside their parent sub-categories. " +
-          "Each item includes a direct bookmark count for active bookmarks.",
+          "Each item includes a direct bookmark count for active bookmarks and is sorted alphabetically by name.",
         responses: {
           200: {
             description: "Grouped sub-sub-category list",
@@ -87,7 +85,6 @@ export const subSubcategoryRoutes = new Elysia()
                       id: S.num("Sub-sub-category ID"),
                       name: S.str("Sub-sub-category name"),
                       description: S.nullable(S.str("Optional description")),
-                      order: S.num("Display sort order"),
                       subcategoryId: S.num("Parent sub-category ID"),
                       bookmarkCount: S.num("Direct active bookmark count"),
                     })),
@@ -113,10 +110,10 @@ export const subSubcategoryRoutes = new Elysia()
       try {
         const [result] = await db
           .insert(subSubcategories)
-          .values({ name, description, subcategoryId: body.subcategoryId, order: body.order ?? 0 })
+          .values({ name, description, subcategoryId: body.subcategoryId })
           .$returningId();
         set.status = 201;
-        return { id: result.id, name, description, subcategoryId: body.subcategoryId, order: body.order ?? 0 };
+        return { id: result.id, name, description, subcategoryId: body.subcategoryId };
       } catch (err: unknown) {
         if (isDupEntry(err)) {
           set.status = 409;
@@ -130,7 +127,6 @@ export const subSubcategoryRoutes = new Elysia()
         name: t.String({ description: "Sub-sub-category name. Must be unique within the parent sub-category." }),
         description: t.Optional(t.Nullable(t.String({ description: "Optional description for the sub-sub-category." }))),
         subcategoryId: t.Number({ description: "Parent sub-category ID." }),
-        order: t.Optional(t.Number({ description: "Display sort order. Lower numbers appear first." })),
       }),
       detail: {
         tags: ["subSubcategories"],
@@ -251,32 +247,6 @@ export const subSubcategoryRoutes = new Elysia()
           400: { ...ErrorResp, description: "Validation error - name is blank after trimming" },
           404: { ...ErrorResp, description: "Sub-sub-category not found" },
           409: { ...ErrorResp, description: "Conflict - an active sub-sub-category with this name already exists in the same parent sub-category" },
-        },
-      },
-    }
-  )
-  .patch(
-    "/subSubcategories/:id/reorder",
-    async ({ params, body, set }) => {
-      const id = Number(params.id);
-      const [row] = await db.select({ id: subSubcategories.id })
-        .from(subSubcategories).where(eq(subSubcategories.id, id));
-      if (!row) { set.status = 404; return { error: "Sub-sub-category not found" }; }
-      await db.update(subSubcategories).set({ order: body.order }).where(eq(subSubcategories.id, id));
-      return { ok: true };
-    },
-    {
-      params: PositiveIdParam,
-      body: t.Object({
-        order: t.Number({ description: "New display sort order." }),
-      }),
-      detail: {
-        tags: ["subSubcategories"],
-        summary: "Set display order for a sub-sub-category",
-        description: "Sets the display order field for a sub-sub-category.",
-        responses: {
-          200: { ...OkResp, description: "Order updated" },
-          404: { ...ErrorResp, description: "Sub-sub-category not found" },
         },
       },
     }

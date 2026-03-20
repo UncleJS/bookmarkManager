@@ -130,13 +130,85 @@
       transition: max-height 0.2s ease;
     }
 
-    .nav-category-items.open {
-      max-height: 600px;
-    }
-
     /* indent category items under their category label */
     .nav-item.cat-item {
       padding-left: 24px;
+    }
+
+    .nav-subcategory-row {
+      display: flex;
+      align-items: stretch;
+      position: relative;
+    }
+
+    .nav-subcategory-row::before {
+      content: '';
+      position: absolute;
+      left: 14px;
+      top: 7px;
+      bottom: 7px;
+      width: 2px;
+      border-radius: 999px;
+      background: transparent;
+      transition: background 0.1s ease;
+    }
+
+    .nav-subcategory-row.has-children::before {
+      background: linear-gradient(180deg, var(--accent), rgba(110, 231, 110, 0.15));
+    }
+
+    .nav-subcategory-row .nav-item {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .nav-subcategory-row.has-children .nav-item {
+      padding-left: 30px;
+    }
+
+    .nav-item-branch-hint {
+      font-size: 10px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--accent);
+      opacity: 0.85;
+      margin-right: 6px;
+      flex-shrink: 0;
+    }
+
+    .nav-branch-toggle {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 28px;
+      margin-right: 6px;
+      border: 1px solid var(--border2);
+      background: rgba(110, 231, 110, 0.08);
+      color: var(--accent);
+      cursor: pointer;
+      border-radius: 6px;
+      transition: background 0.1s, color 0.1s, border-color 0.1s;
+      flex-shrink: 0;
+    }
+
+    .nav-branch-toggle:hover {
+      background: rgba(110, 231, 110, 0.14);
+      color: var(--text);
+      border-color: var(--accent);
+    }
+
+    .nav-branch-toggle.open .nav-section-chevron {
+      transform: rotate(90deg);
+    }
+
+    .nav-subcategory-children {
+      overflow: hidden;
+      max-height: 0;
+      transition: max-height 0.2s ease;
+    }
+
+    .nav-item.cat-item.sub-sub-item {
+      padding-left: 40px;
     }
 
     .nav-item {
@@ -1121,7 +1193,8 @@
     total: 0,
     lastItems: [],            // cached for edit modal
     tagSortOrder: 'count',    // 'count' | 'alpha'
-    openCategories: new Set(), // set of category IDs that are expanded
+    openCategories: new Set(), // set of top-level category IDs that are expanded
+    openSubcategories: new Set(), // set of level-2 category IDs that are expanded
     searchQuery: '',          // full-text search term
   };
 
@@ -1131,12 +1204,36 @@
     fetchBookmarks();
   });
 
+  function syncOpenAncestorHeights(startEl) {
+    let el = startEl?.parentElement || null;
+    while (el) {
+      if (
+        el.classList &&
+        el.classList.contains('open') &&
+        (el.classList.contains('nav-category-items') || el.classList.contains('nav-subcategory-children'))
+      ) {
+        el.style.maxHeight = `${el.scrollHeight}px`;
+      }
+      el = el.parentElement;
+    }
+  }
+
+  function setCollapsibleOpen(itemsContainer, open) {
+    itemsContainer.classList.toggle('open', open);
+    itemsContainer.style.maxHeight = open ? `${itemsContainer.scrollHeight}px` : '0px';
+    syncOpenAncestorHeights(itemsContainer);
+  }
+
+  function isAllBookmarksActive() {
+    return state.subcategoryId == null && state.subSubcategoryId == null && state.filterTagId == null && state.filterFlag == null;
+  }
+
   // ── Sidebar ────────────────────────────────────────────────────────────────
   async function loadSidebar() {
     try {
       const [classRes, tagRes, flagRes] = await Promise.all([
         apiFetch('/subcategories'),
-        apiFetch('/tags?limit=200'),
+        apiFetch(`/tags?limit=200&sort=${state.tagSortOrder}`),
         apiFetch('/flag-counts'),
       ]);
       if (!classRes.ok) throw new Error(classRes.statusText);
@@ -1145,6 +1242,11 @@
       const flagCounts = flagRes.ok ? await flagRes.json() : {};
 
       const nav = document.getElementById('sidebar-nav');
+      const allBookmarksBtn = nav.querySelector('.nav-item[data-id=""]');
+      Array.from(nav.children).forEach(child => {
+        if (child !== allBookmarksBtn) child.remove();
+      });
+      if (allBookmarksBtn) allBookmarksBtn.classList.toggle('active', isAllBookmarksActive());
 
       // ── subtitle ─────────────────────────────────────────────────────────
       let totalCats = 0;
@@ -1173,6 +1275,7 @@
         const btn = document.createElement('button');
         btn.className = `nav-item flag-dot ${cls}`;
         btn.title = label;
+        if (state.filterFlag === key) btn.classList.add('active');
         btn.onclick = () => selectFlag(key, label, btn);
 
         const lbl = document.createElement('span');
@@ -1197,8 +1300,12 @@
       categories.forEach(category => {
         if (!category.subcategories.length) return;
 
-        const categoryId = `cat-category-${category.name.replace(/\s+/g, '-').toLowerCase()}`;
-        const isOpen = state.openCategories && state.openCategories.has(categoryId);
+        const categoryId = `cat-category-${category.id}`;
+        const categoryHasSelection = category.subcategories.some(c =>
+          state.subcategoryId === c.id || (c.subSubcategories || []).some(ssc => state.subSubcategoryId === ssc.id)
+        );
+        const isOpen = (state.openCategories && state.openCategories.has(categoryId)) || categoryHasSelection;
+        if (categoryHasSelection) state.openCategories.add(categoryId);
 
         const heading = document.createElement('div');
         heading.className = 'nav-section-label' + (isOpen ? ' open' : '');
@@ -1220,10 +1327,17 @@
         itemsContainer.dataset.categoryId = categoryId;
 
         category.subcategories.forEach(c => {
+          const branch = document.createElement('div');
+          branch.className = 'nav-subcategory-branch';
+
+          const row = document.createElement('div');
+          row.className = 'nav-subcategory-row';
+
           const btn = document.createElement('button');
           btn.className = 'nav-item cat-item';
           btn.dataset.id = String(c.id);
           btn.title = c.description || c.name;
+          if (state.subcategoryId === c.id) btn.classList.add('active');
           btn.onclick = () => selectSubcategory(c.id, `${category.name} > ${c.name}`, btn);
 
           const label = document.createElement('span');
@@ -1236,14 +1350,58 @@
 
           btn.appendChild(label);
           btn.appendChild(count);
-          itemsContainer.appendChild(btn);
+          row.appendChild(btn);
 
-          (c.subSubcategories || []).forEach(ssc => {
+          const childItems = c.subSubcategories || [];
+          const branchId = `cat-subcategory-${c.id}`;
+          const branchHasSelection = childItems.some(ssc => state.subSubcategoryId === ssc.id);
+          const isBranchOpen = childItems.length > 0 && ((state.openSubcategories && state.openSubcategories.has(branchId)) || branchHasSelection);
+          if (branchHasSelection) state.openSubcategories.add(branchId);
+
+          if (childItems.length > 0) {
+            row.classList.add('has-children');
+
+            const branchHint = document.createElement('span');
+            branchHint.className = 'nav-item-branch-hint';
+            branchHint.textContent = `${childItems.length} sub`;
+            btn.insertBefore(branchHint, count);
+
+            const branchToggle = document.createElement('button');
+            branchToggle.type = 'button';
+            branchToggle.className = 'nav-branch-toggle' + (isBranchOpen ? ' open' : '');
+            branchToggle.dataset.subcategoryBranchId = branchId;
+            branchToggle.title = isBranchOpen ? 'Collapse nested categories' : 'Expand nested categories';
+
+            const branchChevron = document.createElement('span');
+            branchChevron.className = 'nav-section-chevron';
+            branchChevron.textContent = '▶';
+            branchToggle.appendChild(branchChevron);
+            branchToggle.onclick = (e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              const open = !branchToggle.classList.contains('open');
+              branchToggle.classList.toggle('open', open);
+              branchToggle.title = open ? 'Collapse nested categories' : 'Expand nested categories';
+              setCollapsibleOpen(childContainer, open);
+              if (!state.openSubcategories) state.openSubcategories = new Set();
+              if (open) state.openSubcategories.add(branchId);
+              else state.openSubcategories.delete(branchId);
+            };
+            row.appendChild(branchToggle);
+          }
+
+          branch.appendChild(row);
+
+          const childContainer = document.createElement('div');
+          childContainer.className = 'nav-subcategory-children' + (isBranchOpen ? ' open' : '');
+          childContainer.dataset.subcategoryBranchId = branchId;
+
+          childItems.forEach(ssc => {
             const childBtn = document.createElement('button');
-            childBtn.className = 'nav-item cat-item';
+            childBtn.className = 'nav-item cat-item sub-sub-item';
             childBtn.dataset.subSubId = String(ssc.id);
             childBtn.title = ssc.description || `${c.name} > ${ssc.name}`;
-            childBtn.style.paddingLeft = '34px';
+            if (state.subSubcategoryId === ssc.id) childBtn.classList.add('active');
             childBtn.onclick = () => selectSubSubcategory(ssc.id, `${category.name} > ${c.name} > ${ssc.name}`, childBtn);
 
             const childLabel = document.createElement('span');
@@ -1256,15 +1414,21 @@
 
             childBtn.appendChild(childLabel);
             childBtn.appendChild(childCount);
-            itemsContainer.appendChild(childBtn);
+            childContainer.appendChild(childBtn);
           });
+
+          branch.appendChild(childContainer);
+          if (childItems.length > 0) setCollapsibleOpen(childContainer, isBranchOpen);
+
+          itemsContainer.appendChild(branch);
         });
 
         nav.appendChild(itemsContainer);
+        setCollapsibleOpen(itemsContainer, isOpen);
 
         heading.onclick = () => {
           const open = heading.classList.toggle('open');
-          itemsContainer.classList.toggle('open', open);
+          setCollapsibleOpen(itemsContainer, open);
           if (!state.openCategories) state.openCategories = new Set();
           if (open) state.openCategories.add(categoryId);
           else state.openCategories.delete(categoryId);
@@ -1365,64 +1529,7 @@
   // Refresh sidebar counts after any mutation (edit, archive, restore)
   async function refreshCounts() {
     try {
-      const [flagRes, tagRes, classRes] = await Promise.all([
-        apiFetch('/flag-counts'),
-        apiFetch(`/tags?limit=200&sort=${state.tagSortOrder}`),
-        apiFetch('/subcategories'),
-      ]);
-
-      if (flagRes.ok) {
-        const flagCounts = await flagRes.json();
-        const flagDefs = [
-          { key: 'readLater', cls: 'flag-read' },
-          { key: 'hotTopic',  cls: 'flag-hot'  },
-          { key: 'cheatsheets', cls: 'flag-cs' },
-          { key: 'forReview', cls: 'flag-rev'  },
-        ];
-        flagDefs.forEach(({ key, cls }) => {
-          const btn = document.querySelector(`.nav-item.${cls}`);
-          if (btn) {
-            const cnt = btn.querySelector('.nav-item-count');
-            if (cnt) cnt.textContent = String(flagCounts[key] ?? 0);
-          }
-        });
-      }
-
-      if (tagRes.ok) {
-        const { items } = await tagRes.json();
-        // Update counts on existing tag buttons; re-render if list changed
-        let changed = false;
-        items.forEach(tag => {
-          const btn = document.querySelector(`.nav-item[data-tag-id="${tag.id}"]`);
-          if (btn) {
-            const cnt = btn.querySelector('.nav-item-count');
-            if (cnt) cnt.textContent = String(tag.bookmarkCount ?? 0);
-          } else {
-            changed = true;
-          }
-        });
-        if (changed) renderTagList(items);
-      }
-
-      if (classRes.ok) {
-        const { categories } = await classRes.json();
-        categories.forEach(category => {
-          category.subcategories.forEach(c => {
-            const btn = document.querySelector(`.nav-item[data-id="${c.id}"]`);
-            if (btn) {
-              const cnt = btn.querySelector('.nav-item-count');
-              if (cnt) cnt.textContent = String(c.bookmarkCount ?? 0);
-            }
-            (c.subSubcategories || []).forEach(ssc => {
-              const childBtn = document.querySelector(`.nav-item[data-sub-sub-id="${ssc.id}"]`);
-              if (childBtn) {
-                const childCnt = childBtn.querySelector('.nav-item-count');
-                if (childCnt) childCnt.textContent = String(ssc.bookmarkCount ?? 0);
-              }
-            });
-          });
-        });
-      }
+      await loadSidebar();
     } catch (e) {
       console.error('refreshCounts:', e);
     }
@@ -1719,7 +1826,7 @@
   // ── Edit modal ─────────────────────────────────────────────────────────────
   let modalState = {
     bookmarkId: null,
-    allSubcategories: [],   // [{id, name, kind, label, categoryName, subcategoryName}]
+    allSubcategories: [],   // [{id, name, kind, label, categoryName, subcategoryName, parentSubcategoryId}]
     allCategories:  [],   // [{id, name}]  — for the create-subcategory sub-modal
     allTags:    [],   // [{id, name}]
     selSubcategoryIds: new Set(),
@@ -1751,6 +1858,7 @@
           label: category.name !== 'Uncategorized' ? `${category.name} > ${subcategory.name}` : subcategory.name,
           categoryName: category.name !== 'Uncategorized' ? category.name : null,
           subcategoryName: null,
+          parentSubcategoryId: null,
         });
         (subcategory.subSubcategories || []).forEach(subSubcategory => {
           flatSubcategories.push({
@@ -1760,6 +1868,7 @@
             label: [category.name !== 'Uncategorized' ? category.name : null, subcategory.name, subSubcategory.name].filter(Boolean).join(' > '),
             categoryName: category.name !== 'Uncategorized' ? category.name : null,
             subcategoryName: subcategory.name,
+            parentSubcategoryId: subcategory.id,
           });
         });
       });
@@ -1776,6 +1885,12 @@
     modalState.selSubcategoryIds = new Set((bm.subcategories || []).map(c => c.id));
     modalState.selSubSubcategoryIds = new Set((bm.subSubcategories || []).map(c => c.id));
     modalState.selTagIds   = new Set((bm.tags || []).map(t => t.id));
+
+    modalState.allSubcategories.forEach(item => {
+      if (item.kind === 'subSubcategory' && modalState.selSubSubcategoryIds.has(item.id) && item.parentSubcategoryId != null) {
+        modalState.selSubcategoryIds.delete(item.parentSubcategoryId);
+      }
+    });
 
     document.getElementById('edit-title').value = bm.title || '';
     document.getElementById('edit-url').value = bm.url || '';
@@ -1846,11 +1961,24 @@
     if (!chip) return;
     const id = Number(chip.dataset.id);
     if (chip.dataset.kind === 'subSubcategory') {
-      if (modalState.selSubSubcategoryIds.has(id)) modalState.selSubSubcategoryIds.delete(id);
-      else modalState.selSubSubcategoryIds.add(id);
+      if (modalState.selSubSubcategoryIds.has(id)) {
+        modalState.selSubSubcategoryIds.delete(id);
+      } else {
+        modalState.selSubSubcategoryIds.add(id);
+        const parentSubcategoryId = modalState.allSubcategories.find(item => item.kind === 'subSubcategory' && item.id === id)?.parentSubcategoryId;
+        if (parentSubcategoryId != null) modalState.selSubcategoryIds.delete(parentSubcategoryId);
+      }
     } else {
-      if (modalState.selSubcategoryIds.has(id)) modalState.selSubcategoryIds.delete(id);
-      else modalState.selSubcategoryIds.add(id);
+      if (modalState.selSubcategoryIds.has(id)) {
+        modalState.selSubcategoryIds.delete(id);
+      } else {
+        modalState.selSubcategoryIds.add(id);
+        modalState.allSubcategories.forEach(item => {
+          if (item.kind === 'subSubcategory' && item.parentSubcategoryId === id) {
+            modalState.selSubSubcategoryIds.delete(item.id);
+          }
+        });
+      }
     }
     renderChips('class');
   });

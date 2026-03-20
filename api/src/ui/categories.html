@@ -117,30 +117,29 @@
       border-bottom: 1px solid var(--border);
     }
 
-    .order-controls {
-      display: flex;
-      flex-direction: column;
-      gap: 1px;
-    }
-
-    .btn-order {
-      background: none;
-      border: 1px solid var(--border2);
-      color: var(--text-muted);
-      font-size: 9px;
-      line-height: 1;
-      width: 18px;
-      height: 14px;
-      border-radius: 2px;
-      cursor: pointer;
-      display: flex;
+    .collapse-toggle {
+      width: 24px;
+      height: 24px;
+      flex-shrink: 0;
+      display: inline-flex;
       align-items: center;
       justify-content: center;
-      padding: 0;
-      transition: border-color 0.1s, color 0.1s;
+      background: none;
+      border: 1px solid var(--border2);
+      border-radius: 4px;
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: border-color 0.1s, color 0.1s, background 0.1s;
     }
-    .btn-order:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
-    .btn-order:disabled { opacity: 0.25; cursor: not-allowed; }
+    .collapse-toggle:hover { border-color: var(--accent); color: var(--accent); background: rgba(79,156,249,0.08); }
+
+    .toggle-chevron {
+      display: inline-block;
+      font-size: 11px;
+      line-height: 1;
+      transition: transform 0.12s ease;
+    }
+    .collapse-toggle.open .toggle-chevron { transform: rotate(90deg); }
 
     .category-name {
       flex: 1;
@@ -242,6 +241,18 @@
     }
     .subcategory-row:last-child { border-bottom: none; }
     .subcategory-row.archived-row { opacity: 0.55; }
+
+    .subcategory-children {
+      margin-left: 32px;
+      padding-left: 12px;
+      border-left: 1px solid var(--border);
+    }
+
+    .empty-subcategory-note {
+      color: var(--text-muted);
+      font-size: 12px;
+      padding: 6px 0 2px;
+    }
 
     .subcategory-name {
       flex: 1;
@@ -466,7 +477,39 @@
 
   // ── State ──────────────────────────────────────────────────────────────────
   let viewMode = 'active'; // 'active' | 'archived'
-  let categories = [];         // [{id, name, order, archivedAt, subcategories:[{..., subSubcategories:[]}]}]
+  let categories = [];         // [{id, name, archivedAt, subcategories:[{..., subSubcategories:[]}]}]
+  const openCategoryIds = new Set();
+  const openSubcategoryIds = new Set();
+  const seenCategoryIds = new Set();
+  const seenSubcategoryIds = new Set();
+
+  function syncCollapseState() {
+    for (const category of categories) {
+      if (!seenCategoryIds.has(category.id)) {
+        seenCategoryIds.add(category.id);
+      }
+
+      for (const subcategory of (category.subcategories || [])) {
+        if (!seenSubcategoryIds.has(subcategory.id)) {
+          seenSubcategoryIds.add(subcategory.id);
+        }
+      }
+    }
+  }
+
+  function toggleCategorySection(categoryId, e) {
+    if (e) e.stopPropagation();
+    if (openCategoryIds.has(categoryId)) openCategoryIds.delete(categoryId);
+    else openCategoryIds.add(categoryId);
+    renderCategories();
+  }
+
+  function toggleSubcategorySection(subcategoryId, e) {
+    if (e) e.stopPropagation();
+    if (openSubcategoryIds.has(subcategoryId)) openSubcategoryIds.delete(subcategoryId);
+    else openSubcategoryIds.add(subcategoryId);
+    renderCategories();
+  }
 
   // ── Boot ───────────────────────────────────────────────────────────────────
   bootstrapToken().then(() => loadAll());
@@ -507,7 +550,6 @@
         categories.push({
           id: 0,
           name: 'Uncategorized',
-          order: 999,
           archivedAt: null,
           subcategories: uncategorizedCategory.subcategories,
         });
@@ -526,6 +568,7 @@
   // ── Render ─────────────────────────────────────────────────────────────────
   function renderCategories() {
     const container = document.getElementById('categories-container');
+    syncCollapseState();
 
     const visible = viewMode === 'archived'
       ? categories.filter(g => g.archivedAt || g.subcategories.some(c => c.archivedAt))
@@ -538,22 +581,22 @@
       return;
     }
 
-    container.innerHTML = visible.map((g, idx) => renderCategoryCard(g, idx, visible)).join('');
+    container.innerHTML = visible.map((g) => renderCategoryCard(g)).join('');
   }
 
-  function renderCategoryCard(g, idx, allVisible) {
+  function renderCategoryCard(g) {
     const isVirtual = g.id === 0; // uncategorized pseudo-category
     const isArchived = !!g.archivedAt;
-
-    const orderControls = !isVirtual ? `
-      <div class="order-controls">
-        <button class="btn-order" title="Move up"
-          ${idx === 0 ? 'disabled' : ''}
-          onclick="reorderCategory(${g.id}, ${g.order - 1}, event)">▲</button>
-        <button class="btn-order" title="Move down"
-          ${idx === allVisible.length - 1 ? 'disabled' : ''}
-          onclick="reorderCategory(${g.id}, ${g.order + 1}, event)">▼</button>
-      </div>` : '';
+    const isOpen = openCategoryIds.has(g.id);
+    const toggleBtn = `
+      <button
+        type="button"
+        class="collapse-toggle ${isOpen ? 'open' : ''}"
+        title="${isOpen ? 'Collapse' : 'Expand'} category"
+        data-category-toggle-id="${g.id}"
+        onclick="toggleCategorySection(${g.id}, event)">
+        <span class="toggle-chevron">▶</span>
+      </button>`;
 
     const nameSection = `
       <div class="category-name-wrap">
@@ -579,7 +622,7 @@
       ? g.subcategories.filter(c => c.archivedAt)
       : g.subcategories.filter(c => !c.archivedAt);
 
-    const classRows = visibleClasses.map((c, ci) => renderSubcategoryRow(c, ci, visibleClasses)).join('');
+    const classRows = visibleClasses.map((c) => renderSubcategoryRow(c)).join('');
 
     const addClassRow = (!isArchived && viewMode === 'active') ? `
       <div class="add-subcategory-row">
@@ -596,29 +639,30 @@
     return `
     <div class="category-card ${isArchived ? 'archived-row' : ''}" data-category-id="${g.id}">
       <div class="category-header" id="category-header-${g.id}">
-        ${orderControls}
+        ${toggleBtn}
         ${nameSection}
         ${archivedBadge}
         ${actionBtns}
       </div>
-      <div class="subcategory-list">
+      <div class="subcategory-list" data-category-body-id="${g.id}" ${isOpen ? '' : 'hidden'}>
         ${classRows || (viewMode === 'archived' ? '' : '<div style="color:var(--text-muted);font-size:12px;padding:4px 0">No sub-categories yet.</div>')}
         ${addClassRow}
       </div>
     </div>`;
   }
 
-  function renderSubcategoryRow(c, idx, allVisible) {
+  function renderSubcategoryRow(c) {
     const isArchived = !!c.archivedAt;
-    const orderControls = `
-      <div class="order-controls">
-        <button class="btn-order" title="Move up"
-          ${idx === 0 ? 'disabled' : ''}
-          onclick="reorderSubcategory(${c.id}, ${c.order - 1}, event)">▲</button>
-        <button class="btn-order" title="Move down"
-          ${idx === allVisible.length - 1 ? 'disabled' : ''}
-          onclick="reorderSubcategory(${c.id}, ${c.order + 1}, event)">▼</button>
-      </div>`;
+    const isOpen = openSubcategoryIds.has(c.id);
+    const toggleBtn = `
+      <button
+        type="button"
+        class="collapse-toggle ${isOpen ? 'open' : ''}"
+        title="${isOpen ? 'Collapse' : 'Expand'} sub-category"
+        data-subcategory-toggle-id="${c.id}"
+        onclick="toggleSubcategorySection(${c.id}, event)">
+        <span class="toggle-chevron">▶</span>
+      </button>`;
 
     const archivedBadge = isArchived ? `<span class="badge-archived">ARCHIVED</span>` : '';
 
@@ -638,7 +682,7 @@
       ? (c.subSubcategories || []).filter(item => item.archivedAt)
       : (c.subSubcategories || []).filter(item => !item.archivedAt);
 
-    const childRows = visibleChildren.map((item, childIdx) => renderSubSubcategoryRow(item, childIdx, visibleChildren)).join('');
+    const childRows = visibleChildren.map((item) => renderSubSubcategoryRow(item)).join('');
 
     const addChildRow = (!isArchived && viewMode === 'active') ? `
       <div class="add-subcategory-row" style="margin-left:28px;margin-top:8px;">
@@ -653,7 +697,7 @@
 
     return `
     <div class="subcategory-row ${isArchived ? 'archived-row' : ''}" data-class-id="${c.id}" id="subcategory-row-${c.id}">
-      ${orderControls}
+      ${toggleBtn}
       <div class="subcategory-name-wrap">
         <span class="subcategory-name">${esc(c.name)}</span>
         ${c.description ? `<span class="subcategory-desc">${esc(c.description)}</span>` : ''}
@@ -662,22 +706,14 @@
       ${archivedBadge}
       ${actionBtns}
     </div>
-    ${childRows ? `<div style="margin-left:28px;border-left:1px solid var(--border);padding-left:12px;">${childRows}</div>` : ''}
-    ${addChildRow}`;
+    <div class="subcategory-children" data-subcategory-body-id="${c.id}" ${isOpen ? '' : 'hidden'}>
+      ${childRows || (viewMode === 'archived' ? '' : '<div class="empty-subcategory-note">No sub-sub-categories yet.</div>')}
+      ${addChildRow}
+    </div>`;
   }
 
-  function renderSubSubcategoryRow(c, idx, allVisible) {
+  function renderSubSubcategoryRow(c) {
     const isArchived = !!c.archivedAt;
-    const orderControls = `
-      <div class="order-controls">
-        <button class="btn-order" title="Move up"
-          ${idx === 0 ? 'disabled' : ''}
-          onclick="reorderSubSubcategory(${c.id}, ${c.order - 1}, event)">▲</button>
-        <button class="btn-order" title="Move down"
-          ${idx === allVisible.length - 1 ? 'disabled' : ''}
-          onclick="reorderSubSubcategory(${c.id}, ${c.order + 1}, event)">▼</button>
-      </div>`;
-
     const archivedBadge = isArchived ? `<span class="badge-archived">ARCHIVED</span>` : '';
     const count = c.bookmarkCount ?? 0;
     const countBadge = `<span class="count-badge" title="${count} active bookmark${count === 1 ? '' : 's'}">${count}</span>`;
@@ -687,7 +723,7 @@
 
     return `
     <div class="subcategory-row ${isArchived ? 'archived-row' : ''}" data-sub-sub-id="${c.id}" id="sub-subcategory-row-${c.id}" style="background:rgba(255,255,255,0.02);margin-top:6px;">
-      ${orderControls}
+      <span style="width:24px;flex-shrink:0;"></span>
       <div class="subcategory-name-wrap">
         <span class="subcategory-name">${esc(c.name)}</span>
         ${c.description ? `<span class="subcategory-desc">${esc(c.description)}</span>` : ''}
@@ -708,8 +744,7 @@
     const btn = document.getElementById('btn-add-category');
     btn.disabled = true;
     try {
-      const maxOrder = categories.reduce((m, g) => Math.max(m, g.order ?? 0), 0);
-      const body = { name, order: maxOrder + 1 };
+      const body = { name };
       if (description) body.description = description;
       const res = await apiFetch('/categories', {
         method: 'POST',
@@ -1020,44 +1055,6 @@
       toast(e.message, 'error');
       renderCategories();
     }
-  }
-
-  // ── Reorder Category ──────────────────────────────────────────────────────────
-  async function reorderCategory(categoryId, newOrder, e) {
-    e.stopPropagation();
-    try {
-      await apiFetch(`/categories/${categoryId}/reorder`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ order: newOrder }),
-      });
-      await loadAll();
-    } catch (e) { toast(e.message, 'error'); }
-  }
-
-  // ── Reorder Sub-category ─────────────────────────────────────────────────
-  async function reorderSubcategory(subcategoryId, newOrder, e) {
-    e.stopPropagation();
-    try {
-      await apiFetch(`/subcategories/${subcategoryId}/reorder`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ order: newOrder }),
-      });
-      await loadAll();
-    } catch (e) { toast(e.message, 'error'); }
-  }
-
-  async function reorderSubSubcategory(subSubcategoryId, newOrder, e) {
-    e.stopPropagation();
-    try {
-      await apiFetch(`/subSubcategories/${subSubcategoryId}/reorder`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ order: newOrder }),
-      });
-      await loadAll();
-    } catch (e) { toast(e.message, 'error'); }
   }
 
   // ── Archive / Restore Category ────────────────────────────────────────────────

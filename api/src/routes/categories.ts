@@ -21,10 +21,10 @@ export const categoryRoutes = new Elysia()
       try {
         const [result] = await db
           .insert(categories)
-          .values({ name, description, order: body.order ?? 0 })
+          .values({ name, description })
           .$returningId();
         set.status = 201;
-        return { id: result.id, name, description, order: body.order ?? 0 };
+        return { id: result.id, name, description };
       } catch (err: unknown) {
         if (isDupEntry(err)) { set.status = 409; return { error: "Category already exists" }; }
         throw err;
@@ -34,7 +34,6 @@ export const categoryRoutes = new Elysia()
       body: t.Object({
         name: t.String({ description: "Category name. Must be unique among active categories. Whitespace is trimmed." }),
         description: t.Optional(t.String({ description: "Optional description for the category." })),
-        order: t.Optional(t.Number({ description: "Display sort order. Lower numbers appear first. Defaults to 0." })),
       }),
       detail: {
         tags: ["categories"],
@@ -42,9 +41,7 @@ export const categoryRoutes = new Elysia()
         description:
           "Creates a new category used to organise related sub-categories.\n\n" +
           "Category names must be unique among **active** categories. Archived categories with the same name " +
-          "do not block creation.\n\n" +
-          "The `order` field controls the display position in the UI (lower = higher up the list). " +
-          "Use `PATCH /categories/:id/reorder` to change order after creation.",
+          "do not block creation.",
         responses: {
           201: {
             description: "Category created",
@@ -53,7 +50,7 @@ export const categoryRoutes = new Elysia()
                 schema: S.obj("Created category", {
                   id: S.num("New category ID"),
                   name: S.str("Trimmed name as stored"),
-                  order: S.num("Display sort order"),
+                  description: S.nullable(S.str("Description as stored, or null")),
                 }),
               },
             },
@@ -77,12 +74,11 @@ export const categoryRoutes = new Elysia()
             id: categories.id,
             name: categories.name,
             description: categories.description,
-            order: categories.order,
             archivedAt: categories.archivedAt,
           })
           .from(categories)
           .where(categoryWhere)
-          .orderBy(categories.order, categories.name),
+          .orderBy(categories.name),
         db
           .select({
             subcategoryId: bookmarkSubcategories.subcategoryId,
@@ -118,7 +114,6 @@ export const categoryRoutes = new Elysia()
               id: subcategories.id,
               name: subcategories.name,
               description: subcategories.description,
-              order: subcategories.order,
               categoryId: subcategories.categoryId,
               archivedAt: subcategories.archivedAt,
             })
@@ -128,7 +123,7 @@ export const categoryRoutes = new Elysia()
                 ? and(inArray(subcategories.categoryId, categoryIds), subcategoryArchivedWhere)
                 : inArray(subcategories.categoryId, categoryIds)
             )
-            .orderBy(subcategories.order, subcategories.name),
+            .orderBy(subcategories.name),
         categoryIds.length === 0
           ? Promise.resolve([])
           : db
@@ -136,7 +131,6 @@ export const categoryRoutes = new Elysia()
               id: subSubcategories.id,
               name: subSubcategories.name,
               description: subSubcategories.description,
-              order: subSubcategories.order,
               subcategoryId: subSubcategories.subcategoryId,
               archivedAt: subSubcategories.archivedAt,
             })
@@ -147,7 +141,7 @@ export const categoryRoutes = new Elysia()
                 ? inArray(subcategories.categoryId, categoryIds)
                 : and(inArray(subcategories.categoryId, categoryIds), isNull(subSubcategories.archivedAt), isNull(subcategories.archivedAt))
             )
-            .orderBy(subSubcategories.order, subSubcategories.name),
+            .orderBy(subSubcategories.name),
       ]);
 
       const directCountMap = new Map<number, number>(
@@ -205,7 +199,7 @@ export const categoryRoutes = new Elysia()
           "**Default:** active categories with active sub-categories only. Pass `archived=true` to include archived categories " +
           "and archived sub-categories in the response.\n\n" +
           "Each sub-category includes `bookmarkCount` reflecting only active (non-archived) bookmarks. " +
-          "Categories are ordered by `order` then `name`; sub-categories within each category are ordered the same way.",
+          "Categories, sub-categories, and sub-sub-categories are ordered alphabetically by name.",
         responses: {
           200: {
             description: "Category list with nested sub-categories",
@@ -215,13 +209,11 @@ export const categoryRoutes = new Elysia()
                   items: S.arr("List of categories", S.obj("Category with sub-categories", {
                     id: S.num("Category ID"),
                     name: S.str("Category name"),
-                    order: S.num("Display sort order"),
                     archivedAt: S.nullable(S.any("Archive timestamp (UTC), null when active")),
                     subcategories: S.arr("Sub-categories in this category", S.obj("Sub-category", {
                       id: S.num("Sub-category ID"),
                       name: S.str("Sub-category name"),
                       description: S.nullable(S.str("Optional description for this sub-category")),
-                      order: S.num("Display sort order"),
                       categoryId: S.nullable(S.num("Parent category ID")),
                       archivedAt: S.nullable(S.any("Archive timestamp (UTC), null when active")),
                       bookmarkCount: S.num("Total active bookmarks using this sub-category directly or any nested sub-sub-category"),
@@ -230,7 +222,6 @@ export const categoryRoutes = new Elysia()
                         id: S.num("Sub-sub-category ID"),
                         name: S.str("Sub-sub-category name"),
                         description: S.nullable(S.str("Optional description for this sub-sub-category")),
-                        order: S.num("Display sort order"),
                         subcategoryId: S.num("Parent sub-category ID"),
                         archivedAt: S.nullable(S.any("Archive timestamp (UTC), null when active")),
                         bookmarkCount: S.num("Number of active bookmarks using this sub-sub-category"),
@@ -288,35 +279,6 @@ export const categoryRoutes = new Elysia()
             },
           },
           400: { ...ErrorResp, description: "Validation error - name is blank after trimming" },
-          404: { ...ErrorResp, description: "Category not found" },
-        },
-      },
-    }
-  )
-  .patch(
-    "/categories/:id/reorder",
-    async ({ params, body, set }) => {
-      const id = Number(params.id);
-      const [row] = await db.select({ id: categories.id })
-        .from(categories).where(eq(categories.id, id));
-      if (!row) { set.status = 404; return { error: "Category not found" }; }
-      await db.update(categories).set({ order: body.order }).where(eq(categories.id, id));
-      return { ok: true };
-    },
-    {
-      body: t.Object({
-        order: t.Number({ description: "New display sort order value. Lower numbers appear first. Values do not need to be contiguous." }),
-      }),
-      detail: {
-        tags: ["categories"],
-        summary: "Set display order for a category",
-        description:
-          "Sets the `order` field on a category, controlling its position in the UI. " +
-          "Categories with lower `order` values appear first; ties are broken alphabetically by name.\n\n" +
-          "Order values are arbitrary integers - you can use sparse values (e.g. 10, 20, 30) " +
-          "to leave room for future insertions without having to reorder everything.",
-        responses: {
-          200: { ...OkResp, description: "Order updated" },
           404: { ...ErrorResp, description: "Category not found" },
         },
       },

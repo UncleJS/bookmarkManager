@@ -18,7 +18,6 @@ export const categories = mysqlTable("categories", {
   id: int("id").autoincrement().primaryKey(),
   name: varchar("name", { length: 255 }).notNull(),
   description: text("description"),
-  order: int("order").default(0),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`),
   archivedAt: datetime("archived_at"),
 });
@@ -33,7 +32,6 @@ export const subcategories = mysqlTable(
     categoryId: int("category_id"),
     name: varchar("name", { length: 255 }).notNull(),
     description: text("description"),
-    order: int("order").default(0),
     createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`),
     archivedAt: datetime("archived_at"),
     // Generated column: non-null only when active — enables unique-among-active index
@@ -58,7 +56,6 @@ export const subSubcategories = mysqlTable(
     subcategoryId: int("subcategory_id").notNull().references(() => subcategories.id),
     name: varchar("name", { length: 255 }).notNull(),
     description: text("description"),
-    order: int("order").default(0),
     createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`),
     archivedAt: datetime("archived_at"),
     nameActive: text("name_active").generatedAlwaysAs(

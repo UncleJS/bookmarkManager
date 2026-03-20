@@ -73,7 +73,7 @@ export function createHealthRoutes({ checkReadiness }: HealthRoutesOptions = {})
           summary: "Category management web UI",
           description:
             "Serves the static category and sub-category management page. " +
-            "Allows users to create, rename, reorder, archive, and restore categories and sub-categories.",
+            "Allows users to create, rename, archive, restore, and collapse categories and sub-categories.",
           responses: {
             200: { description: "HTML page" },
           },

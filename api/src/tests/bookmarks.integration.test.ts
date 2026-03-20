@@ -143,10 +143,10 @@ describe("create endpoint status codes", () => {
   it("returns 201 for category creation", async () => {
     const name = uniqueName("category-created");
 
-    const res = await app.handle(jsonRequest("/categories", "POST", { name, order: 7 }));
+    const res = await app.handle(jsonRequest("/categories", "POST", { name }));
 
     expect(res.status).toBe(201);
-    await expect(res.json()).resolves.toMatchObject({ name, order: 7 });
+    await expect(res.json()).resolves.toMatchObject({ name, description: null });
   });
 
   it("returns 201 for sub-sub-category creation", async () => {
@@ -353,7 +353,7 @@ describe("category lifecycle", () => {
 
   it("archives and restores categories through the API", async () => {
     const name = uniqueName("category-lifecycle");
-    const createRes = await app.handle(jsonRequest("/categories", "POST", { name, order: 11 }));
+    const createRes = await app.handle(jsonRequest("/categories", "POST", { name }));
     const created = await createRes.json() as { id: number };
 
     const archiveRes = await app.handle(request(`/categories/${created.id}/archive`, "PATCH"));
@@ -445,6 +445,29 @@ describe("bookmark write transactions", () => {
 
     expect(bookmarkTag?.tagId).toBe(tagId);
     expect(bookmarkSubcategory?.subcategoryId).toBe(subcategoryId);
+  });
+
+  it("rejects bookmark creation when a parent and child classification overlap", async () => {
+    const [{ id: subcategoryId }] = await db
+      .insert(schema.subcategories)
+      .values({ name: uniqueName("subcategory-overlap-create"), categoryId: null })
+      .$returningId();
+    const [{ id: subSubcategoryId }] = await db
+      .insert(schema.subSubcategories)
+      .values({ name: uniqueName("subsubcategory-overlap-create"), subcategoryId })
+      .$returningId();
+
+    const res = await app.handle(jsonRequest("/bookmarks", "POST", {
+      url: uniqueUrl("overlap-create"),
+      title: "Overlap create",
+      subcategoryIds: [subcategoryId],
+      subSubcategoryIds: [subSubcategoryId],
+    }));
+
+    expect(res.status).toBe(409);
+    await expect(res.json()).resolves.toMatchObject({
+      error: "Cannot assign a bookmark to both a sub-category and one of its nested sub-sub-categories in the same branch",
+    });
   });
 
   it("rolls back bookmark creation when tag association insert fails", async () => {
@@ -625,6 +648,34 @@ describe("bookmark write transactions", () => {
     ]);
   });
 
+  it("rejects bookmark updates when a parent and child classification overlap", async () => {
+    const [{ id: subcategoryId }] = await db
+      .insert(schema.subcategories)
+      .values({ name: uniqueName("subcategory-overlap-patch"), categoryId: null })
+      .$returningId();
+    const [{ id: subSubcategoryId }] = await db
+      .insert(schema.subSubcategories)
+      .values({ name: uniqueName("subsubcategory-overlap-patch"), subcategoryId })
+      .$returningId();
+
+    const createRes = await app.handle(jsonRequest("/bookmarks", "POST", {
+      url: uniqueUrl("overlap-patch"),
+      title: "Overlap patch",
+      subcategoryIds: [subcategoryId],
+    }));
+    expect(createRes.status).toBe(201);
+    const created = await createRes.json() as { id: number };
+
+    const patchRes = await app.handle(jsonRequest(`/bookmarks/${created.id}`, "PATCH", {
+      subSubcategoryIds: [subSubcategoryId],
+    }));
+
+    expect(patchRes.status).toBe(409);
+    await expect(patchRes.json()).resolves.toMatchObject({
+      error: "Cannot assign a bookmark to both a sub-category and one of its nested sub-sub-categories in the same branch",
+    });
+  });
+
   it("refreshes updatedAt when only associations change", async () => {
     const [{ id: originalTagId }] = await db.insert(schema.tags).values({ name: uniqueName("tag-updated-at-old") }).$returningId();
     const [{ id: replacementTagId }] = await db.insert(schema.tags).values({ name: uniqueName("tag-updated-at-new") }).$returningId();
@@ -750,15 +801,15 @@ describe("category listing", () => {
     const archivedAt = new Date();
     const [{ id: activeCategoryId }] = await db
       .insert(schema.categories)
-      .values({ name: uniqueName("category-active-default"), order: 10 })
+      .values({ name: uniqueName("category-active-default") })
       .$returningId();
     const [{ id: otherCategoryId }] = await db
       .insert(schema.categories)
-      .values({ name: uniqueName("category-other-default"), order: 20 })
+      .values({ name: uniqueName("category-other-default") })
       .$returningId();
     const [{ id: archivedCategoryId }] = await db
       .insert(schema.categories)
-      .values({ name: uniqueName("category-archived-default"), order: 30, archivedAt })
+      .values({ name: uniqueName("category-archived-default"), archivedAt })
       .$returningId();
 
     const activeSubcategoryName = uniqueName("subcategory-active-default");
@@ -767,10 +818,10 @@ describe("category listing", () => {
     const archivedCategorySubcategoryName = uniqueName("subcategory-archived-category-default");
 
     await db.insert(schema.subcategories).values([
-      { name: activeSubcategoryName, categoryId: activeCategoryId, order: 1 },
-      { name: archivedSubcategoryName, categoryId: activeCategoryId, order: 2, archivedAt },
-      { name: otherSubcategoryName, categoryId: otherCategoryId, order: 1 },
-      { name: archivedCategorySubcategoryName, categoryId: archivedCategoryId, order: 1 },
+      { name: activeSubcategoryName, categoryId: activeCategoryId },
+      { name: archivedSubcategoryName, categoryId: activeCategoryId, archivedAt },
+      { name: otherSubcategoryName, categoryId: otherCategoryId },
+      { name: archivedCategorySubcategoryName, categoryId: archivedCategoryId },
     ]);
 
     const res = await app.handle(request("/categories"));
@@ -791,15 +842,160 @@ describe("category listing", () => {
     expect(otherCategory?.subcategories.map((subcategory) => subcategory.name)).toEqual([otherSubcategoryName]);
   });
 
+  it("orders categories, subcategories, and sub-sub-categories alphabetically", async () => {
+    const categoryNames = [
+      uniqueName("category-zulu-alpha"),
+      uniqueName("category-alpha-alpha"),
+    ];
+    const [{ id: zuluCategoryId }] = await db.insert(schema.categories).values({ name: categoryNames[0] }).$returningId();
+    const [{ id: alphaCategoryId }] = await db.insert(schema.categories).values({ name: categoryNames[1] }).$returningId();
+
+    const subcategoryNames = [
+      uniqueName("subcategory-zulu-alpha"),
+      uniqueName("subcategory-alpha-alpha"),
+    ];
+    const [{ id: parentSubcategoryId }] = await db
+      .insert(schema.subcategories)
+      .values({ name: subcategoryNames[0], categoryId: alphaCategoryId })
+      .$returningId();
+    await db.insert(schema.subcategories).values({ name: subcategoryNames[1], categoryId: alphaCategoryId });
+
+    const leafNames = [
+      uniqueName("subsubcategory-zulu-alpha"),
+      uniqueName("subsubcategory-alpha-alpha"),
+    ];
+    await db.insert(schema.subSubcategories).values([
+      { name: leafNames[0], subcategoryId: parentSubcategoryId },
+      { name: leafNames[1], subcategoryId: parentSubcategoryId },
+    ]);
+
+    const categoriesRes = await app.handle(request("/categories"));
+    expect(categoriesRes.status).toBe(200);
+    const categoriesBody = await categoriesRes.json() as {
+      items: Array<{
+        id: number;
+        name: string;
+        subcategories: Array<{
+          name: string;
+          subSubcategories: Array<{ name: string }>;
+        }>;
+      }>;
+    };
+
+    expect(categoriesBody.items
+      .filter((category) => categoryNames.includes(category.name))
+      .map((category) => category.name)).toEqual([
+      categoryNames[1],
+      categoryNames[0],
+    ]);
+
+    const alphaCategory = categoriesBody.items.find((category) => category.id === alphaCategoryId);
+    expect(alphaCategory?.subcategories.map((subcategory) => subcategory.name)).toEqual([
+      subcategoryNames[1],
+      subcategoryNames[0],
+    ]);
+    expect(alphaCategory?.subcategories.find((subcategory) => subcategory.name === subcategoryNames[0])?.subSubcategories.map((leaf) => leaf.name)).toEqual([
+      leafNames[1],
+      leafNames[0],
+    ]);
+
+    const sidebarRes = await app.handle(request("/subcategories"));
+    expect(sidebarRes.status).toBe(200);
+    const sidebarBody = await sidebarRes.json() as {
+      categories: Array<{
+        id: number;
+        name: string;
+        subcategories: Array<{
+          name: string;
+          subSubcategories: Array<{ name: string }>;
+        }>;
+      }>;
+    };
+
+    expect(sidebarBody.categories
+      .filter((category) => categoryNames.includes(category.name))
+      .map((category) => category.name)).toEqual([
+      categoryNames[1],
+      categoryNames[0],
+    ]);
+    expect(sidebarBody.categories.find((category) => category.id === alphaCategoryId)?.subcategories.map((subcategory) => subcategory.name)).toEqual([
+      subcategoryNames[1],
+      subcategoryNames[0],
+    ]);
+
+    const leavesRes = await app.handle(request("/subSubcategories"));
+    expect(leavesRes.status).toBe(200);
+    const leavesBody = await leavesRes.json() as {
+      subcategories: Array<{
+        id: number;
+        subSubcategories: Array<{ name: string }>;
+      }>;
+    };
+
+    expect(leavesBody.subcategories.find((subcategory) => subcategory.id === parentSubcategoryId)?.subSubcategories.map((leaf) => leaf.name)).toEqual([
+      leafNames[1],
+      leafNames[0],
+    ]);
+    expect(categoriesBody.items.some((category) => category.id === zuluCategoryId)).toBe(true);
+  });
+
+  it("counts distinct bookmarks across a sub-category branch", async () => {
+    const [{ id: categoryId }] = await db
+      .insert(schema.categories)
+      .values({ name: uniqueName("category-branch-count") })
+      .$returningId();
+    const [{ id: subcategoryId }] = await db
+      .insert(schema.subcategories)
+      .values({ name: uniqueName("subcategory-branch-count"), categoryId })
+      .$returningId();
+    const [{ id: firstLeafId }] = await db
+      .insert(schema.subSubcategories)
+      .values({ name: uniqueName("subsubcategory-branch-count-a"), subcategoryId })
+      .$returningId();
+    const [{ id: secondLeafId }] = await db
+      .insert(schema.subSubcategories)
+      .values({ name: uniqueName("subsubcategory-branch-count-b"), subcategoryId })
+      .$returningId();
+
+    const bookmarkRes = await app.handle(jsonRequest("/bookmarks", "POST", {
+      url: uniqueUrl("branch-count"),
+      title: "Distinct branch count",
+      subSubcategoryIds: [firstLeafId, secondLeafId],
+    }));
+    expect(bookmarkRes.status).toBe(201);
+
+    const res = await app.handle(request("/subcategories"));
+    expect(res.status).toBe(200);
+    const body = await res.json() as {
+      categories: Array<{
+        id: number;
+        subcategories: Array<{
+          id: number;
+          bookmarkCount: number;
+          subSubcategories: Array<{ id: number; bookmarkCount: number }>;
+        }>;
+      }>;
+    };
+
+    const listedCategory = body.categories.find((item) => item.id === categoryId);
+    const listedSubcategory = listedCategory?.subcategories.find((item) => item.id === subcategoryId);
+
+    expect(listedSubcategory?.bookmarkCount).toBe(1);
+    expect(listedSubcategory?.subSubcategories).toEqual([
+      expect.objectContaining({ id: firstLeafId, bookmarkCount: 1 }),
+      expect.objectContaining({ id: secondLeafId, bookmarkCount: 1 }),
+    ]);
+  });
+
   it("includes archived categories and subcategories when archived=true", async () => {
     const archivedAt = new Date();
     const [{ id: activeCategoryId }] = await db
       .insert(schema.categories)
-      .values({ name: uniqueName("category-active-archived-view"), order: 40 })
+      .values({ name: uniqueName("category-active-archived-view") })
       .$returningId();
     const [{ id: archivedCategoryId }] = await db
       .insert(schema.categories)
-      .values({ name: uniqueName("category-archived-archived-view"), order: 50, archivedAt })
+      .values({ name: uniqueName("category-archived-archived-view"), archivedAt })
       .$returningId();
 
     const activeSubcategoryName = uniqueName("subcategory-active-archived-view");
@@ -807,9 +1003,9 @@ describe("category listing", () => {
     const archivedCategorySubcategoryName = uniqueName("subcategory-archived-category-archived-view");
 
     await db.insert(schema.subcategories).values([
-      { name: activeSubcategoryName, categoryId: activeCategoryId, order: 1 },
-      { name: archivedSubcategoryName, categoryId: activeCategoryId, order: 2, archivedAt },
-      { name: archivedCategorySubcategoryName, categoryId: archivedCategoryId, order: 1, archivedAt },
+      { name: activeSubcategoryName, categoryId: activeCategoryId },
+      { name: archivedSubcategoryName, categoryId: activeCategoryId, archivedAt },
+      { name: archivedCategorySubcategoryName, categoryId: archivedCategoryId, archivedAt },
     ]);
 
     const res = await app.handle(request("/categories?archived=true"));

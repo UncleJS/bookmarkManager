@@ -64,6 +64,13 @@
       "when": 1774200000000,
       "tag": "0008_add_sub_subcategories",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "5",
+      "when": 1774286400000,
+      "tag": "0009_drop_taxonomy_order_columns",
+      "breakpoints": true
     }
   ]
 }
