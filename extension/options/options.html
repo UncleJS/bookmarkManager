@@ -12,7 +12,7 @@
       <header class="options-header">
         <p class="eyebrow">Extension Settings</p>
         <h1 id="options-title">Bookmark Manager Options</h1>
-        <p class="options-copy">Configure the API endpoint used by the extension when saving bookmarks.</p>
+        <p class="options-copy">Configure the API endpoint and token the extension uses when saving bookmarks.</p>
       </header>
 
       <div class="field-group">
@@ -23,13 +23,13 @@
 
       <div class="field-group">
         <label for="apiToken" class="field-label">API Token</label>
-        <input id="apiToken" class="input-field" type="password" autocomplete="off" placeholder="Paste your API_TOKEN here" aria-describedby="apiTokenHint" />
+        <input id="apiToken" class="input-field" type="password" autocomplete="off" placeholder="Paste your API token here" aria-describedby="apiTokenHint" />
         <p id="apiTokenHint" class="field-hint">Required. Set <code>API_TOKEN</code> in <code>api/.env</code> then paste the same value here. Sent as <code>Authorization: Bearer &lt;token&gt;</code> on every API request.</p>
       </div>
 
       <div class="actions-row">
         <span id="status" class="status-text" role="status" aria-live="polite"></span>
-        <button id="save" class="save-button">Save</button>
+        <button id="save" class="save-button">Save settings</button>
       </div>
     </section>
   </main>

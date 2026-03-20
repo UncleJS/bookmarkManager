@@ -520,7 +520,7 @@ async function handleCreateSubcategory() {
   };
   const res = await send('createSubcategory', payload);
     if (!res?.ok) {
-      setStatus(res.error || 'Failed to create sub-category', false);
+      setStatus(res.error || 'Could not create sub-category.', false);
       return;
     }
 
@@ -546,10 +546,10 @@ async function handleCreateSubcategory() {
     addSubcategory(newSubcategory);
 
     hideModal();
-    setStatus('Sub-category created!', true);
+    setStatus('Sub-category created.', true);
     setTimeout(() => setStatus(''), 2000);
   } catch (error) {
-    setStatus('Failed to create sub-category', false);
+    setStatus('Could not create sub-category.', false);
   }
 }
 
@@ -563,7 +563,7 @@ async function loadInitial() {
   try {
     const res = await send('fetchInitialData');
     if (!res?.ok) {
-      setStatus(res?.error || 'Failed to load initial data', false);
+      setStatus(res?.error || 'Could not load bookmark details.', false);
       return;
     }
 
@@ -598,7 +598,7 @@ async function loadInitial() {
     // Store tag suggestions
     state.tagSuggestions = tags.items || [];
   } catch (error) {
-    setStatus('Failed to load initial data', false);
+    setStatus('Could not load bookmark details.', false);
   }
 }
 
@@ -750,7 +750,7 @@ async function onDuplicateConfirm() {
 
   hideDuplicateWarning();
   setSubmitPending(false);
-  setStatus('Bookmark already exists', false);
+  setStatus('Bookmark already exists.', false);
 }
 
 /**
@@ -1119,7 +1119,7 @@ async function onTagEnterCreateIfNeeded(e) {
     const res = await send('createTag', { name });
     if (res?.ok) {
       addTag(res.data);
-      setStatus('Tag created!', true);
+      setStatus('Tag created.', true);
       setTimeout(() => setStatus(''), 2000);
     } else if (res?.status === 409) {
       const existingRes = await send('searchTags', { query: name, limit: 1, exact: true });
@@ -1127,12 +1127,12 @@ async function onTagEnterCreateIfNeeded(e) {
         addTag(existingRes.data.items[0]);
         return;
       }
-      setStatus(res?.error || 'Failed to create tag', false);
+      setStatus(res?.error || 'Could not create tag.', false);
     } else {
-      setStatus(res?.error || 'Failed to create tag', false);
+      setStatus(res?.error || 'Could not create tag.', false);
     }
   } catch (error) {
-    setStatus('Failed to create tag', false);
+    setStatus('Could not create tag.', false);
   }
 }
 
@@ -1187,8 +1187,8 @@ async function onSubmit(e) {
   const url = el('url').value.trim();
   const title = el('title').value.trim();
 
-  if (!url) return setStatus('Missing URL', false);
-  if (!title) return setStatus('Missing title', false);
+  if (!url) return setStatus('URL is required.', false);
+  if (!title) return setStatus('Title is required.', false);
 
   const payload = buildBookmarkPayload(url, title);
 
@@ -1200,20 +1200,20 @@ async function onSubmit(e) {
     const res = await send('createBookmark', payload);
     if (res?.ok) {
       shouldRestoreSubmitState = false;
-      showSaveToast('✓ Bookmark saved!', true);
-      setStatus('Bookmark saved!', true);
+      showSaveToast('✓ Bookmark saved', true);
+      setStatus('Bookmark saved.', true);
       setTimeout(() => window.close(), 2500);
     } else if (res?.status === 409 && res?.data?.duplicates?.length) {
       showDuplicateWarning(res.data.duplicates);
       showSaveToast('✕ Bookmark already exists', false);
-      setStatus('Bookmark already exists. Review duplicates below.', false);
+      setStatus('Bookmark already exists. Review the existing entries below.', false);
     } else {
-      showSaveToast('✕ ' + (res?.error || 'Failed to save bookmark'), false);
-      setStatus(res?.error || 'Failed to save bookmark', false);
+      showSaveToast('✕ ' + (res?.error || 'Could not save bookmark.'), false);
+      setStatus(res?.error || 'Could not save bookmark.', false);
     }
   } catch (error) {
-    showSaveToast('✕ Failed to save bookmark', false);
-    setStatus('Failed to save bookmark', false);
+    showSaveToast('✕ Could not save bookmark', false);
+    setStatus('Could not save bookmark.', false);
   } finally {
     if (shouldRestoreSubmitState) {
       setSubmitPending(false);

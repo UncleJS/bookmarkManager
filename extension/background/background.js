@@ -36,12 +36,12 @@ chrome.runtime.onInstalled.addListener(async () => {
   // Create context menu items for bookmark saving
   chrome.contextMenus.create({
     id: MENU_IDS.QUICK,
-    title: 'Quick Save Bookmark',
+    title: 'Quick save bookmark',
     contexts: ['page', 'selection', 'link']
   });
   chrome.contextMenus.create({
     id: MENU_IDS.FULL,
-    title: 'Full Save Bookmark…',
+    title: 'Open bookmark form…',
     contexts: ['page', 'selection', 'link']
   });
 });
@@ -91,13 +91,13 @@ async function handleQuickSave(tab) {
 
     // Send bookmark to API with timeout
     await apiPost('/bookmarks', payload, { timeoutMs: 8000 });
-    await showPageToast(t.id, '✓ Bookmark saved!', true);
+    await showPageToast(t.id, '✓ Bookmark saved', true);
   } catch (e) {
     const t = tab || (await getActiveTab().catch(() => null));
     if (t?.id) {
-      await showPageToast(t.id, '✕ ' + (e.message || 'Quick save failed'), false);
+      await showPageToast(t.id, '✕ ' + (e.message || 'Could not quick-save bookmark'), false);
     } else {
-      await notify('Quick save failed', e.message || String(e), 'error');
+      await notify('Quick save failed', e.message || 'Could not quick-save bookmark.', 'error');
     }
   }
 }
@@ -278,7 +278,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           break;
         }
         default:
-          sendResponse({ ok: false, error: 'Unknown message type' });
+          sendResponse({ ok: false, error: 'Unknown extension message type.' });
       }
     } catch (err) {
       sendResponse({

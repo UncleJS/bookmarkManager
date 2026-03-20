@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Save Bookmark</title>
+  <title>Add Bookmark</title>
   <link rel="stylesheet" href="popup.css" />
 </head>
 <body class="dark-bg dark-text">
@@ -11,7 +11,7 @@
     <div id="save-toast" class="save-toast" role="status" aria-live="polite" aria-atomic="true"></div>
 
     <div class="header">
-      <h1 class="title">Save Bookmark</h1>
+      <h1 class="title">Add Bookmark</h1>
     </div>
 
     <form id="form" class="form-container">
@@ -58,7 +58,7 @@
             <input
               id="subcategory-search"
               type="text"
-              placeholder="Search sub-categories..."
+              placeholder="Search sub-categories"
               autocomplete="off"
               aria-autocomplete="list"
               aria-expanded="false"
@@ -79,7 +79,7 @@
             type="button"
             class="add-button"
           >
-            + Add New Sub-category
+            + Add sub-category
           </button>
         </div>
       </div>
@@ -96,7 +96,7 @@
             <input
               id="tag-input"
               type="text"
-              placeholder="Type to search or add tags"
+              placeholder="Search or add tags"
               autocomplete="off"
               aria-autocomplete="list"
               aria-expanded="false"
@@ -158,7 +158,7 @@
           type="submit"
           class="save-button"
         >
-          Save Bookmark
+          Save bookmark
         </button>
       </div>
     </form>
@@ -167,7 +167,7 @@
   <!-- Modal for creating subcategories -->
   <div id="subcategory-modal" class="modal-backdrop hidden">
     <div class="modal-content" role="dialog" aria-modal="true" aria-labelledby="subcategory-modal-title" tabindex="-1">
-      <h3 id="subcategory-modal-title" class="modal-title">Create New Sub-category</h3>
+      <h3 id="subcategory-modal-title" class="modal-title">Create sub-category</h3>
 
       <div class="modal-body">
         <div class="field-group">
@@ -175,7 +175,7 @@
           <input
             id="modal-subcategory-name"
             type="text"
-            placeholder="Enter sub-category name..."
+            placeholder="Enter a sub-category name"
             class="input-field"
           />
         </div>
@@ -184,7 +184,7 @@
           <label for="modal-subcategory-description" class="field-label">Description <span style="font-weight:400;opacity:0.65">(optional)</span></label>
           <textarea
             id="modal-subcategory-description"
-            placeholder="What does this sub-category mean?"
+            placeholder="Optional description"
             class="input-field textarea-field"
             rows="2"
           ></textarea>
@@ -195,21 +195,21 @@
           <div class="radio-group">
             <label class="radio-label">
               <input type="radio" name="category-option" value="none" checked class="radio-input" />
-              <span>No Category</span>
+              <span>No category</span>
             </label>
             <label class="radio-label">
               <input type="radio" name="category-option" value="existing" class="radio-input" />
-              <span>Existing Category</span>
+              <span>Existing category</span>
             </label>
             <label class="radio-label">
               <input type="radio" name="category-option" value="new" class="radio-input" />
-              <span>New Category</span>
+              <span>New category</span>
             </label>
           </div>
         </div>
 
         <div id="existing-categories-section" class="field-group hidden">
-          <label for="modal-existing-categories" class="field-label">Select Existing Category</label>
+          <label for="modal-existing-categories" class="field-label">Choose category</label>
           <select
             id="modal-existing-categories"
             class="input-field"
@@ -218,11 +218,11 @@
         </div>
 
         <div id="new-category-section" class="field-group hidden">
-          <label for="modal-new-category-name" class="field-label">New Category Name</label>
+          <label for="modal-new-category-name" class="field-label">New category name</label>
           <input
             id="modal-new-category-name"
             type="text"
-            placeholder="Enter category name..."
+            placeholder="Enter a category name"
             class="input-field"
           />
         </div>

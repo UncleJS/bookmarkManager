@@ -55,9 +55,9 @@ el('save').addEventListener('click', async () => {
 
     await setApiToken(el('apiToken').value.trim());
 
-    showStatus('Saved');
+    showStatus('Settings saved.');
   } catch (error) {
-    showStatus(error?.message || 'Failed to save settings.', {
+    showStatus(error?.message || 'Could not save settings.', {
       success: false,
       timeoutMs: 4000,
     });
