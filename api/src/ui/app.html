@@ -694,6 +694,84 @@
       overflow-y: auto;
     }
 
+    .taxonomy-selected-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      min-height: 34px;
+      padding: 8px;
+      border: 1px solid var(--border2);
+      border-radius: 4px;
+      background: var(--surface2);
+    }
+
+    .taxonomy-empty {
+      font-size: 12px;
+      color: var(--text-dim);
+    }
+
+    .taxonomy-selection-grid {
+      display: grid;
+      gap: 8px;
+      margin-top: 8px;
+    }
+
+    .taxonomy-select {
+      width: 100%;
+      background: var(--surface2);
+      border: 1px solid var(--border2);
+      border-radius: 4px;
+      color: var(--text);
+      font-family: inherit;
+      font-size: 12px;
+      padding: 6px 8px;
+      outline: none;
+    }
+
+    .taxonomy-select:focus { border-color: var(--accent); }
+    .taxonomy-select:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    .taxonomy-add-row {
+      display: flex;
+      justify-content: flex-end;
+      margin-top: 8px;
+    }
+
+    .taxonomy-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      max-width: 100%;
+      padding: 4px 8px;
+      border-radius: 999px;
+      border: 1px solid var(--accent);
+      background: var(--accent-dim);
+      color: var(--accent);
+      font-size: 11px;
+      line-height: 1.2;
+    }
+
+    .taxonomy-chip button {
+      border: none;
+      background: transparent;
+      color: inherit;
+      cursor: pointer;
+      font: inherit;
+      line-height: 1;
+      padding: 0;
+    }
+
+    .taxonomy-chip button:hover { color: var(--text); }
+
+    .taxonomy-helper {
+      margin-top: 6px;
+      font-size: 11px;
+      color: var(--text-dim);
+    }
+
     .picker-chip {
       font-size: 11px;
       padding: 3px 8px;
@@ -1048,8 +1126,22 @@
 
     <div class="modal-field">
       <label>Sub-categories</label>
-      <input type="text" class="picker-search" id="subcategory-search" placeholder="Filter…" oninput="filterChips('class')" />
-      <div class="picker-list" id="subcategory-chips"></div>
+      <div class="taxonomy-selected-list" id="selected-taxonomy"></div>
+      <div class="taxonomy-selection-grid">
+        <select id="taxonomy-category-select" class="taxonomy-select" onchange="onTaxonomyCategoryChange()">
+          <option value="">Select category</option>
+        </select>
+        <select id="taxonomy-subcategory-select" class="taxonomy-select" onchange="onTaxonomySubcategoryChange()" disabled>
+          <option value="">Select sub-category</option>
+        </select>
+        <select id="taxonomy-subsubcategory-select" class="taxonomy-select" onchange="onTaxonomySubSubcategoryChange()" disabled>
+          <option value="">Select sub-sub-category (optional)</option>
+        </select>
+      </div>
+      <div class="taxonomy-add-row">
+        <button type="button" class="btn-primary" id="taxonomy-add-btn" onclick="addSelectedTaxonomy()" disabled>Add selection</button>
+      </div>
+      <div class="taxonomy-helper">Add a category only, or continue into a sub-category and optional sub-sub-category.</div>
       <button type="button" class="btn-add-new-class" onclick="openCreateSubcategoryModal()">+ Add New Sub-category</button>
     </div>
 
@@ -1711,6 +1803,7 @@
       .join('');
 
     const classes = [
+      ...(b.categories || []).map(c => ({ label: c.name })),
       ...(b.subcategories || []).map(c => ({ label: c.categoryName ? `${c.categoryName} > ${c.name}` : c.name })),
       ...(b.subSubcategories || []).map(c => ({ label: [c.categoryName, c.subcategoryName, c.name].filter(Boolean).join(' > ') })),
     ]
@@ -1826,12 +1919,17 @@
   // ── Edit modal ─────────────────────────────────────────────────────────────
   let modalState = {
     bookmarkId: null,
-    allSubcategories: [],   // [{id, name, kind, label, categoryName, subcategoryName, parentSubcategoryId}]
+    taxonomyTree: [],
+    allTaxonomyItems: [],
     allCategories:  [],   // [{id, name}]  — for the create-subcategory sub-modal
     allTags:    [],   // [{id, name}]
+    selCategoryIds: new Set(),
     selSubcategoryIds: new Set(),
     selSubSubcategoryIds: new Set(),
     selTagIds:   new Set(),
+    cascadeCategoryId: '',
+    cascadeSubcategoryId: '',
+    cascadeSubSubcategoryId: '',
   };
 
   // Pre-load subcategories & tags for the modal (shared data, refreshed on open)
@@ -1844,27 +1942,31 @@
     const { items: tagItems } = await tRes.json();
 
     // Flatten all active subcategories and sub-sub-categories with breadcrumb info
-    const flatSubcategories = [];
+    const flatTaxonomyItems = [];
     const flatCategories = [];
     categories.forEach(category => {
       if (category.name !== 'Uncategorized') {
+        const categoryItem = { id: category.id, name: category.name, kind: 'category', label: category.name, categoryId: category.id, categoryName: category.name, subcategoryName: null, parentSubcategoryId: null };
         flatCategories.push({ id: category.id, name: category.name });
+        flatTaxonomyItems.push(categoryItem);
       }
       category.subcategories.forEach(subcategory => {
-        flatSubcategories.push({
+        flatTaxonomyItems.push({
           id: subcategory.id,
           name: subcategory.name,
           kind: 'subcategory',
+          categoryId: category.name !== 'Uncategorized' ? category.id : null,
           label: category.name !== 'Uncategorized' ? `${category.name} > ${subcategory.name}` : subcategory.name,
           categoryName: category.name !== 'Uncategorized' ? category.name : null,
           subcategoryName: null,
           parentSubcategoryId: null,
         });
         (subcategory.subSubcategories || []).forEach(subSubcategory => {
-          flatSubcategories.push({
+          flatTaxonomyItems.push({
             id: subSubcategory.id,
             name: subSubcategory.name,
             kind: 'subSubcategory',
+            categoryId: category.name !== 'Uncategorized' ? category.id : null,
             label: [category.name !== 'Uncategorized' ? category.name : null, subcategory.name, subSubcategory.name].filter(Boolean).join(' > '),
             categoryName: category.name !== 'Uncategorized' ? category.name : null,
             subcategoryName: subcategory.name,
@@ -1873,7 +1975,19 @@
         });
       });
     });
-    modalState.allSubcategories = flatSubcategories;
+    modalState.taxonomyTree = categories.map(category => ({
+      id: category.id,
+      name: category.name,
+      subcategories: (category.subcategories || []).map(subcategory => ({
+        id: subcategory.id,
+        name: subcategory.name,
+        subSubcategories: (subcategory.subSubcategories || []).map(subSubcategory => ({
+          id: subSubcategory.id,
+          name: subSubcategory.name,
+        })),
+      })),
+    }));
+    modalState.allTaxonomyItems = flatTaxonomyItems;
     modalState.allCategories  = flatCategories;
     modalState.allTags = tagItems;
   }
@@ -1882,11 +1996,12 @@
     await loadModalData();
 
     modalState.bookmarkId = bm.id;
+    modalState.selCategoryIds = new Set((bm.categories || []).map(c => c.id));
     modalState.selSubcategoryIds = new Set((bm.subcategories || []).map(c => c.id));
     modalState.selSubSubcategoryIds = new Set((bm.subSubcategories || []).map(c => c.id));
     modalState.selTagIds   = new Set((bm.tags || []).map(t => t.id));
 
-    modalState.allSubcategories.forEach(item => {
+    modalState.allTaxonomyItems.forEach(item => {
       if (item.kind === 'subSubcategory' && modalState.selSubSubcategoryIds.has(item.id) && item.parentSubcategoryId != null) {
         modalState.selSubcategoryIds.delete(item.parentSubcategoryId);
       }
@@ -1900,9 +2015,10 @@
     document.getElementById('flag-cheatsheets').checked = !!bm.cheatsheets;
     document.getElementById('flag-forReview').checked   = !!bm.forReview;
 
-    document.getElementById('subcategory-search').value = '';
     document.getElementById('tag-search').value   = '';
-    renderChips('class');
+    resetTaxonomyCascade();
+    renderSelectedTaxonomy();
+    renderTaxonomyCascade();
     renderChips('tag');
 
     document.getElementById('modal-overlay').classList.add('open');
@@ -1932,21 +2048,213 @@
 
   function filterChips(type) { renderChips(type); }
 
+  function normalizeTaxonomyCategoryId(value) {
+    if (value === '' || value == null) return '';
+    return String(value);
+  }
+
+  function getSelectedTaxonomyItems() {
+    return modalState.allTaxonomyItems.filter(item => {
+      if (item.kind === 'category') return modalState.selCategoryIds.has(item.id);
+      if (item.kind === 'subSubcategory') return modalState.selSubSubcategoryIds.has(item.id);
+      return modalState.selSubcategoryIds.has(item.id);
+    }).sort((a, b) => a.label.localeCompare(b.label));
+  }
+
+  function renderSelectedTaxonomy() {
+    const container = document.getElementById('selected-taxonomy');
+    const items = getSelectedTaxonomyItems();
+    if (!items.length) {
+      container.innerHTML = '<span class="taxonomy-empty">No categories selected.</span>';
+      return;
+    }
+
+    container.innerHTML = items.map(item => (
+      `<span class="taxonomy-chip" data-id="${item.id}" data-kind="${item.kind}">` +
+      `${esc(item.label)}` +
+      `<button type="button" title="Remove ${esc(item.label)}" aria-label="Remove ${esc(item.label)}">x</button>` +
+      `</span>`
+    )).join('');
+  }
+
+  function getCascadeCategoryOptions() {
+    return modalState.taxonomyTree.filter(category => category.name !== 'Uncategorized');
+  }
+
+  function getCascadeSelectedCategory() {
+    return getCascadeCategoryOptions().find(category => normalizeTaxonomyCategoryId(category.id) === modalState.cascadeCategoryId) || null;
+  }
+
+  function getCascadeSelectedSubcategory() {
+    const category = getCascadeSelectedCategory();
+    if (!category) return null;
+    return (category.subcategories || []).find(subcategory => String(subcategory.id) === modalState.cascadeSubcategoryId) || null;
+  }
+
+  function getPendingTaxonomySelection() {
+    const subSubcategory = getCascadeSelectedSubcategory()?.subSubcategories?.find(item => String(item.id) === modalState.cascadeSubSubcategoryId) || null;
+    if (subSubcategory) {
+      return {
+        kind: 'subSubcategory',
+        id: subSubcategory.id,
+        alreadySelected: modalState.selSubSubcategoryIds.has(subSubcategory.id),
+      };
+    }
+
+    const subcategory = getCascadeSelectedSubcategory();
+    if (subcategory) {
+      return {
+        kind: 'subcategory',
+        id: subcategory.id,
+        alreadySelected: modalState.selSubcategoryIds.has(subcategory.id),
+      };
+    }
+
+    const category = getCascadeSelectedCategory();
+    if (category) {
+      return {
+        kind: 'category',
+        id: category.id,
+        alreadySelected: modalState.selCategoryIds.has(category.id),
+      };
+    }
+
+    return null;
+  }
+
+  function updateTaxonomyAddButton() {
+    const btn = document.getElementById('taxonomy-add-btn');
+    const pending = getPendingTaxonomySelection();
+    if (!pending) {
+      btn.disabled = true;
+      btn.textContent = 'Add selection';
+      return;
+    }
+
+    btn.disabled = pending.alreadySelected;
+    btn.textContent = pending.kind === 'subSubcategory'
+      ? 'Add sub-sub-category'
+      : pending.kind === 'subcategory'
+        ? 'Add sub-category'
+        : 'Add category';
+  }
+
+  function renderTaxonomyCascade() {
+    const categorySelect = document.getElementById('taxonomy-category-select');
+    const subcategorySelect = document.getElementById('taxonomy-subcategory-select');
+    const subSubcategorySelect = document.getElementById('taxonomy-subsubcategory-select');
+
+    const categories = getCascadeCategoryOptions();
+    categorySelect.innerHTML = '<option value="">Select category</option>' + categories.map(category => (
+      `<option value="${category.id}">${esc(category.name)}</option>`
+    )).join('');
+    categorySelect.value = modalState.cascadeCategoryId;
+
+    const selectedCategory = getCascadeSelectedCategory();
+    const subcategories = selectedCategory?.subcategories || [];
+    subcategorySelect.innerHTML = '<option value="">Select sub-category</option>' + subcategories.map(subcategory => (
+      `<option value="${subcategory.id}">${esc(subcategory.name)}</option>`
+    )).join('');
+    subcategorySelect.disabled = !selectedCategory || subcategories.length === 0;
+    subcategorySelect.value = modalState.cascadeSubcategoryId;
+
+    const selectedSubcategory = getCascadeSelectedSubcategory();
+    const subSubcategories = selectedSubcategory?.subSubcategories || [];
+    subSubcategorySelect.innerHTML = '<option value="">Select sub-sub-category (optional)</option>' + subSubcategories.map(subSubcategory => (
+      `<option value="${subSubcategory.id}">${esc(subSubcategory.name)}</option>`
+    )).join('');
+    subSubcategorySelect.disabled = !selectedSubcategory || subSubcategories.length === 0;
+    if (subSubcategorySelect.disabled) {
+      modalState.cascadeSubSubcategoryId = '';
+      subSubcategorySelect.value = '';
+    } else {
+      subSubcategorySelect.value = modalState.cascadeSubSubcategoryId;
+    }
+
+    updateTaxonomyAddButton();
+  }
+
+  function resetTaxonomyCascade() {
+    modalState.cascadeCategoryId = '';
+    modalState.cascadeSubcategoryId = '';
+    modalState.cascadeSubSubcategoryId = '';
+  }
+
+  function onTaxonomyCategoryChange() {
+    modalState.cascadeCategoryId = document.getElementById('taxonomy-category-select').value;
+    modalState.cascadeSubcategoryId = '';
+    modalState.cascadeSubSubcategoryId = '';
+    renderTaxonomyCascade();
+  }
+
+  function onTaxonomySubcategoryChange() {
+    modalState.cascadeSubcategoryId = document.getElementById('taxonomy-subcategory-select').value;
+    modalState.cascadeSubSubcategoryId = '';
+    renderTaxonomyCascade();
+  }
+
+  function onTaxonomySubSubcategoryChange() {
+    modalState.cascadeSubSubcategoryId = document.getElementById('taxonomy-subsubcategory-select').value;
+    updateTaxonomyAddButton();
+  }
+
+  function addSelectedTaxonomy() {
+    const pending = getPendingTaxonomySelection();
+    if (!pending || pending.alreadySelected) return;
+
+    if (pending.kind === 'category') {
+      modalState.selCategoryIds.add(pending.id);
+      modalState.allTaxonomyItems.forEach(item => {
+        if (item.categoryId === pending.id) {
+          if (item.kind === 'subcategory') modalState.selSubcategoryIds.delete(item.id);
+          if (item.kind === 'subSubcategory') modalState.selSubSubcategoryIds.delete(item.id);
+        }
+      });
+    } else if (pending.kind === 'subSubcategory') {
+      modalState.selSubSubcategoryIds.add(pending.id);
+      const parentSubcategoryId = modalState.allTaxonomyItems.find(item => item.kind === 'subSubcategory' && item.id === pending.id)?.parentSubcategoryId;
+      if (parentSubcategoryId != null) modalState.selSubcategoryIds.delete(parentSubcategoryId);
+      const categoryId = modalState.allTaxonomyItems.find(item => item.kind === 'subSubcategory' && item.id === pending.id)?.categoryId;
+      if (categoryId != null) modalState.selCategoryIds.delete(categoryId);
+    } else {
+      modalState.selSubcategoryIds.add(pending.id);
+      const categoryId = modalState.allTaxonomyItems.find(item => item.kind === 'subcategory' && item.id === pending.id)?.categoryId;
+      if (categoryId != null) modalState.selCategoryIds.delete(categoryId);
+      modalState.allTaxonomyItems.forEach(item => {
+        if (item.kind === 'subSubcategory' && item.parentSubcategoryId === pending.id) {
+          modalState.selSubSubcategoryIds.delete(item.id);
+        }
+      });
+    }
+
+    renderSelectedTaxonomy();
+    resetTaxonomyCascade();
+    renderTaxonomyCascade();
+  }
+
+  document.getElementById('selected-taxonomy').addEventListener('click', e => {
+    const chip = e.target.closest('.taxonomy-chip');
+    if (!chip) return;
+    const id = Number(chip.dataset.id);
+    if (chip.dataset.kind === 'category') modalState.selCategoryIds.delete(id);
+    else if (chip.dataset.kind === 'subSubcategory') modalState.selSubSubcategoryIds.delete(id);
+    else modalState.selSubcategoryIds.delete(id);
+    renderSelectedTaxonomy();
+    updateTaxonomyAddButton();
+  });
+
   function renderChips(type) {
     const isClass = type === 'class';
-    const query = (document.getElementById(isClass ? 'subcategory-search' : 'tag-search').value || '').toLowerCase();
-    const list  = document.getElementById(isClass ? 'subcategory-chips' : 'tag-chips');
-    const items = isClass ? modalState.allSubcategories : modalState.allTags;
-    const filtered = isClass
-      ? items.filter(item => item.label.toLowerCase().includes(query) || item.name.toLowerCase().includes(query))
-      : items.filter(item => item.name.toLowerCase().includes(query));
+    if (isClass) return;
+
+    const query = (document.getElementById('tag-search').value || '').toLowerCase();
+    const list  = document.getElementById('tag-chips');
+    const items = modalState.allTags;
+    const filtered = items.filter(item => item.name.toLowerCase().includes(query));
 
     list.innerHTML = filtered.map(item => {
-      const label = isClass ? item.label : item.name;
-      const sel = isClass
-        ? (item.kind === 'subSubcategory' ? modalState.selSubSubcategoryIds.has(item.id) : modalState.selSubcategoryIds.has(item.id))
-        : modalState.selTagIds.has(item.id);
-      return `<span class="picker-chip${sel ? ' selected' : ''}" data-id="${item.id}" data-kind="${item.kind || ''}" data-type="${type}">${esc(label)}</span>`;
+      const sel = modalState.selTagIds.has(item.id);
+      return `<span class="picker-chip${sel ? ' selected' : ''}" data-id="${item.id}" data-kind="${item.kind || ''}" data-type="${type}">${esc(item.name)}</span>`;
     }).join('');
 
     // Show "create" chip for tags if no exact match
@@ -1954,34 +2262,6 @@
       list.innerHTML += `<span class="picker-chip" data-type="tag-create" data-name="${esc(query)}">+ "${esc(query)}"</span>`;
     }
   }
-
-  // Chip click — toggle selection or create tag
-  document.getElementById('subcategory-chips').addEventListener('click', e => {
-    const chip = e.target.closest('.picker-chip');
-    if (!chip) return;
-    const id = Number(chip.dataset.id);
-    if (chip.dataset.kind === 'subSubcategory') {
-      if (modalState.selSubSubcategoryIds.has(id)) {
-        modalState.selSubSubcategoryIds.delete(id);
-      } else {
-        modalState.selSubSubcategoryIds.add(id);
-        const parentSubcategoryId = modalState.allSubcategories.find(item => item.kind === 'subSubcategory' && item.id === id)?.parentSubcategoryId;
-        if (parentSubcategoryId != null) modalState.selSubcategoryIds.delete(parentSubcategoryId);
-      }
-    } else {
-      if (modalState.selSubcategoryIds.has(id)) {
-        modalState.selSubcategoryIds.delete(id);
-      } else {
-        modalState.selSubcategoryIds.add(id);
-        modalState.allSubcategories.forEach(item => {
-          if (item.kind === 'subSubcategory' && item.parentSubcategoryId === id) {
-            modalState.selSubSubcategoryIds.delete(item.id);
-          }
-        });
-      }
-    }
-    renderChips('class');
-  });
 
   // ── Create-subcategory sub-modal ────────────────────────────────────────
   function openCreateSubcategoryModal() {
@@ -2090,12 +2370,34 @@
         categoryName: resolvedCategoryName,
         subcategoryName: null,
       };
-      modalState.allSubcategories.push(newClass);
+      modalState.allTaxonomyItems.push(newClass);
       modalState.selSubcategoryIds.add(data.id);
+      if (data.categoryId != null) modalState.selCategoryIds.delete(data.categoryId);
+      const targetCategoryId = data.categoryId == null ? 0 : data.categoryId;
+      const targetCategoryName = resolvedCategoryName || 'Uncategorized';
+      let didUpdateTree = false;
+      modalState.taxonomyTree = modalState.taxonomyTree.map(category => {
+        if (normalizeTaxonomyCategoryId(category.id) !== normalizeTaxonomyCategoryId(targetCategoryId)) return category;
+        didUpdateTree = true;
+        return {
+          ...category,
+          subcategories: [...category.subcategories, { id: data.id, name: data.name, subSubcategories: [] }]
+            .sort((a, b) => a.name.localeCompare(b.name)),
+        };
+      });
+      if (!didUpdateTree) {
+        modalState.taxonomyTree.push({
+          id: targetCategoryId,
+          name: targetCategoryName,
+          subcategories: [{ id: data.id, name: data.name, subSubcategories: [] }],
+        });
+        modalState.taxonomyTree.sort((a, b) => a.name.localeCompare(b.name));
+      }
 
       closeCreateClassModal();
-      document.getElementById('subcategory-search').value = '';
-      renderChips('class');
+      renderSelectedTaxonomy();
+      resetTaxonomyCascade();
+      renderTaxonomyCascade();
     } catch (err) {
       errEl.textContent = 'Failed to create sub-category: ' + err.message;
     } finally {
@@ -2174,6 +2476,7 @@
       title:             document.getElementById('edit-title').value.trim(),
       url:               document.getElementById('edit-url').value.trim() || undefined,
       description:       document.getElementById('edit-description').value.trim() || null,
+      categoryIds:       [...modalState.selCategoryIds],
       subcategoryIds: [...modalState.selSubcategoryIds],
       subSubcategoryIds: [...modalState.selSubSubcategoryIds],
       tagIds:            [...modalState.selTagIds],

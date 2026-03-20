@@ -2,6 +2,7 @@ import { Elysia, t } from "elysia";
 import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "../db/client.ts";
 import {
+  bookmarkCategories,
   bookmarkSubcategories,
   bookmarkSubSubcategories,
   bookmarks,
@@ -293,7 +294,18 @@ export const categoryRoutes = new Elysia()
       if (!row) { set.status = 404; return { error: "Category not found" }; }
       if (row.archivedAt) { set.status = 409; return { error: "Already archived" }; }
 
-      const [[{ count: directCount }], [{ count: childCount }]] = await Promise.all([
+      const [[{ count: categoryCount }], [{ count: directCount }], [{ count: childCount }]] = await Promise.all([
+        db
+          .select({ count: sql<number>`COUNT(*)` })
+          .from(bookmarkCategories)
+          .innerJoin(bookmarks, and(
+            eq(bookmarkCategories.bookmarkId, bookmarks.id),
+            isNull(bookmarks.archivedAt),
+          ))
+          .where(and(
+            eq(bookmarkCategories.categoryId, id),
+            isNull(bookmarkCategories.archivedAt),
+          )),
         db
           .select({ count: sql<number>`COUNT(*)` })
           .from(bookmarkSubcategories)
@@ -325,10 +337,10 @@ export const categoryRoutes = new Elysia()
           ))
           .where(isNull(bookmarkSubSubcategories.archivedAt)),
       ]);
-      const total = Number(directCount) + Number(childCount);
+      const total = Number(categoryCount) + Number(directCount) + Number(childCount);
       if (total > 0) {
         set.status = 409;
-        return { error: `Cannot archive: ${total} active bookmark${total === 1 ? "" : "s"} linked to sub-categories in this category` };
+        return { error: `Cannot archive: ${total} active bookmark${total === 1 ? "" : "s"} linked to this category branch` };
       }
 
       await db.update(categories).set({ archivedAt: sql`NOW()` }).where(eq(categories.id, id));
@@ -340,15 +352,15 @@ export const categoryRoutes = new Elysia()
         summary: "Archive a category",
         description:
           "Soft-deletes a category by setting its `archivedAt` timestamp.\n\n" +
-          "**Safety check:** archiving is blocked if any active (non-archived) sub-categories inside " +
-          "this category have active bookmarks assigned to them. " +
-          "The error message reports the total active bookmark count across all affected sub-categories.\n\n" +
-          "To proceed: archive or reassign the bookmarks linked to this category's sub-categories first. " +
+          "**Safety check:** archiving is blocked if any active bookmarks are linked directly to this category, " +
+          "to sub-categories inside it, or to nested sub-sub-categories in the same branch. " +
+          "The error message reports the total active bookmark count across the whole category branch.\n\n" +
+          "To proceed: archive or reassign the bookmarks linked to this category branch first. " +
           "The category and all its sub-categories can be restored at any time.",
         responses: {
           200: { ...OkResp, description: "Category archived" },
           404: { ...ErrorResp, description: "Category not found" },
-          409: { ...ErrorResp, description: "Already archived, or active bookmarks are linked to sub-categories in this category" },
+          409: { ...ErrorResp, description: "Already archived, or active bookmarks are linked somewhere in this category branch" },
         },
       },
     }

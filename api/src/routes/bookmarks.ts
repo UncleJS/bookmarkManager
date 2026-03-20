@@ -2,6 +2,7 @@ import { Elysia, t } from "elysia";
 import { and, asc, desc, eq, inArray, isNotNull, isNull, like, or, sql } from "drizzle-orm";
 import { db } from "../db/client.ts";
 import {
+  bookmarkCategories,
   bookmarkSubcategories,
   bookmarkSubSubcategories,
   bookmarks,
@@ -29,10 +30,18 @@ function uniqueIds(ids?: number[]): number[] {
 }
 
 async function getActiveClassificationIds(bookmarkId: number): Promise<{
+  categoryIds: number[];
   subcategoryIds: number[];
   subSubcategoryIds: number[];
 }> {
-  const [subcategoryRows, subSubcategoryRows] = await Promise.all([
+  const [categoryRows, subcategoryRows, subSubcategoryRows] = await Promise.all([
+    db
+      .select({ categoryId: bookmarkCategories.categoryId })
+      .from(bookmarkCategories)
+      .where(and(
+        eq(bookmarkCategories.bookmarkId, bookmarkId),
+        isNull(bookmarkCategories.archivedAt),
+      )),
     db
       .select({ subcategoryId: bookmarkSubcategories.subcategoryId })
       .from(bookmarkSubcategories)
@@ -50,12 +59,13 @@ async function getActiveClassificationIds(bookmarkId: number): Promise<{
   ]);
 
   return {
+    categoryIds: categoryRows.map((row) => row.categoryId),
     subcategoryIds: subcategoryRows.map((row) => row.subcategoryId),
     subSubcategoryIds: subSubcategoryRows.map((row) => row.subSubcategoryId),
   };
 }
 
-async function findClassificationOverlapError(subcategoryIds: number[], subSubcategoryIds: number[]): Promise<string | null> {
+async function findClassificationOverlapError(categoryIds: number[], subcategoryIds: number[], subSubcategoryIds: number[]): Promise<string | null> {
   if (subcategoryIds.length === 0 || subSubcategoryIds.length === 0) return null;
 
   const selectedSubcategoryIds = new Set(subcategoryIds);
@@ -70,6 +80,40 @@ async function findClassificationOverlapError(subcategoryIds: number[], subSubca
   const hasOverlap = childRows.some((row) => selectedSubcategoryIds.has(row.subcategoryId));
   return hasOverlap
     ? "Cannot assign a bookmark to both a sub-category and one of its nested sub-sub-categories in the same branch"
+    : null;
+}
+
+async function findCategoryDepthOverlapError(categoryIds: number[], subcategoryIds: number[], subSubcategoryIds: number[]): Promise<string | null> {
+  if (categoryIds.length === 0 || (subcategoryIds.length === 0 && subSubcategoryIds.length === 0)) return null;
+
+  const selectedCategoryIds = new Set(categoryIds);
+  const [subcategoryRows, subSubcategoryRows] = await Promise.all([
+    subcategoryIds.length > 0
+      ? db
+          .select({
+            id: subcategories.id,
+            categoryId: subcategories.categoryId,
+          })
+          .from(subcategories)
+          .where(inArray(subcategories.id, subcategoryIds))
+      : Promise.resolve([]),
+    subSubcategoryIds.length > 0
+      ? db
+          .select({
+            id: subSubcategories.id,
+            categoryId: subcategories.categoryId,
+          })
+          .from(subSubcategories)
+          .innerJoin(subcategories, eq(subSubcategories.subcategoryId, subcategories.id))
+          .where(inArray(subSubcategories.id, subSubcategoryIds))
+      : Promise.resolve([]),
+  ]);
+
+  const hasSubcategoryOverlap = subcategoryRows.some((row) => row.categoryId !== null && selectedCategoryIds.has(row.categoryId));
+  const hasSubSubcategoryOverlap = subSubcategoryRows.some((row) => row.categoryId !== null && selectedCategoryIds.has(row.categoryId));
+
+  return hasSubcategoryOverlap || hasSubSubcategoryOverlap
+    ? "Cannot assign a bookmark to both a category and a deeper taxonomy link in the same category branch"
     : null;
 }
 
@@ -95,10 +139,13 @@ export const bookmarkRoutes = new Elysia()
 
       const flags = body.flags ?? {};
       const tagIds = uniqueIds(body.tags);
+      const categoryIds = uniqueIds(body.categoryIds);
       const subcategoryIds = uniqueIds(body.subcategoryIds);
       const subSubcategoryIds = uniqueIds(body.subSubcategoryIds);
 
-      const overlapError = await findClassificationOverlapError(subcategoryIds, subSubcategoryIds);
+      const overlapError =
+        await findClassificationOverlapError(categoryIds, subcategoryIds, subSubcategoryIds) ??
+        await findCategoryDepthOverlapError(categoryIds, subcategoryIds, subSubcategoryIds);
       if (overlapError) {
         set.status = 409;
         return { error: overlapError };
@@ -128,6 +175,12 @@ export const bookmarkRoutes = new Elysia()
             await tx
               .insert(bookmarkTags)
               .values(tagIds.map((tagId) => ({ bookmarkId: id, tagId })));
+          }
+
+          if (categoryIds.length > 0) {
+            await tx
+              .insert(bookmarkCategories)
+              .values(categoryIds.map((categoryId) => ({ bookmarkId: id, categoryId })));
           }
 
           if (subcategoryIds.length > 0) {
@@ -172,6 +225,7 @@ export const bookmarkRoutes = new Elysia()
         url: t.String({ description: "Full URL of the page to bookmark. Whitespace is trimmed. Required." }),
         title: t.String({ description: "Page title. Whitespace is trimmed. Required." }),
         description: t.Optional(t.String({ description: "Optional freeform notes or description for the bookmark." })),
+        categoryIds: t.Optional(t.Array(t.Number(), { description: "IDs of top-level categories to attach directly. Duplicates are deduplicated automatically." })),
         subcategoryIds: t.Optional(t.Array(t.Number(), { description: "IDs of sub-categories to attach. Duplicates are deduplicated automatically." })),
         subSubcategoryIds: t.Optional(t.Array(t.Number(), { description: "IDs of sub-sub-categories to attach. Duplicates are deduplicated automatically." })),
         tags: t.Optional(t.Array(t.Number(), { description: "IDs of tags to attach. Duplicates are deduplicated automatically." })),
@@ -191,13 +245,14 @@ export const bookmarkRoutes = new Elysia()
         tags: ["bookmarks"],
         summary: "Create a bookmark",
         description:
-          "Saves a new bookmark with optional tags, sub-categories, and flags.\n\n" +
+          "Saves a new bookmark with optional tags, categories, sub-categories, and flags.\n\n" +
           "**Duplicate detection:** by default, if an active bookmark with the same URL already exists " +
           "a `409` is returned with a `duplicates` array listing the existing records. " +
           "Pass `allowDuplicate: true` to skip the preflight lookup and rely on the database uniqueness constraint instead; " +
           "active duplicate URLs still return `409`.\n\n" +
-          "**Tags, sub-categories, and sub-sub-categories** must already exist; pass their integer IDs in `tags`, " +
-          "`subcategoryIds`, and `subSubcategoryIds`. Duplicates in those arrays are silently deduplicated.\n\n" +
+          "**Tags and taxonomy links** must already exist; pass their integer IDs in `tags`, `categoryIds`, `subcategoryIds`, " +
+          "and `subSubcategoryIds`. Duplicates in those arrays are silently deduplicated. A bookmark cannot be linked to a direct category " +
+          "and also to a deeper sub-category or sub-sub-category in that same category branch.\n\n" +
           "**Flags** are all `false` by default. The special `flags.archived` field allows the " +
           "Chrome extension to save a bookmark directly into the archived state (e.g. when importing " +
           "historical data).",
@@ -217,7 +272,7 @@ export const bookmarkRoutes = new Elysia()
           },
           400: { ...ErrorResp, description: "Validation error - url or title is blank after trimming" },
           409: {
-            description: "Duplicate URL detected, or the request linked the bookmark to both a sub-category and one of its nested sub-sub-categories.",
+            description: "Duplicate URL detected, or the request linked conflicting taxonomy levels in the same branch.",
             content: {
               "application/json": {
                 schema: S.obj("Duplicate conflict", {
@@ -474,7 +529,7 @@ export const bookmarkRoutes = new Elysia()
       ]);
 
       const ids = rows.map((r) => r.id);
-      const [tagRows, classRows, childClassRows] =
+      const [tagRows, categoryRows, classRows, childClassRows] =
         ids.length > 0
           ? await Promise.all([
               db
@@ -488,6 +543,18 @@ export const bookmarkRoutes = new Elysia()
                 .where(and(
                   inArray(bookmarkTags.bookmarkId, ids),
                   isNull(bookmarkTags.archivedAt),
+                )),
+              db
+                .select({
+                  bookmarkId: bookmarkCategories.bookmarkId,
+                  categoryId: categories.id,
+                  categoryName: categories.name,
+                })
+                .from(bookmarkCategories)
+                .innerJoin(categories, eq(bookmarkCategories.categoryId, categories.id))
+                .where(and(
+                  inArray(bookmarkCategories.bookmarkId, ids),
+                  isNull(bookmarkCategories.archivedAt),
                 )),
               db
                 .select({
@@ -523,13 +590,16 @@ export const bookmarkRoutes = new Elysia()
                   isNull(bookmarkSubSubcategories.archivedAt),
                 )),
             ])
-          : [[], [], []];
+          : [[], [], [], []];
 
       const items = rows.map((b) => ({
         ...b,
         tags: tagRows
           .filter((tagRow) => tagRow.bookmarkId === b.id)
           .map((tagRow) => ({ id: tagRow.tagId, name: tagRow.tagName })),
+        categories: categoryRows
+          .filter((categoryRow) => categoryRow.bookmarkId === b.id)
+          .map((categoryRow) => ({ id: categoryRow.categoryId, name: categoryRow.categoryName })),
         subcategories: classRows
           .filter((classRow) => classRow.bookmarkId === b.id)
           .map((classRow) => ({ id: classRow.classId, name: classRow.className, categoryId: classRow.categoryId ?? null, categoryName: classRow.categoryName ?? null })),
@@ -563,7 +633,7 @@ export const bookmarkRoutes = new Elysia()
         tags: ["bookmarks"],
         summary: "List bookmarks",
         description:
-          "Returns a paginated list of bookmarks with their full tag and sub-category associations.\n\n" +
+          "Returns a paginated list of bookmarks with their full tag and taxonomy associations.\n\n" +
           "**Default behaviour:** returns active (non-archived) bookmarks, newest first, 20 per page.\n\n" +
           "**Filters (all combinable with AND logic):**\n" +
           "- `q` - full-text search on title, URL, and description (case-insensitive LIKE)\n" +
@@ -572,7 +642,7 @@ export const bookmarkRoutes = new Elysia()
           "- `tagId` - bookmarks that have that tag\n" +
           "- `flag` - bookmarks with that flag set (`readLater` | `hotTopic` | `cheatsheets` | `forReview`)\n" +
           "- `archived=true` - show archived bookmarks (mutually exclusive with active)\n\n" +
-          "Each bookmark item includes fully resolved `tags`, `subcategories`, and `subSubcategories` arrays " +
+          "Each bookmark item includes fully resolved `tags`, `categories`, `subcategories`, and `subSubcategories` arrays " +
           "with parent breadcrumb metadata. Flags are returned as `0`/`1` integers.",
         responses: {
           200: {
@@ -596,6 +666,10 @@ export const bookmarkRoutes = new Elysia()
                     tags: S.arr("Attached tags", S.obj("Tag", {
                       id: S.num("Tag ID"),
                       name: S.str("Tag name"),
+                    })),
+                    categories: S.arr("Attached top-level categories", S.obj("Category", {
+                      id: S.num("Category ID"),
+                      name: S.str("Category name"),
                     })),
                     subcategories: S.arr("Attached sub-categories", S.obj("Sub-category", {
                       id: S.num("Sub-category ID"),
@@ -650,15 +724,26 @@ export const bookmarkRoutes = new Elysia()
       }
 
       const nextTagIds = body.tagIds !== undefined ? uniqueIds(body.tagIds) : null;
+      const nextCategoryIds = body.categoryIds !== undefined ? uniqueIds(body.categoryIds) : null;
       const nextSubcategoryIds = body.subcategoryIds !== undefined ? uniqueIds(body.subcategoryIds) : null;
       const nextSubSubcategoryIds = body.subSubcategoryIds !== undefined ? uniqueIds(body.subSubcategoryIds) : null;
 
-      if (nextSubcategoryIds !== null || nextSubSubcategoryIds !== null) {
+      if (nextCategoryIds !== null || nextSubcategoryIds !== null || nextSubSubcategoryIds !== null) {
         const currentClassificationIds = await getActiveClassificationIds(id);
-        const overlapError = await findClassificationOverlapError(
-          nextSubcategoryIds ?? currentClassificationIds.subcategoryIds,
-          nextSubSubcategoryIds ?? currentClassificationIds.subSubcategoryIds,
-        );
+        const categoryIds = nextCategoryIds ?? currentClassificationIds.categoryIds;
+        const subcategoryIds = nextSubcategoryIds ?? currentClassificationIds.subcategoryIds;
+        const subSubcategoryIds = nextSubSubcategoryIds ?? currentClassificationIds.subSubcategoryIds;
+        const overlapError =
+          await findClassificationOverlapError(
+            categoryIds,
+            subcategoryIds,
+            subSubcategoryIds,
+          ) ??
+          await findCategoryDepthOverlapError(
+            categoryIds,
+            subcategoryIds,
+            subSubcategoryIds,
+          );
 
         if (overlapError) {
           set.status = 409;
@@ -666,7 +751,11 @@ export const bookmarkRoutes = new Elysia()
         }
       }
 
-      const hasAssociationChanges = body.tagIds !== undefined || body.subcategoryIds !== undefined || body.subSubcategoryIds !== undefined;
+      const hasAssociationChanges =
+        body.tagIds !== undefined ||
+        body.categoryIds !== undefined ||
+        body.subcategoryIds !== undefined ||
+        body.subSubcategoryIds !== undefined;
 
       await db.transaction(async (tx) => {
         // Always touch updatedAt when anything changes (scalar or associations)
@@ -714,6 +803,48 @@ export const bookmarkRoutes = new Elysia()
                 .where(eq(bookmarkTags.id, archivedLink.id));
             } else {
               await tx.insert(bookmarkTags).values({ bookmarkId: id, tagId });
+            }
+          }
+        }
+
+        if (nextCategoryIds !== null) {
+          const uniqueCategoryIds = nextCategoryIds;
+
+          const existingCategoryLinks = await tx
+            .select({ id: bookmarkCategories.id, categoryId: bookmarkCategories.categoryId, archivedAt: bookmarkCategories.archivedAt })
+            .from(bookmarkCategories)
+            .where(eq(bookmarkCategories.bookmarkId, id));
+
+          const desiredCategoryIds = new Set(uniqueCategoryIds);
+          const categoriesToArchive = existingCategoryLinks
+            .filter((link) => link.archivedAt === null && !desiredCategoryIds.has(link.categoryId))
+            .map((link) => link.id);
+
+          if (categoriesToArchive.length > 0) {
+            await tx.update(bookmarkCategories)
+              .set({ archivedAt: sql`NOW()` })
+              .where(inArray(bookmarkCategories.id, categoriesToArchive));
+          }
+
+          const existingCategoryById = new Map<number, Array<typeof existingCategoryLinks[number]>>();
+          for (const link of existingCategoryLinks) {
+            const bucket = existingCategoryById.get(link.categoryId);
+            if (bucket) bucket.push(link);
+            else existingCategoryById.set(link.categoryId, [link]);
+          }
+
+          for (const categoryId of uniqueCategoryIds) {
+            const matchingLinks = existingCategoryById.get(categoryId) ?? [];
+            const activeLink = matchingLinks.find((link) => link.archivedAt === null);
+            if (activeLink) continue;
+
+            const archivedLink = matchingLinks.find((link) => link.archivedAt !== null);
+            if (archivedLink) {
+              await tx.update(bookmarkCategories)
+                .set({ archivedAt: null })
+                .where(eq(bookmarkCategories.id, archivedLink.id));
+            } else {
+              await tx.insert(bookmarkCategories).values({ bookmarkId: id, categoryId });
             }
           }
         }
@@ -812,6 +943,7 @@ export const bookmarkRoutes = new Elysia()
         url: t.Optional(t.String({ description: "New URL. Whitespace is trimmed. Cannot be set to an empty string." })),
         description: t.Optional(t.Nullable(t.String({ description: "New description. Pass null to clear the existing description." }))),
         tagIds: t.Optional(t.Array(t.Number(), { description: "Replacement tag ID list. When provided, ALL existing tag associations are replaced with this set. Pass an empty array to remove all tags." })),
+        categoryIds: t.Optional(t.Array(t.Number(), { description: "Replacement top-level category ID list. When provided, ALL existing direct category associations are replaced with this set. Pass an empty array to remove all direct categories." })),
         subcategoryIds: t.Optional(t.Array(t.Number(), { description: "Replacement sub-category ID list. When provided, ALL existing sub-category associations are replaced with this set. Pass an empty array to remove all sub-categories." })),
         subSubcategoryIds: t.Optional(t.Array(t.Number(), { description: "Replacement sub-sub-category ID list. When provided, ALL existing sub-sub-category associations are replaced with this set. Pass an empty array to remove all nested selections." })),
         flags: t.Optional(t.Object({
@@ -827,10 +959,11 @@ export const bookmarkRoutes = new Elysia()
         description:
           "Partially updates a bookmark. Only fields present in the request body are changed - " +
           "omitting a field leaves its current value untouched.\n\n" +
-          "**Tag, sub-category, and sub-sub-category replacement:** when `tagIds`, `subcategoryIds`, or `subSubcategoryIds` are provided, " +
+          "**Tag and taxonomy replacement:** when `tagIds`, `categoryIds`, `subcategoryIds`, or `subSubcategoryIds` are provided, " +
           "the existing associations are **fully replaced** (not merged). " +
           "Removed associations are soft-archived; re-adding a previously removed association restores it. " +
-          "Send an empty array to detach all tags, sub-categories, or sub-sub-categories.\n\n" +
+          "Send an empty array to detach all tags, direct categories, sub-categories, or sub-sub-categories. " +
+          "A bookmark cannot be linked to a direct category and also to a deeper link in that same category branch.\n\n" +
           "**Flags:** each flag is independent. Omitting a flag key leaves it unchanged. " +
           "Pass `false` to clear a flag that was previously set.\n\n" +
           "**URL:** when provided, whitespace is trimmed and an empty string is rejected with 400.\n\n" +
@@ -839,7 +972,7 @@ export const bookmarkRoutes = new Elysia()
           200: { ...OkResp, description: "Bookmark updated successfully" },
           400: { ...ErrorResp, description: "Validation error - invalid id, or title/url is blank after trimming" },
           404: { ...ErrorResp, description: "Bookmark not found" },
-          409: { ...ErrorResp, description: "Conflicting sub-category and nested sub-sub-category assignments" },
+          409: { ...ErrorResp, description: "Conflicting taxonomy assignments in the same category branch" },
         },
       },
     }

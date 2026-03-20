@@ -149,6 +149,33 @@ export const bookmarkTags = mysqlTable(
 );
 
 // ---------------------------------------------------------------------------
+// bookmark_categories  (many-to-many)
+// ---------------------------------------------------------------------------
+export const bookmarkCategories = mysqlTable(
+  "bookmark_categories",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    bookmarkId: int("bookmark_id").notNull().references(() => bookmarks.id),
+    categoryId: int("category_id").notNull().references(() => categories.id),
+    createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`),
+    archivedAt: datetime("archived_at"),
+    bookmarkIdActive: int("bookmark_id_active").generatedAlwaysAs(
+      sql`CASE WHEN archived_at IS NULL THEN bookmark_id ELSE NULL END`,
+      { mode: "stored" }
+    ),
+    categoryIdActive: int("category_id_active").generatedAlwaysAs(
+      sql`CASE WHEN archived_at IS NULL THEN category_id ELSE NULL END`,
+      { mode: "stored" }
+    ),
+  },
+  (t) => [
+    uniqueIndex("uniq_active_bookmark_category").on(t.bookmarkIdActive, t.categoryIdActive),
+    index("idx_bcat_bookmark").on(t.bookmarkId),
+    index("idx_bcat_category").on(t.categoryId),
+  ]
+);
+
+// ---------------------------------------------------------------------------
 // bookmark_subcategories  (many-to-many)
 // ---------------------------------------------------------------------------
 export const bookmarkSubcategories = mysqlTable(

@@ -55,6 +55,7 @@ beforeAll(async () => {
   await adminConnection.query("DROP TRIGGER IF EXISTS fail_bookmark_sub_subcategories_insert");
   await adminConnection.query("DROP TABLE IF EXISTS bookmark_sub_subcategories");
   await adminConnection.query("DROP TABLE IF EXISTS bookmark_subcategories");
+  await adminConnection.query("DROP TABLE IF EXISTS bookmark_categories");
   await adminConnection.query("DROP TABLE IF EXISTS sub_subcategories");
   await adminConnection.query("DROP TABLE IF EXISTS bookmark_tags");
   await adminConnection.query("DROP TABLE IF EXISTS bookmarks");
@@ -347,7 +348,27 @@ describe("category lifecycle", () => {
 
     expect(res.status).toBe(409);
     await expect(res.json()).resolves.toMatchObject({
-      error: "Cannot archive: 1 active bookmark linked to sub-categories in this category",
+      error: "Cannot archive: 1 active bookmark linked to this category branch",
+    });
+  });
+
+  it("blocks archiving categories that still have active direct category bookmarks", async () => {
+    const [{ id: categoryId }] = await db
+      .insert(schema.categories)
+      .values({ name: uniqueName("category-direct-archive-blocked") })
+      .$returningId();
+    const [{ id: bookmarkId }] = await db
+      .insert(schema.bookmarks)
+      .values({ url: uniqueUrl("category-direct-archive-blocked"), title: "Category direct archive blocked" })
+      .$returningId();
+
+    await db.insert(schema.bookmarkCategories).values({ bookmarkId, categoryId });
+
+    const res = await app.handle(request(`/categories/${categoryId}/archive`, "PATCH"));
+
+    expect(res.status).toBe(409);
+    await expect(res.json()).resolves.toMatchObject({
+      error: "Cannot archive: 1 active bookmark linked to this category branch",
     });
   });
 
@@ -673,6 +694,87 @@ describe("bookmark write transactions", () => {
     expect(patchRes.status).toBe(409);
     await expect(patchRes.json()).resolves.toMatchObject({
       error: "Cannot assign a bookmark to both a sub-category and one of its nested sub-sub-categories in the same branch",
+    });
+  });
+
+  it("allows saving a bookmark with only a direct category link", async () => {
+    const [{ id: categoryId }] = await db
+      .insert(schema.categories)
+      .values({ name: uniqueName("bookmark-direct-category") })
+      .$returningId();
+
+    const createRes = await app.handle(jsonRequest("/bookmarks", "POST", {
+      url: uniqueUrl("direct-category-only"),
+      title: "Direct category only",
+      categoryIds: [categoryId],
+    }));
+
+    expect(createRes.status).toBe(201);
+    const created = await createRes.json() as { id: number };
+
+    const listRes = await app.handle(request("/bookmarks"));
+    expect(listRes.status).toBe(200);
+    const listBody = await listRes.json() as {
+      items: Array<{ id: number; categories: Array<{ id: number; name: string }>; subcategories: Array<unknown>; subSubcategories: Array<unknown> }>;
+    };
+
+    expect(listBody.items).toContainEqual(expect.objectContaining({
+      id: created.id,
+      categories: [expect.objectContaining({ id: categoryId })],
+      subcategories: [],
+      subSubcategories: [],
+    }));
+  });
+
+  it("rejects bookmark creation when a direct category and deeper link use the same category branch", async () => {
+    const [{ id: categoryId }] = await db
+      .insert(schema.categories)
+      .values({ name: uniqueName("bookmark-category-conflict") })
+      .$returningId();
+    const [{ id: subcategoryId }] = await db
+      .insert(schema.subcategories)
+      .values({ name: uniqueName("bookmark-category-conflict-sub"), categoryId })
+      .$returningId();
+
+    const res = await app.handle(jsonRequest("/bookmarks", "POST", {
+      url: uniqueUrl("category-branch-conflict"),
+      title: "Category branch conflict",
+      categoryIds: [categoryId],
+      subcategoryIds: [subcategoryId],
+    }));
+
+    expect(res.status).toBe(409);
+    await expect(res.json()).resolves.toMatchObject({
+      error: "Cannot assign a bookmark to both a category and a deeper taxonomy link in the same category branch",
+    });
+  });
+
+  it("rejects bookmark updates when a direct category and deeper link use the same category branch", async () => {
+    const [{ id: categoryId }] = await db
+      .insert(schema.categories)
+      .values({ name: uniqueName("bookmark-category-patch-conflict") })
+      .$returningId();
+    const [{ id: subcategoryId }] = await db
+      .insert(schema.subcategories)
+      .values({ name: uniqueName("bookmark-category-patch-conflict-sub"), categoryId })
+      .$returningId();
+
+    const createRes = await app.handle(jsonRequest("/bookmarks", "POST", {
+      url: uniqueUrl("category-patch-conflict"),
+      title: "Category patch conflict",
+      categoryIds: [categoryId],
+    }));
+    expect(createRes.status).toBe(201);
+    const created = await createRes.json() as { id: number };
+
+    const patchRes = await app.handle(jsonRequest(`/bookmarks/${created.id}`, "PATCH", {
+      categoryIds: [categoryId],
+      subcategoryIds: [subcategoryId],
+    }));
+
+    expect(patchRes.status).toBe(409);
+    await expect(patchRes.json()).resolves.toMatchObject({
+      error: "Cannot assign a bookmark to both a category and a deeper taxonomy link in the same category branch",
     });
   });
 
