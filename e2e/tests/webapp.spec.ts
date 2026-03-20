@@ -116,5 +116,8 @@ test.describe("API docs UI", () => {
     await expect(
       page.getByRole("heading", { name: /Bookmark Manager API/i }).first()
     ).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText("/health", { exact: true }).first()).toBeVisible({
+      timeout: 15_000,
+    });
   });
 });
