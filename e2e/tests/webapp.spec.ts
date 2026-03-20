@@ -9,8 +9,7 @@
  *
  * Prerequisites:
  *   - API running at http://localhost:11650 (or API_BASE_URL env var)
- *   - API_TOKEN env var set (the UI injects it from a prompt or the page reads it
- *     from query params — we pass it as a header via extraHTTPHeaders)
+ *   - API_TOKEN env var set so authenticated UI data can load during tests
  */
 import { test, expect } from "@playwright/test";
 
@@ -18,7 +17,7 @@ const BASE = process.env.API_BASE_URL ?? "http://localhost:11650";
 const TOKEN = process.env.API_TOKEN ?? "";
 
 // The web UI authenticates via a token stored in localStorage ("apiToken").
-// We inject it before navigation.
+// Inject it before navigation so authenticated views can load immediately.
 async function injectToken(page: import("@playwright/test").Page): Promise<void> {
   if (!TOKEN) return;
   await page.addInitScript((token) => {
@@ -82,8 +81,7 @@ test.describe("Category Manager UI (/manage-categories)", () => {
     await page.goto(`${BASE}/manage-categories`, {
       waitUntil: "domcontentloaded",
     });
-    // The page should have some structural element
-    await expect(page.locator("main, #main, #layout, .container").first()).toBeVisible({
+    await expect(page.locator("#page, #topbar, #categories-container").first()).toBeVisible({
       timeout: 10_000,
     });
   });
@@ -96,8 +94,7 @@ test.describe("Category Manager UI (/manage-categories)", () => {
       await page.goto(`${BASE}/manage-categories`, {
         waitUntil: "networkidle",
       });
-      // The page should render a list or an empty-state message
-      const list = page.locator(".category-item, .category-row, #category-list, .empty-state");
+      const list = page.locator("#categories-container > *, .state-box, button:has-text('Archive')");
       await expect(list.first()).toBeAttached({ timeout: 15_000 });
     });
   });
@@ -113,12 +110,11 @@ test.describe("Root redirect", () => {
   });
 });
 
-test.describe("Swagger UI", () => {
-  test("GET /docs serves the Swagger UI", async ({ page }) => {
+test.describe("API docs UI", () => {
+  test("GET /docs serves the API docs UI", async ({ page }) => {
     await page.goto(`${BASE}/docs`, { waitUntil: "domcontentloaded" });
-    // Swagger UI injects a div#swagger-ui or similar
     await expect(
-      page.locator("#swagger-ui, .swagger-ui, [class*='swagger']").first()
+      page.getByRole("heading", { name: /Bookmark Manager API/i }).first()
     ).toBeVisible({ timeout: 15_000 });
   });
 });
