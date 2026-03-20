@@ -138,6 +138,7 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 4px;
+  max-width: 100%;
   padding: 4px 8px;
   background-color: #dbeafe;
   color: #1e40af;
@@ -145,6 +146,20 @@ body {
   font-weight: 500;
   border-radius: 9999px;
   animation: chipEnter 0.2s ease-out;
+}
+
+.chip {
+  overflow: hidden;
+}
+
+.chip-remove {
+  flex: 0 0 auto;
+}
+
+.chip-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .dark .chip {
@@ -246,6 +261,21 @@ body {
   color: #ffffff;
   background-color: #f9fafb;
   border-bottom: 1px solid #e5e7eb;
+}
+
+.category-header {
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #ffffff;
+  background-color: #f9fafb;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.dark .category-header {
+  color: #ffffff;
+  background-color: #1f2937;
+  border-bottom-color: #4b5563;
 }
 
 .dark .group-header {

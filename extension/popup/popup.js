@@ -115,8 +115,9 @@ function updateActiveSuggestion(containerId, activeIndex) {
 function createChip(text, onRemove, isSubcategory = false) {
   const chip = document.createElement('span');
   chip.className = `chip ${isSubcategory ? 'chip-subcategory' : ''}`;
+  chip.title = text;
   chip.innerHTML = `
-    ${text}
+    <span class="chip-text">${text}</span>
     <button type="button" class="chip-remove" title="Remove">
       <svg width="12" height="12" fill="currentColor" viewBox="0 0 20 20">
         <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z"/>
@@ -402,6 +403,8 @@ function showModal() {
 
   document.addEventListener('keydown', onModalKeydown);
 
+  updateModalLevelUi();
+
   // Focus on the name input
   setTimeout(() => el('modal-subcategory-name').focus(), 100);
 
@@ -415,6 +418,18 @@ function showModal() {
     existingRadio.disabled = false;
     existingLabel.style.opacity = '1';
   }
+
+  const subSubcategoryRadio = document.querySelector('input[name="level-option"][value="subSubcategory"]');
+  const subSubcategoryLabel = subSubcategoryRadio.closest('.radio-label');
+  if (state.existingParentSubcategories.length === 0) {
+    subSubcategoryRadio.disabled = true;
+    subSubcategoryLabel.style.opacity = '0.5';
+    document.querySelector('input[name="level-option"][value="subcategory"]').checked = true;
+  } else {
+    subSubcategoryRadio.disabled = false;
+    subSubcategoryLabel.style.opacity = '1';
+  }
+  updateModalLevelUi();
 }
 
 /**
@@ -507,6 +522,28 @@ function updateCategorySections() {
     existingSection.classList.add('hidden');
     newSection.classList.add('hidden');
   }
+}
+
+function updateModalLevelUi() {
+  const levelOption = document.querySelector('input[name="level-option"]:checked')?.value || 'subcategory';
+  const title = el('subcategory-modal-title');
+  const nameLabel = el('modal-name-label');
+  const nameInput = el('modal-subcategory-name');
+  const createBtn = el('modal-create');
+
+  if (levelOption === 'subSubcategory') {
+    title.textContent = 'Create sub-sub-category';
+    nameLabel.textContent = 'Sub-sub-category Name';
+    nameInput.placeholder = 'Enter a sub-sub-category name';
+    createBtn.textContent = 'Create sub-sub-category';
+  } else {
+    title.textContent = 'Create sub-category';
+    nameLabel.textContent = 'Sub-category Name';
+    nameInput.placeholder = 'Enter a sub-category name';
+    createBtn.textContent = 'Create sub-category';
+  }
+
+  updateCategorySections();
 }
 
 /**

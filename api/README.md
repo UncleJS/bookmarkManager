@@ -8,7 +8,7 @@
 [![OpenAPI](https://img.shields.io/badge/API-OpenAPI%203.0-85ea2d?logo=openapiinitiative&logoColor=black)](http://localhost:11650/docs)
 [![Podman](https://img.shields.io/badge/Container-Podman-892ca0?logo=podman)](https://podman.io)
 
-A Bun + Elysia API for managing bookmarks, tags, and subcategories. Backed by MariaDB with Drizzle ORM. Data is never hard-deleted — entity rows and bookmark association rows use archive/restore semantics via `archived_at`.
+A Bun + Elysia API for managing bookmarks, tags, categories, subcategories, and nested sub-sub-categories. Backed by MariaDB with Drizzle ORM. Data is never hard-deleted — entity rows and bookmark association rows use archive/restore semantics via `archived_at`.
 
 ---
 
@@ -184,7 +184,7 @@ Interactive docs always available at **`http://localhost:11650/docs`**.
 |---|---|---|
 | `GET` | `/bookmarks` | List/filter bookmarks (`?limit=&offset=&subcategoryId=&tagId=&flag=&sortBy=&archived=`) |
 | `POST` | `/bookmarks` | Create bookmark |
-| `PATCH` | `/bookmarks/:id` | Edit title, description, flags, tags, sub-categories |
+| `PATCH` | `/bookmarks/:id` | Edit title, description, flags, tags, sub-categories, and sub-sub-categories |
 | `PATCH` | `/bookmarks/:id/archive` | Soft-delete (sets `archivedAt`) |
 | `PATCH` | `/bookmarks/:id/restore` | Restore archived bookmark |
 
@@ -214,18 +214,31 @@ Interactive docs always available at **`http://localhost:11650/docs`**.
 
 [↑ Table of Contents](#table-of-contents)
 
+### Sub-sub-categories
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/subSubcategories` | All active sub-sub-categories, grouped by parent sub-category |
+| `POST` | `/subSubcategories` | Create sub-sub-category with optional `description` |
+| `PATCH` | `/subSubcategories/:id` | Rename sub-sub-category and/or update its `description` |
+| `PATCH` | `/subSubcategories/:id/reorder` | Set display order |
+| `PATCH` | `/subSubcategories/:id/archive` | Archive sub-sub-category |
+| `PATCH` | `/subSubcategories/:id/restore` | Restore archived sub-sub-category |
+
+[↑ Table of Contents](#table-of-contents)
+
 ### Categories
 
 | Method | Path | Description |
 |---|---|---|
-| `GET` | `/categories` | List categories with nested sub-categories (management view) |
+| `GET` | `/categories` | List categories with nested sub-categories and sub-sub-categories (management view) |
 | `POST` | `/categories` | Create category with optional `description` |
 | `PATCH` | `/categories/:id` | Rename category and/or update its `description` |
 | `PATCH` | `/categories/:id/reorder` | Set display order |
 | `PATCH` | `/categories/:id/archive` | Archive category |
 | `PATCH` | `/categories/:id/restore` | Restore archived category |
 
-**Data lifecycle:** nothing is hard-deleted. Entity records and bookmark association rows are archived via `archivedAt`, and replacing bookmark tags/sub-categories archives removed links instead of deleting them.
+**Data lifecycle:** nothing is hard-deleted. Entity records and bookmark association rows are archived via `archivedAt`, and replacing bookmark tags/sub-categories/sub-sub-categories archives removed links instead of deleting them.
 
 **POST /bookmarks — duplicate detection:**
 - Returns `409` with a `duplicates` array if an active bookmark with the same URL already exists.
@@ -245,11 +258,13 @@ All tables include `archived_at DATETIME NULL`. A `NULL` value means the row is 
 | `bookmarks` | Core bookmark store |
 | `categories` | Parent categories for organizing sub-categories; each category has an optional `description TEXT NULL` |
 | `subcategories` | Child items assigned to bookmarks; each sub-category has an optional `description TEXT NULL` |
+| `sub_subcategories` | Third-level items nested under `subcategories`; each sub-sub-category has an optional `description TEXT NULL` |
 | `tags` | Flexible labels; many-to-many with bookmarks |
 | `bookmark_tags` | Junction table with archive/restore semantics |
 | `bookmark_subcategories` | Junction table with archive/restore semantics |
+| `bookmark_sub_subcategories` | Junction table linking bookmarks to sub-sub-categories with archive/restore semantics |
 
-**Uniqueness among active rows** — `tags` and `subcategories` use a generated column (`name_active`) that is `NULL` when archived, with a unique index on that column. This allows archived rows to share names with active rows.
+**Uniqueness among active rows** — `tags`, `subcategories`, and `sub_subcategories` use a generated column (`name_active`) that is `NULL` when archived, with a unique index on that column. This allows archived rows to share names with active rows.
 
 ---
 

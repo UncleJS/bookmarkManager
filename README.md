@@ -263,7 +263,7 @@ Interactive docs always available at **`http://localhost:11650/docs`**.
 |---|---|---|
 | `GET` | `/bookmarks` | List/filter bookmarks (`?limit=&offset=&subcategoryId=&tagId=&flag=&sortBy=&archived=`) |
 | `POST` | `/bookmarks` | Create bookmark |
-| `PATCH` | `/bookmarks/:id` | Edit title, description, flags, tags, sub-categories |
+| `PATCH` | `/bookmarks/:id` | Edit title, description, flags, tags, sub-categories, and sub-sub-categories |
 | `PATCH` | `/bookmarks/:id/archive` | Soft-delete (sets `archivedAt`) |
 | `PATCH` | `/bookmarks/:id/restore` | Restore archived bookmark |
 
@@ -291,20 +291,33 @@ Interactive docs always available at **`http://localhost:11650/docs`**.
 | `PATCH` | `/subcategories/:id/archive` | Archive sub-category |
 | `PATCH` | `/subcategories/:id/restore` | Restore archived sub-category |
 
+### Sub-sub-categories
+
+Third-level taxonomy nested under a sub-category. Bookmarks can be linked to sub-categories, sub-sub-categories, or both.
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/subSubcategories` | All active sub-sub-categories, grouped by sub-category |
+| `POST` | `/subSubcategories` | Create sub-sub-category with optional description |
+| `PATCH` | `/subSubcategories/:id` | Rename sub-sub-category and/or update its description |
+| `PATCH` | `/subSubcategories/:id/reorder` | Set display order |
+| `PATCH` | `/subSubcategories/:id/archive` | Archive sub-sub-category |
+| `PATCH` | `/subSubcategories/:id/restore` | Restore archived sub-sub-category |
+
 [↑ Table of Contents](#table-of-contents)
 
 ### Categories
 
 | Method | Path | Description |
 |---|---|---|
-| `GET` | `/categories` | List categories with nested sub-categories (management view) |
+| `GET` | `/categories` | List categories with nested sub-categories and sub-sub-categories (management view) |
 | `POST` | `/categories` | Create category with optional description |
 | `PATCH` | `/categories/:id` | Rename category and/or update its description |
 | `PATCH` | `/categories/:id/reorder` | Set display order |
 | `PATCH` | `/categories/:id/archive` | Archive category |
 | `PATCH` | `/categories/:id/restore` | Restore archived category |
 
-**Data lifecycle:** nothing is hard-deleted. Entity records and bookmark association rows are archived via `archivedAt`, and replacing bookmark tags/sub-categories archives removed links instead of deleting them.
+**Data lifecycle:** nothing is hard-deleted. Entity records and bookmark association rows are archived via `archivedAt`, and replacing bookmark tags/sub-categories/sub-sub-categories archives removed links instead of deleting them.
 
 **Duplicate URL detection:** `POST /bookmarks` returns `409` with existing bookmark metadata when an active bookmark already has that URL. This is enforced by the database, so concurrent creates cannot produce duplicate active URLs, while archived bookmarks can still share the same URL.
 
