@@ -264,6 +264,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           sendResponse({ ok: true, data: res });
           break;
         }
+        case 'createSubSubcategory': {
+          const res = await apiPost('/subSubcategories', message.payload, { timeoutMs: 8000 });
+          sendResponse({ ok: true, data: res });
+          break;
+        }
         case 'createBookmark': {
           const res = await apiPost('/bookmarks', message.payload, { timeoutMs: 8000 });
           sendResponse({ ok: true, data: res });

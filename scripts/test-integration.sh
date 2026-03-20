@@ -8,6 +8,7 @@ systemctl --user start bookmark-pod.service >/dev/null
 podman run --rm \
   --pod systemd-bookmark \
   --env-file "$ROOT_DIR/api/.env" \
+  -e DB_NAME=bookmarks_test \
   -v "$ROOT_DIR/api:/app:Z" \
   -w /app \
   docker.io/oven/bun:1.3.8 \
@@ -18,6 +19,7 @@ podman run --rm \
 podman run --rm \
   --pod systemd-bookmark \
   --env-file "$ROOT_DIR/api/.env" \
+  -e DB_NAME=bookmarks_test \
   -v "$ROOT_DIR/api:/app:Z" \
   -w /app \
   docker.io/oven/bun:1.3.8 \

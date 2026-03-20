@@ -49,6 +49,30 @@ export const subcategories = mysqlTable(
 );
 
 // ---------------------------------------------------------------------------
+// sub_subcategories
+// ---------------------------------------------------------------------------
+export const subSubcategories = mysqlTable(
+  "sub_subcategories",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    subcategoryId: int("subcategory_id").notNull().references(() => subcategories.id),
+    name: varchar("name", { length: 255 }).notNull(),
+    description: text("description"),
+    order: int("order").default(0),
+    createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`),
+    archivedAt: datetime("archived_at"),
+    nameActive: text("name_active").generatedAlwaysAs(
+      sql`CASE WHEN archived_at IS NULL THEN name ELSE NULL END`,
+      { mode: "stored" }
+    ),
+  },
+  (t) => [
+    uniqueIndex("uniq_active_subcategory_child_name").on(t.subcategoryId, t.nameActive),
+    index("idx_ssc_subcategory").on(t.subcategoryId),
+  ]
+);
+
+// ---------------------------------------------------------------------------
 // tags
 // ---------------------------------------------------------------------------
 export const tags = mysqlTable(
@@ -151,5 +175,32 @@ export const bookmarkSubcategories = mysqlTable(
     uniqueIndex("uniq_active_bookmark_subcategory").on(t.bookmarkIdActive, t.subcategoryIdActive),
     index("idx_bc_bookmark").on(t.bookmarkId),
     index("idx_bs_subcategory").on(t.subcategoryId),
+  ]
+);
+
+// ---------------------------------------------------------------------------
+// bookmark_sub_subcategories  (many-to-many)
+// ---------------------------------------------------------------------------
+export const bookmarkSubSubcategories = mysqlTable(
+  "bookmark_sub_subcategories",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    bookmarkId: int("bookmark_id").notNull().references(() => bookmarks.id),
+    subSubcategoryId: int("sub_subcategory_id").notNull().references(() => subSubcategories.id),
+    createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`),
+    archivedAt: datetime("archived_at"),
+    bookmarkIdActive: int("bookmark_id_active").generatedAlwaysAs(
+      sql`CASE WHEN archived_at IS NULL THEN bookmark_id ELSE NULL END`,
+      { mode: "stored" }
+    ),
+    subSubcategoryIdActive: int("sub_subcategory_id_active").generatedAlwaysAs(
+      sql`CASE WHEN archived_at IS NULL THEN sub_subcategory_id ELSE NULL END`,
+      { mode: "stored" }
+    ),
+  },
+  (t) => [
+    uniqueIndex("uniq_active_bookmark_sub_subcategory").on(t.bookmarkIdActive, t.subSubcategoryIdActive),
+    index("idx_bssc_bookmark").on(t.bookmarkId),
+    index("idx_bssc_sub_subcategory").on(t.subSubcategoryId),
   ]
 );

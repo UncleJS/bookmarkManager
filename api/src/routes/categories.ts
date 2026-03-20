@@ -3,9 +3,11 @@ import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "../db/client.ts";
 import {
   bookmarkSubcategories,
+  bookmarkSubSubcategories,
   bookmarks,
   categories,
   subcategories,
+  subSubcategories,
 } from "../db/schema.ts";
 import { ErrorResp, OkResp, S, isDupEntry } from "./shared.ts";
 
@@ -69,7 +71,7 @@ export const categoryRoutes = new Elysia()
       const categoryWhere = includeArchived ? undefined : isNull(categories.archivedAt);
       const subcategoryArchivedWhere = includeArchived ? undefined : isNull(subcategories.archivedAt);
 
-      const [rows, countRows] = await Promise.all([
+      const [rows, countRows, childCountRows] = await Promise.all([
         db
           .select({
             id: categories.id,
@@ -93,31 +95,77 @@ export const categoryRoutes = new Elysia()
           ))
           .where(isNull(bookmarkSubcategories.archivedAt))
           .groupBy(bookmarkSubcategories.subcategoryId),
+        db
+          .select({
+            subSubcategoryId: bookmarkSubSubcategories.subSubcategoryId,
+            count: sql<number>`COUNT(*)`,
+          })
+          .from(bookmarkSubSubcategories)
+          .innerJoin(bookmarks, and(
+            eq(bookmarkSubSubcategories.bookmarkId, bookmarks.id),
+            isNull(bookmarks.archivedAt),
+          ))
+          .where(isNull(bookmarkSubSubcategories.archivedAt))
+          .groupBy(bookmarkSubSubcategories.subSubcategoryId),
       ]);
 
       const categoryIds = rows.map((category) => category.id);
-      const subcategoryRows = categoryIds.length === 0
-        ? []
-        : await db
-          .select({
-            id: subcategories.id,
-            name: subcategories.name,
-            description: subcategories.description,
-            order: subcategories.order,
-            categoryId: subcategories.categoryId,
-            archivedAt: subcategories.archivedAt,
-          })
-          .from(subcategories)
-          .where(
-            subcategoryArchivedWhere
-              ? and(inArray(subcategories.categoryId, categoryIds), subcategoryArchivedWhere)
-              : inArray(subcategories.categoryId, categoryIds)
-          )
-          .orderBy(subcategories.order, subcategories.name);
+      const [subcategoryRows, subSubcategoryRows] = await Promise.all([
+        categoryIds.length === 0
+          ? Promise.resolve([])
+          : db
+            .select({
+              id: subcategories.id,
+              name: subcategories.name,
+              description: subcategories.description,
+              order: subcategories.order,
+              categoryId: subcategories.categoryId,
+              archivedAt: subcategories.archivedAt,
+            })
+            .from(subcategories)
+            .where(
+              subcategoryArchivedWhere
+                ? and(inArray(subcategories.categoryId, categoryIds), subcategoryArchivedWhere)
+                : inArray(subcategories.categoryId, categoryIds)
+            )
+            .orderBy(subcategories.order, subcategories.name),
+        categoryIds.length === 0
+          ? Promise.resolve([])
+          : db
+            .select({
+              id: subSubcategories.id,
+              name: subSubcategories.name,
+              description: subSubcategories.description,
+              order: subSubcategories.order,
+              subcategoryId: subSubcategories.subcategoryId,
+              archivedAt: subSubcategories.archivedAt,
+            })
+            .from(subSubcategories)
+            .innerJoin(subcategories, eq(subSubcategories.subcategoryId, subcategories.id))
+            .where(
+              includeArchived
+                ? inArray(subcategories.categoryId, categoryIds)
+                : and(inArray(subcategories.categoryId, categoryIds), isNull(subSubcategories.archivedAt), isNull(subcategories.archivedAt))
+            )
+            .orderBy(subSubcategories.order, subSubcategories.name),
+      ]);
 
-      const countMap = new Map<number, number>(
+      const directCountMap = new Map<number, number>(
         countRows.map((row) => [row.subcategoryId, Number(row.count)])
       );
+      const childCountMap = new Map<number, number>(
+        childCountRows.map((row) => [row.subSubcategoryId, Number(row.count)])
+      );
+
+      const subSubcategoriesBySubcategory = new Map<number, Array<typeof subSubcategoryRows[number]>>();
+      const nestedCountBySubcategory = new Map<number, number>();
+      for (const item of subSubcategoryRows) {
+        const bucket = subSubcategoriesBySubcategory.get(item.subcategoryId);
+        const enriched = { ...item, bookmarkCount: childCountMap.get(item.id) ?? 0 };
+        if (bucket) bucket.push(enriched);
+        else subSubcategoriesBySubcategory.set(item.subcategoryId, [enriched]);
+        nestedCountBySubcategory.set(item.subcategoryId, (nestedCountBySubcategory.get(item.subcategoryId) ?? 0) + enriched.bookmarkCount);
+      }
 
       const subcategoriesByCategory = new Map<number | null, Array<typeof subcategoryRows[number]>>();
       for (const subcategory of subcategoryRows) {
@@ -133,7 +181,12 @@ export const categoryRoutes = new Elysia()
       const items = rows.map((category) => ({
         ...category,
         subcategories: (subcategoriesByCategory.get(category.id) ?? [])
-          .map((subcategory) => ({ ...subcategory, bookmarkCount: countMap.get(subcategory.id) ?? 0 })),
+          .map((subcategory) => ({
+            ...subcategory,
+            bookmarkCount: (directCountMap.get(subcategory.id) ?? 0) + (nestedCountBySubcategory.get(subcategory.id) ?? 0),
+            directBookmarkCount: directCountMap.get(subcategory.id) ?? 0,
+            subSubcategories: subSubcategoriesBySubcategory.get(subcategory.id) ?? [],
+          })),
       }));
 
       return { items };
@@ -146,7 +199,7 @@ export const categoryRoutes = new Elysia()
         tags: ["categories"],
         summary: "List categories",
         description:
-          "Returns categories with their nested sub-categories. " +
+          "Returns categories with their nested sub-categories and sub-sub-categories. " +
           "This is the **management view** and exposes the `archivedAt` field on both categories and " +
           "sub-categories so the UI can show archived state.\n\n" +
           "**Default:** active categories with active sub-categories only. Pass `archived=true` to include archived categories " +
@@ -171,7 +224,17 @@ export const categoryRoutes = new Elysia()
                       order: S.num("Display sort order"),
                       categoryId: S.nullable(S.num("Parent category ID")),
                       archivedAt: S.nullable(S.any("Archive timestamp (UTC), null when active")),
-                      bookmarkCount: S.num("Number of active bookmarks using this sub-category"),
+                      bookmarkCount: S.num("Total active bookmarks using this sub-category directly or any nested sub-sub-category"),
+                      directBookmarkCount: S.num("Number of active bookmarks linked directly to this sub-category"),
+                      subSubcategories: S.arr("Sub-sub-categories in this sub-category", S.obj("Sub-sub-category", {
+                        id: S.num("Sub-sub-category ID"),
+                        name: S.str("Sub-sub-category name"),
+                        description: S.nullable(S.str("Optional description for this sub-sub-category")),
+                        order: S.num("Display sort order"),
+                        subcategoryId: S.num("Parent sub-category ID"),
+                        archivedAt: S.nullable(S.any("Archive timestamp (UTC), null when active")),
+                        bookmarkCount: S.num("Number of active bookmarks using this sub-sub-category"),
+                      })),
                     })),
                   })),
                 }),
@@ -268,20 +331,39 @@ export const categoryRoutes = new Elysia()
       if (!row) { set.status = 404; return { error: "Category not found" }; }
       if (row.archivedAt) { set.status = 409; return { error: "Already archived" }; }
 
-      const [{ count }] = await db
-        .select({ count: sql<number>`COUNT(*)` })
-        .from(bookmarkSubcategories)
-        .innerJoin(bookmarks, and(
-          eq(bookmarkSubcategories.bookmarkId, bookmarks.id),
-          isNull(bookmarks.archivedAt),
-        ))
-        .innerJoin(subcategories, and(
-          eq(bookmarkSubcategories.subcategoryId, subcategories.id),
-          isNull(subcategories.archivedAt),
-          eq(subcategories.categoryId, id),
-        ))
-        .where(isNull(bookmarkSubcategories.archivedAt));
-      const total = Number(count);
+      const [[{ count: directCount }], [{ count: childCount }]] = await Promise.all([
+        db
+          .select({ count: sql<number>`COUNT(*)` })
+          .from(bookmarkSubcategories)
+          .innerJoin(bookmarks, and(
+            eq(bookmarkSubcategories.bookmarkId, bookmarks.id),
+            isNull(bookmarks.archivedAt),
+          ))
+          .innerJoin(subcategories, and(
+            eq(bookmarkSubcategories.subcategoryId, subcategories.id),
+            isNull(subcategories.archivedAt),
+            eq(subcategories.categoryId, id),
+          ))
+          .where(isNull(bookmarkSubcategories.archivedAt)),
+        db
+          .select({ count: sql<number>`COUNT(*)` })
+          .from(bookmarkSubSubcategories)
+          .innerJoin(bookmarks, and(
+            eq(bookmarkSubSubcategories.bookmarkId, bookmarks.id),
+            isNull(bookmarks.archivedAt),
+          ))
+          .innerJoin(subSubcategories, and(
+            eq(bookmarkSubSubcategories.subSubcategoryId, subSubcategories.id),
+            isNull(subSubcategories.archivedAt),
+          ))
+          .innerJoin(subcategories, and(
+            eq(subSubcategories.subcategoryId, subcategories.id),
+            isNull(subcategories.archivedAt),
+            eq(subcategories.categoryId, id),
+          ))
+          .where(isNull(bookmarkSubSubcategories.archivedAt)),
+      ]);
+      const total = Number(directCount) + Number(childCount);
       if (total > 0) {
         set.status = 409;
         return { error: `Cannot archive: ${total} active bookmark${total === 1 ? "" : "s"} linked to sub-categories in this category` };

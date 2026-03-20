@@ -466,7 +466,7 @@
 
   // ── State ──────────────────────────────────────────────────────────────────
   let viewMode = 'active'; // 'active' | 'archived'
-  let categories = [];         // [{id, name, order, archivedAt, subcategories:[]}]
+  let categories = [];         // [{id, name, order, archivedAt, subcategories:[{..., subSubcategories:[]}]}]
 
   // ── Boot ───────────────────────────────────────────────────────────────────
   bootstrapToken().then(() => loadAll());
@@ -634,8 +634,59 @@
         <button class="btn-icon danger" onclick="archiveSubcategory(${c.id}, event)">Archive</button>`;
     }
 
+    const visibleChildren = viewMode === 'archived'
+      ? (c.subSubcategories || []).filter(item => item.archivedAt)
+      : (c.subSubcategories || []).filter(item => !item.archivedAt);
+
+    const childRows = visibleChildren.map((item, childIdx) => renderSubSubcategoryRow(item, childIdx, visibleChildren)).join('');
+
+    const addChildRow = (!isArchived && viewMode === 'active') ? `
+      <div class="add-subcategory-row" style="margin-left:28px;margin-top:8px;">
+        <div class="add-class-inputs">
+          <input class="add-input" type="text" placeholder="New sub-sub-category…" maxlength="255"
+                 data-subcategory-id="${c.id}"
+                 onkeydown="if(event.key==='Enter') addSubSubcategory(${c.id}, this)" />
+          <button class="btn-add" onclick="addSubSubcategory(${c.id}, this.closest('.add-subcategory-row').querySelector('.add-input'))">+ Add</button>
+        </div>
+        <textarea class="add-desc-input" rows="1" placeholder="Description (optional)…" maxlength="1000"></textarea>
+      </div>` : '';
+
     return `
     <div class="subcategory-row ${isArchived ? 'archived-row' : ''}" data-class-id="${c.id}" id="subcategory-row-${c.id}">
+      ${orderControls}
+      <div class="subcategory-name-wrap">
+        <span class="subcategory-name">${esc(c.name)}</span>
+        ${c.description ? `<span class="subcategory-desc">${esc(c.description)}</span>` : ''}
+      </div>
+      ${countBadge}
+      ${archivedBadge}
+      ${actionBtns}
+    </div>
+    ${childRows ? `<div style="margin-left:28px;border-left:1px solid var(--border);padding-left:12px;">${childRows}</div>` : ''}
+    ${addChildRow}`;
+  }
+
+  function renderSubSubcategoryRow(c, idx, allVisible) {
+    const isArchived = !!c.archivedAt;
+    const orderControls = `
+      <div class="order-controls">
+        <button class="btn-order" title="Move up"
+          ${idx === 0 ? 'disabled' : ''}
+          onclick="reorderSubSubcategory(${c.id}, ${c.order - 1}, event)">▲</button>
+        <button class="btn-order" title="Move down"
+          ${idx === allVisible.length - 1 ? 'disabled' : ''}
+          onclick="reorderSubSubcategory(${c.id}, ${c.order + 1}, event)">▼</button>
+      </div>`;
+
+    const archivedBadge = isArchived ? `<span class="badge-archived">ARCHIVED</span>` : '';
+    const count = c.bookmarkCount ?? 0;
+    const countBadge = `<span class="count-badge" title="${count} active bookmark${count === 1 ? '' : 's'}">${count}</span>`;
+    const actionBtns = isArchived
+      ? `<button class="btn-icon success" onclick="restoreSubSubcategory(${c.id}, event)">↩ Restore</button>`
+      : `<button class="btn-icon" onclick="startRenameSubSubcategory(${c.id}, event)">Rename</button><button class="btn-icon danger" onclick="archiveSubSubcategory(${c.id}, event)">Archive</button>`;
+
+    return `
+    <div class="subcategory-row ${isArchived ? 'archived-row' : ''}" data-sub-sub-id="${c.id}" id="sub-subcategory-row-${c.id}" style="background:rgba(255,255,255,0.02);margin-top:6px;">
       ${orderControls}
       <div class="subcategory-name-wrap">
         <span class="subcategory-name">${esc(c.name)}</span>
@@ -698,6 +749,35 @@
       });
       const data = await res.json();
       if (!res.ok) { toast(data.error || 'Failed to add sub-category', 'error'); return; }
+      inputEl.value = '';
+      if (descEl) descEl.value = '';
+      toast(`"${name}" added`, 'ok');
+      await loadAll();
+    } catch (e) {
+      toast(e.message, 'error');
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  async function addSubSubcategory(subcategoryId, inputEl) {
+    const name = inputEl.value.trim();
+    if (!name) return;
+    const addRow = inputEl.closest('.add-subcategory-row');
+    const descEl = addRow ? addRow.querySelector('.add-desc-input') : null;
+    const description = descEl ? descEl.value.trim() : '';
+    const btn = addRow ? addRow.querySelector('.btn-add') : inputEl.nextElementSibling;
+    btn.disabled = true;
+    try {
+      const body = { name, subcategoryId };
+      if (description) body.description = description;
+      const res = await apiFetch('/subSubcategories', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (!res.ok) { toast(data.error || 'Failed to add sub-sub-category', 'error'); return; }
       inputEl.value = '';
       if (descEl) descEl.value = '';
       toast(`"${name}" added`, 'ok');
@@ -867,6 +947,81 @@
     }
   }
 
+  function startRenameSubSubcategory(subSubcategoryId, e) {
+    e.stopPropagation();
+    const row = document.getElementById(`sub-subcategory-row-${subSubcategoryId}`);
+    const nameWrap = row.querySelector('.subcategory-name-wrap');
+    const nameSpan = nameWrap.querySelector('.subcategory-name');
+    const descSpan = nameWrap.querySelector('.subcategory-desc');
+    const currentName = nameSpan.textContent;
+    const currentDesc = descSpan ? descSpan.textContent : '';
+
+    const editWrap = document.createElement('div');
+    editWrap.style.flex = '1';
+    editWrap.style.display = 'flex';
+    editWrap.style.flexDirection = 'column';
+    editWrap.style.gap = '4px';
+
+    const inp = document.createElement('input');
+    inp.className = 'inline-input';
+    inp.value = currentName;
+    inp.maxLength = 255;
+
+    const descInp = document.createElement('textarea');
+    descInp.className = 'inline-desc-input';
+    descInp.value = currentDesc;
+    descInp.maxLength = 1000;
+    descInp.rows = 2;
+    descInp.placeholder = 'Description (optional)…';
+
+    editWrap.appendChild(inp);
+    editWrap.appendChild(descInp);
+    nameWrap.replaceWith(editWrap);
+
+    const saveBtn = document.createElement('button');
+    saveBtn.className = 'btn-icon confirm';
+    saveBtn.textContent = 'Save';
+    const cancelBtn = document.createElement('button');
+    cancelBtn.className = 'btn-icon cancel';
+    cancelBtn.textContent = 'Cancel';
+
+    const existingBtns = row.querySelectorAll('.btn-icon');
+    existingBtns.forEach(b => b.remove());
+    row.appendChild(saveBtn);
+    row.appendChild(cancelBtn);
+
+    inp.focus();
+    inp.select();
+
+    saveBtn.onclick = () => commitRenameSubSubcategory(subSubcategoryId, inp.value, descInp.value);
+    cancelBtn.onclick = () => renderCategories();
+    inp.onkeydown = (ev) => {
+      if (ev.key === 'Enter') { ev.preventDefault(); commitRenameSubSubcategory(subSubcategoryId, inp.value, descInp.value); }
+      if (ev.key === 'Escape') renderCategories();
+    };
+  }
+
+  async function commitRenameSubSubcategory(subSubcategoryId, newName, newDesc) {
+    newName = newName.trim();
+    if (!newName) return;
+    newDesc = (newDesc || '').trim();
+    try {
+      const body = { name: newName, description: newDesc || null };
+      const res = await apiFetch(`/subSubcategories/${subSubcategoryId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (!res.ok) { toast(data.error || 'Failed to rename', 'error'); renderCategories(); return; }
+      toast(`Renamed to "${newName}"`, 'ok');
+      await loadAll();
+    } catch (e) {
+      toast(e.message, 'error');
+      renderCategories();
+    }
+  }
+
   // ── Reorder Category ──────────────────────────────────────────────────────────
   async function reorderCategory(categoryId, newOrder, e) {
     e.stopPropagation();
@@ -885,6 +1040,18 @@
     e.stopPropagation();
     try {
       await apiFetch(`/subcategories/${subcategoryId}/reorder`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ order: newOrder }),
+      });
+      await loadAll();
+    } catch (e) { toast(e.message, 'error'); }
+  }
+
+  async function reorderSubSubcategory(subSubcategoryId, newOrder, e) {
+    e.stopPropagation();
+    try {
+      await apiFetch(`/subSubcategories/${subSubcategoryId}/reorder`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ order: newOrder }),
@@ -937,6 +1104,29 @@
       const data = await res.json();
       if (!res.ok) { toast(data.error || 'Failed', 'error'); return; }
       toast('Sub-category restored', 'ok');
+      await loadAll();
+    } catch (e) { toast(e.message, 'error'); }
+  }
+
+  async function archiveSubSubcategory(subSubcategoryId, e) {
+    e.stopPropagation();
+    if (!confirm('Archive this sub-sub-category?')) return;
+    try {
+      const res = await apiFetch(`/subSubcategories/${subSubcategoryId}/archive`, { method: 'PATCH' });
+      const data = await res.json();
+      if (!res.ok) { toast(data.error || 'Failed', 'error'); return; }
+      toast('Sub-sub-category archived', 'ok');
+      await loadAll();
+    } catch (e) { toast(e.message, 'error'); }
+  }
+
+  async function restoreSubSubcategory(subSubcategoryId, e) {
+    e.stopPropagation();
+    try {
+      const res = await apiFetch(`/subSubcategories/${subSubcategoryId}/restore`, { method: 'PATCH' });
+      const data = await res.json();
+      if (!res.ok) { toast(data.error || 'Failed', 'error'); return; }
+      toast('Sub-sub-category restored', 'ok');
       await loadAll();
     } catch (e) { toast(e.message, 'error'); }
   }

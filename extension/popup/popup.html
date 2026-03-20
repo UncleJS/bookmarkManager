@@ -167,7 +167,7 @@
   <!-- Modal for creating subcategories -->
   <div id="subcategory-modal" class="modal-backdrop hidden">
     <div class="modal-content" role="dialog" aria-modal="true" aria-labelledby="subcategory-modal-title" tabindex="-1">
-      <h3 id="subcategory-modal-title" class="modal-title">Create sub-category</h3>
+      <h3 id="subcategory-modal-title" class="modal-title">Create taxonomy item</h3>
 
       <div class="modal-body">
         <div class="field-group">
@@ -178,6 +178,25 @@
             placeholder="Enter a sub-category name"
             class="input-field"
           />
+        </div>
+
+        <div class="field-group">
+          <label class="field-label">Level</label>
+          <div class="radio-group">
+            <label class="radio-label">
+              <input type="radio" name="level-option" value="subcategory" checked class="radio-input" />
+              <span>Sub-category</span>
+            </label>
+            <label class="radio-label">
+              <input type="radio" name="level-option" value="subSubcategory" class="radio-input" />
+              <span>Sub-sub-category</span>
+            </label>
+          </div>
+        </div>
+
+        <div id="parent-subcategory-section" class="field-group hidden">
+          <label for="modal-parent-subcategory" class="field-label">Parent sub-category</label>
+          <select id="modal-parent-subcategory" class="input-field"></select>
         </div>
 
         <div class="field-group">

@@ -37,11 +37,12 @@ const FOCUSABLE_SELECTOR = [
  */
 let state = {
   selectedTags: [], // Array of selected tag objects: { id, name }
-  selectedSubcategories: [], // Array of selected sub-category objects: { id, name, categoryName }
+  selectedSubcategories: [], // Array of selected taxonomy objects: { id, name, kind, categoryName, subcategoryName }
   allSubcategories: [], // All available sub-categories with categories from API
   filteredSubcategories: [], // Filtered sub-categories for display in search
   tagSuggestions: [], // Tag suggestions for autocomplete dropdown
   existingCategories: [], // Available categories for the sub-category modal: { id, name }
+  existingParentSubcategories: [], // Available parent sub-categories for creating sub-sub-categories
   prefetchedTags: [], // Cache for prefetched tag results
   hasSubcategoriesPrefetched: false, // Track if sub-categories are loaded
   hasTagsPrefetched: false, // Track if initial tags are loaded
@@ -141,11 +142,11 @@ function renderSelectedSubcategories() {
 
   state.selectedSubcategories.forEach(subcategory => {
     // Format display text with category hierarchy if available
-    const chipText = subcategory.categoryName
-      ? `${subcategory.categoryName} → ${subcategory.name}`
-      : subcategory.name;
+    const chipText = [subcategory.categoryName, subcategory.subcategoryName, subcategory.name]
+      .filter(Boolean)
+      .join(' → ');
 
-    const chip = createChip(chipText, () => removeSubcategory(subcategory.id), true);
+    const chip = createChip(chipText, () => removeSubcategory(`${subcategory.kind}:${subcategory.id}`), true);
     container.appendChild(chip);
   });
 }
@@ -158,7 +159,7 @@ function renderSelectedSubcategories() {
  * @param {number} id - Sub-category ID to remove
  */
 function removeSubcategory(id) {
-  state.selectedSubcategories = state.selectedSubcategories.filter(c => c.id !== id);
+  state.selectedSubcategories = state.selectedSubcategories.filter(c => `${c.kind}:${c.id}` !== id);
   renderSelectedSubcategories();
 }
 
@@ -171,7 +172,7 @@ function removeSubcategory(id) {
  * @param {Object} subcategory - Sub-category object to add
  */
 function addSubcategory(subcategory) {
-  if (!state.selectedSubcategories.some(c => c.id === subcategory.id)) {
+  if (!state.selectedSubcategories.some(c => `${c.kind}:${c.id}` === `${subcategory.kind}:${subcategory.id}`)) {
     state.selectedSubcategories.push(subcategory);
     renderSelectedSubcategories();
   }
@@ -201,7 +202,9 @@ function renderSubcategorySuggestions(subcategories) {
   // Group sub-categories by category name
   const groupedByCategory = {};
   subcategories.forEach(c => {
-    const categoryName = c.categoryName || 'Uncategorized';
+    const categoryName = c.subcategoryName
+      ? `${c.categoryName || 'Uncategorized'} → ${c.subcategoryName}`
+      : (c.categoryName || 'Uncategorized');
     if (!groupedByCategory[categoryName]) groupedByCategory[categoryName] = [];
     groupedByCategory[categoryName].push(c);
   });
@@ -219,7 +222,7 @@ function renderSubcategorySuggestions(subcategories) {
     items.forEach(subcategory => {
       const item = document.createElement('div');
       item.className = 'suggestion';
-      item.textContent = subcategory.name;
+      item.textContent = subcategory.subcategoryName ? `→ ${subcategory.name}` : subcategory.name;
       item.id = getSuggestionId('subcategory-suggestions', optionIndex);
       item.setAttribute('role', 'option');
       item.setAttribute('aria-selected', 'false');
@@ -265,10 +268,12 @@ function hideSubcategorySuggestions() {
  */
 function filterSubcategories(query) {
   const filtered = state.allSubcategories.filter(c => {
-    const nameMatch = c.name.toLowerCase().includes(query.toLowerCase());
-    const categoryMatch = c.categoryName && c.categoryName.toLowerCase().includes(query.toLowerCase());
-    const notSelected = !state.selectedSubcategories.some(selected => selected.id === c.id);
-    return (nameMatch || categoryMatch) && notSelected;
+    const lower = query.toLowerCase();
+    const nameMatch = c.name.toLowerCase().includes(lower);
+    const categoryMatch = c.categoryName && c.categoryName.toLowerCase().includes(lower);
+    const subcategoryMatch = c.subcategoryName && c.subcategoryName.toLowerCase().includes(lower);
+    const notSelected = !state.selectedSubcategories.some(selected => `${selected.kind}:${selected.id}` === `${c.kind}:${c.id}`);
+    return (nameMatch || categoryMatch || subcategoryMatch) && notSelected;
   });
 
   state.filteredSubcategories = filtered;
@@ -386,6 +391,15 @@ function showModal() {
     categoriesSelect.appendChild(option);
   });
 
+  const parentSelect = el('modal-parent-subcategory');
+  parentSelect.innerHTML = '<option value="">Select a parent sub-category</option>';
+  state.existingParentSubcategories.forEach(item => {
+    const option = document.createElement('option');
+    option.value = String(item.id);
+    option.textContent = item.label;
+    parentSelect.appendChild(option);
+  });
+
   document.addEventListener('keydown', onModalKeydown);
 
   // Focus on the name input
@@ -417,9 +431,12 @@ function hideModal() {
   el('modal-subcategory-name').value = '';
   el('modal-subcategory-description').value = '';
   el('modal-new-category-name').value = '';
+  el('modal-parent-subcategory').value = '';
   document.querySelector('input[name="category-option"][value="none"]').checked = true;
+  document.querySelector('input[name="level-option"][value="subcategory"]').checked = true;
   el('existing-categories-section').classList.add('hidden');
   el('new-category-section').classList.add('hidden');
+  el('parent-subcategory-section').classList.add('hidden');
 
   if (state.lastFocusedElement instanceof HTMLElement) {
     state.lastFocusedElement.focus();
@@ -465,9 +482,20 @@ function onModalKeydown(e) {
  * Shows or hides the existing/new category sections in the modal based on user selection.
  */
 function updateCategorySections() {
+  const levelOption = document.querySelector('input[name="level-option"]:checked')?.value;
+  const parentSection = el('parent-subcategory-section');
   const categoryOption = document.querySelector('input[name="category-option"]:checked')?.value;
   const existingSection = el('existing-categories-section');
   const newSection = el('new-category-section');
+
+  if (levelOption === 'subSubcategory') {
+    parentSection.classList.remove('hidden');
+    existingSection.classList.add('hidden');
+    newSection.classList.add('hidden');
+    return;
+  }
+
+  parentSection.classList.add('hidden');
 
   if (categoryOption === 'existing') {
     existingSection.classList.remove('hidden');
@@ -495,6 +523,49 @@ async function handleCreateSubcategory() {
   }
 
   const description = el('modal-subcategory-description').value.trim() || null;
+  const levelOption = document.querySelector('input[name="level-option"]:checked')?.value || 'subcategory';
+
+  if (levelOption === 'subSubcategory') {
+    const selectedParent = el('modal-parent-subcategory').value;
+    const subcategoryId = selectedParent ? Number(selectedParent) : null;
+    if (!subcategoryId || Number.isNaN(subcategoryId)) {
+      setStatus('Parent sub-category is required', false);
+      return;
+    }
+
+    try {
+      const payload = {
+        name,
+        ...(description != null ? { description } : {}),
+        subcategoryId,
+      };
+      const res = await send('createSubSubcategory', payload);
+      if (!res?.ok) {
+        setStatus(res.error || 'Could not create sub-sub-category.', false);
+        return;
+      }
+
+      const parent = state.existingParentSubcategories.find(item => item.id === subcategoryId);
+      const newSubcategory = {
+        id: res.data.id,
+        name: res.data.name,
+        kind: 'subSubcategory',
+        description: res.data.description ?? null,
+        categoryId: parent?.categoryId ?? null,
+        categoryName: parent?.categoryName ?? null,
+        subcategoryName: parent?.name ?? null,
+      };
+      state.allSubcategories.push(newSubcategory);
+      addSubcategory(newSubcategory);
+      hideModal();
+      setStatus('Sub-sub-category created.', true);
+      setTimeout(() => setStatus(''), 2000);
+      return;
+    } catch {
+      setStatus('Could not create sub-sub-category.', false);
+      return;
+    }
+  }
 
   const categoryOption = document.querySelector('input[name="category-option"]:checked')?.value;
   let categoryId = null;
@@ -575,6 +646,7 @@ async function loadInitial() {
     // Process sub-category data
     state.allSubcategories = [];
     state.existingCategories = [];
+    state.existingParentSubcategories = [];
     if (subcategories.categories) {
       subcategories.categories.forEach(category => {
         if (category?.id && category?.name) {
@@ -583,12 +655,32 @@ async function loadInitial() {
         }
         if (category.subcategories) {
           category.subcategories.forEach(c => {
+            state.existingParentSubcategories.push({
+              id: c.id,
+              name: c.name,
+              label: [category.name, c.name].filter(Boolean).join(' -> '),
+              categoryId: category.id,
+              categoryName: category.name,
+            });
             state.allSubcategories.push({
               id: c.id,
               name: c.name,
+              kind: 'subcategory',
               description: c.description ?? null,
               categoryId: category.id,
-              categoryName: category.name
+              categoryName: category.name,
+              subcategoryName: null,
+            });
+            (c.subSubcategories || []).forEach(ssc => {
+              state.allSubcategories.push({
+                id: ssc.id,
+                name: ssc.name,
+                kind: 'subSubcategory',
+                description: ssc.description ?? null,
+                categoryId: category.id,
+                categoryName: category.name,
+                subcategoryName: c.name,
+              });
             });
           });
         }
@@ -959,7 +1051,7 @@ async function prefetchSubcategories() {
 
   // Show first 10 available subcategories (not already selected)
   const availableSubcategories = state.allSubcategories.filter(c =>
-    !state.selectedSubcategories.some(selected => selected.id === c.id)
+    !state.selectedSubcategories.some(selected => `${selected.kind}:${selected.id}` === `${c.kind}:${c.id}`)
   ).slice(0, 10);
 
   if (availableSubcategories.length > 0) {
@@ -1045,9 +1137,12 @@ function initEvents() {
   el('modal-create').addEventListener('click', handleCreateSubcategory);
 
   // Category option radio buttons
-  document.querySelectorAll('input[name="category-option"]').forEach(radio => {
-    radio.addEventListener('change', updateCategorySections);
-  });
+document.querySelectorAll('input[name="category-option"]').forEach(radio => {
+  radio.addEventListener('change', updateCategorySections);
+});
+document.querySelectorAll('input[name="level-option"]').forEach(radio => {
+  radio.addEventListener('change', updateCategorySections);
+});
 
   // Close modal when clicking backdrop
   el('subcategory-modal').addEventListener('click', (e) => {
@@ -1158,7 +1253,8 @@ function buildBookmarkPayload(url, title) {
     url,
     title,
     description: el('description').value || '',
-    subcategoryIds: state.selectedSubcategories.map(c => c.id),
+      subcategoryIds: state.selectedSubcategories.filter(c => c.kind !== 'subSubcategory').map(c => c.id),
+      subSubcategoryIds: state.selectedSubcategories.filter(c => c.kind === 'subSubcategory').map(c => c.id),
     tags: state.selectedTags.map(t => t.id),
     flags: {
       forReview: el('flag-forReview').checked,

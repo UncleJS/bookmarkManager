@@ -88,8 +88,8 @@ describe("backup route", () => {
             "bookmarks",
             "bookmark_subcategories",
             "bookmark_tags",
-            "subcategories",
             "categories",
+            "subcategories",
             "tags",
           ]);
 

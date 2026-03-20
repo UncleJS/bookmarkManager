@@ -3,10 +3,12 @@ import { and, asc, desc, eq, inArray, isNotNull, isNull, like, or, sql } from "d
 import { db } from "../db/client.ts";
 import {
   bookmarkSubcategories,
+  bookmarkSubSubcategories,
   bookmarks,
   bookmarkTags,
   categories,
   subcategories,
+  subSubcategories,
   tags,
 } from "../db/schema.ts";
 import {
@@ -45,6 +47,7 @@ export const bookmarkRoutes = new Elysia()
       const flags = body.flags ?? {};
       const tagIds = [...new Set(body.tags ?? [])].filter(Boolean);
       const subcategoryIds = [...new Set(body.subcategoryIds ?? [])].filter(Boolean);
+      const subSubcategoryIds = [...new Set(body.subSubcategoryIds ?? [])].filter(Boolean);
 
       let bookmarkId: number;
       try {
@@ -78,6 +81,12 @@ export const bookmarkRoutes = new Elysia()
               .values(subcategoryIds.map((subcategoryId) => ({ bookmarkId: id, subcategoryId })));
           }
 
+          if (subSubcategoryIds.length > 0) {
+            await tx
+              .insert(bookmarkSubSubcategories)
+              .values(subSubcategoryIds.map((subSubcategoryId) => ({ bookmarkId: id, subSubcategoryId })));
+          }
+
           return id;
         });
       } catch (err: unknown) {
@@ -109,6 +118,7 @@ export const bookmarkRoutes = new Elysia()
         title: t.String({ description: "Page title. Whitespace is trimmed. Required." }),
         description: t.Optional(t.String({ description: "Optional freeform notes or description for the bookmark." })),
         subcategoryIds: t.Optional(t.Array(t.Number(), { description: "IDs of sub-categories to attach. Duplicates are deduplicated automatically." })),
+        subSubcategoryIds: t.Optional(t.Array(t.Number(), { description: "IDs of sub-sub-categories to attach. Duplicates are deduplicated automatically." })),
         tags: t.Optional(t.Array(t.Number(), { description: "IDs of tags to attach. Duplicates are deduplicated automatically." })),
         flags: t.Optional(
           t.Object({
@@ -131,8 +141,8 @@ export const bookmarkRoutes = new Elysia()
           "a `409` is returned with a `duplicates` array listing the existing records. " +
           "Pass `allowDuplicate: true` to skip the preflight lookup and rely on the database uniqueness constraint instead; " +
           "active duplicate URLs still return `409`.\n\n" +
-          "**Tags and sub-categories** must already exist; pass their integer IDs in `tags` and " +
-          "`subcategoryIds`. Duplicates in those arrays are silently deduplicated.\n\n" +
+          "**Tags, sub-categories, and sub-sub-categories** must already exist; pass their integer IDs in `tags`, " +
+          "`subcategoryIds`, and `subSubcategoryIds`. Duplicates in those arrays are silently deduplicated.\n\n" +
           "**Flags** are all `false` by default. The special `flags.archived` field allows the " +
           "Chrome extension to save a bookmark directly into the archived state (e.g. when importing " +
           "historical data).",
@@ -264,6 +274,18 @@ export const bookmarkRoutes = new Elysia()
         subcategoryId = n;
       }
 
+      // --- subSubcategoryId ---
+      const rawSubSubcategoryId = query.subSubcategoryId;
+      let subSubcategoryId: number | null = null;
+      if (rawSubSubcategoryId !== undefined) {
+        const n = Number(rawSubSubcategoryId);
+        if (!Number.isInteger(n) || n < 1) {
+          set.status = 400;
+          return { error: "subSubcategoryId must be a positive integer" };
+        }
+        subSubcategoryId = n;
+      }
+
       // --- tagId ---
       const rawTagId = query.tagId;
       let tagId: number | null = null;
@@ -330,12 +352,35 @@ export const bookmarkRoutes = new Elysia()
       }
 
       if (subcategoryId) {
-        const matchingIds = db
+        const directMatchingIds = db
           .select({ bookmarkId: bookmarkSubcategories.bookmarkId })
           .from(bookmarkSubcategories)
           .where(and(
             eq(bookmarkSubcategories.subcategoryId, subcategoryId),
             isNull(bookmarkSubcategories.archivedAt),
+          ));
+        const nestedMatchingIds = db
+          .select({ bookmarkId: bookmarkSubSubcategories.bookmarkId })
+          .from(bookmarkSubSubcategories)
+          .innerJoin(subSubcategories, eq(bookmarkSubSubcategories.subSubcategoryId, subSubcategories.id))
+          .where(and(
+            eq(subSubcategories.subcategoryId, subcategoryId),
+            isNull(subSubcategories.archivedAt),
+            isNull(bookmarkSubSubcategories.archivedAt),
+          ));
+        conditions.push(or(
+          inArray(bookmarks.id, directMatchingIds),
+          inArray(bookmarks.id, nestedMatchingIds),
+        )!);
+      }
+
+      if (subSubcategoryId) {
+        const matchingIds = db
+          .select({ bookmarkId: bookmarkSubSubcategories.bookmarkId })
+          .from(bookmarkSubSubcategories)
+          .where(and(
+            eq(bookmarkSubSubcategories.subSubcategoryId, subSubcategoryId),
+            isNull(bookmarkSubSubcategories.archivedAt),
           ));
         conditions.push(inArray(bookmarks.id, matchingIds));
       }
@@ -374,7 +419,7 @@ export const bookmarkRoutes = new Elysia()
       ]);
 
       const ids = rows.map((r) => r.id);
-      const [tagRows, classRows] =
+      const [tagRows, classRows, childClassRows] =
         ids.length > 0
           ? await Promise.all([
               db
@@ -404,8 +449,26 @@ export const bookmarkRoutes = new Elysia()
                   inArray(bookmarkSubcategories.bookmarkId, ids),
                   isNull(bookmarkSubcategories.archivedAt),
                 )),
+              db
+                .select({
+                  bookmarkId: bookmarkSubSubcategories.bookmarkId,
+                  subSubcategoryId: subSubcategories.id,
+                  subSubcategoryName: subSubcategories.name,
+                  subcategoryId: subcategories.id,
+                  subcategoryName: subcategories.name,
+                  categoryId: categories.id,
+                  categoryName: categories.name,
+                })
+                .from(bookmarkSubSubcategories)
+                .innerJoin(subSubcategories, eq(bookmarkSubSubcategories.subSubcategoryId, subSubcategories.id))
+                .innerJoin(subcategories, eq(subSubcategories.subcategoryId, subcategories.id))
+                .leftJoin(categories, eq(subcategories.categoryId, categories.id))
+                .where(and(
+                  inArray(bookmarkSubSubcategories.bookmarkId, ids),
+                  isNull(bookmarkSubSubcategories.archivedAt),
+                )),
             ])
-          : [[], []];
+          : [[], [], []];
 
       const items = rows.map((b) => ({
         ...b,
@@ -415,6 +478,16 @@ export const bookmarkRoutes = new Elysia()
         subcategories: classRows
           .filter((classRow) => classRow.bookmarkId === b.id)
           .map((classRow) => ({ id: classRow.classId, name: classRow.className, categoryId: classRow.categoryId ?? null, categoryName: classRow.categoryName ?? null })),
+        subSubcategories: childClassRows
+          .filter((classRow) => classRow.bookmarkId === b.id)
+          .map((classRow) => ({
+            id: classRow.subSubcategoryId,
+            name: classRow.subSubcategoryName,
+            subcategoryId: classRow.subcategoryId,
+            subcategoryName: classRow.subcategoryName,
+            categoryId: classRow.categoryId ?? null,
+            categoryName: classRow.categoryName ?? null,
+          })),
       }));
 
       return { items, total: Number(total) };
@@ -425,6 +498,7 @@ export const bookmarkRoutes = new Elysia()
         offset: t.Optional(t.String({ description: "Zero-based pagination offset. Non-negative integer. Default: 0." })),
         q: t.Optional(t.String({ description: "Full-text search query. Matches against title, URL, and description using a case-insensitive LIKE search. Combinable with all other filters." })),
         subcategoryId: t.Optional(t.String({ description: "Filter to bookmarks assigned to this subcategory ID. Must be a positive integer." })),
+        subSubcategoryId: t.Optional(t.String({ description: "Filter to bookmarks assigned to this sub-sub-category ID. Must be a positive integer." })),
         tagId: t.Optional(t.String({ description: "Filter to bookmarks that have this tag ID attached. Must be a positive integer." })),
         flag: t.Optional(t.String({ description: "Filter to bookmarks with a specific flag set. Allowed values: `readLater`, `hotTopic`, `cheatsheets`, `forReview`." })),
         sortBy: t.Optional(t.String({ description: "Sort order by creation date. `newest` (default) or `oldest`." })),
@@ -438,12 +512,13 @@ export const bookmarkRoutes = new Elysia()
           "**Default behaviour:** returns active (non-archived) bookmarks, newest first, 20 per page.\n\n" +
           "**Filters (all combinable with AND logic):**\n" +
           "- `q` - full-text search on title, URL, and description (case-insensitive LIKE)\n" +
-          "- `subcategoryId` - bookmarks assigned to that subcategory\n" +
+          "- `subcategoryId` - bookmarks assigned directly to that subcategory or any nested sub-sub-category\n" +
+          "- `subSubcategoryId` - bookmarks assigned to that sub-sub-category\n" +
           "- `tagId` - bookmarks that have that tag\n" +
           "- `flag` - bookmarks with that flag set (`readLater` | `hotTopic` | `cheatsheets` | `forReview`)\n" +
           "- `archived=true` - show archived bookmarks (mutually exclusive with active)\n\n" +
-          "Each bookmark item includes a fully resolved `tags` array and `subcategories` array " +
-          "(with parent category name). Flags are returned as `0`/`1` integers.",
+          "Each bookmark item includes fully resolved `tags`, `subcategories`, and `subSubcategories` arrays " +
+          "with parent breadcrumb metadata. Flags are returned as `0`/`1` integers.",
         responses: {
           200: {
             description: "Paginated bookmark list",
@@ -472,6 +547,14 @@ export const bookmarkRoutes = new Elysia()
                       name: S.str("Sub-category name"),
                       categoryId: S.nullable(S.num("Parent category ID")),
                       categoryName: S.nullable(S.str("Parent category name")),
+                    })),
+                    subSubcategories: S.arr("Attached sub-sub-categories", S.obj("Sub-sub-category", {
+                      id: S.num("Sub-sub-category ID"),
+                      name: S.str("Sub-sub-category name"),
+                      subcategoryId: S.num("Parent sub-category ID"),
+                      subcategoryName: S.str("Parent sub-category name"),
+                      categoryId: S.nullable(S.num("Top-level category ID")),
+                      categoryName: S.nullable(S.str("Top-level category name")),
                     })),
                   })),
                   total: S.num("Total matching bookmarks (ignoring limit/offset)"),
@@ -511,7 +594,7 @@ export const bookmarkRoutes = new Elysia()
         if (flags.forReview !== undefined) updates.forReview = flags.forReview ? 1 : 0;
       }
 
-      const hasAssociationChanges = body.tagIds !== undefined || body.subcategoryIds !== undefined;
+      const hasAssociationChanges = body.tagIds !== undefined || body.subcategoryIds !== undefined || body.subSubcategoryIds !== undefined;
 
       await db.transaction(async (tx) => {
         // Always touch updatedAt when anything changes (scalar or associations)
@@ -604,6 +687,48 @@ export const bookmarkRoutes = new Elysia()
             }
           }
         }
+
+        if (body.subSubcategoryIds !== undefined) {
+          const uniqueSubSubcategoryIds = [...new Set(body.subSubcategoryIds)].filter(Boolean);
+
+          const existingSubSubcategoryLinks = await tx
+            .select({ id: bookmarkSubSubcategories.id, subSubcategoryId: bookmarkSubSubcategories.subSubcategoryId, archivedAt: bookmarkSubSubcategories.archivedAt })
+            .from(bookmarkSubSubcategories)
+            .where(eq(bookmarkSubSubcategories.bookmarkId, id));
+
+          const desiredSubSubcategoryIds = new Set(uniqueSubSubcategoryIds);
+          const subSubcategoriesToArchive = existingSubSubcategoryLinks
+            .filter((link) => link.archivedAt === null && !desiredSubSubcategoryIds.has(link.subSubcategoryId))
+            .map((link) => link.id);
+
+          if (subSubcategoriesToArchive.length > 0) {
+            await tx.update(bookmarkSubSubcategories)
+              .set({ archivedAt: sql`NOW()` })
+              .where(inArray(bookmarkSubSubcategories.id, subSubcategoriesToArchive));
+          }
+
+          const existingSubSubcategoryById = new Map<number, Array<typeof existingSubSubcategoryLinks[number]>>();
+          for (const link of existingSubSubcategoryLinks) {
+            const bucket = existingSubSubcategoryById.get(link.subSubcategoryId);
+            if (bucket) bucket.push(link);
+            else existingSubSubcategoryById.set(link.subSubcategoryId, [link]);
+          }
+
+          for (const subSubcategoryId of uniqueSubSubcategoryIds) {
+            const matchingLinks = existingSubSubcategoryById.get(subSubcategoryId) ?? [];
+            const activeLink = matchingLinks.find((link) => link.archivedAt === null);
+            if (activeLink) continue;
+
+            const archivedLink = matchingLinks.find((link) => link.archivedAt !== null);
+            if (archivedLink) {
+              await tx.update(bookmarkSubSubcategories)
+                .set({ archivedAt: null })
+                .where(eq(bookmarkSubSubcategories.id, archivedLink.id));
+            } else {
+              await tx.insert(bookmarkSubSubcategories).values({ bookmarkId: id, subSubcategoryId });
+            }
+          }
+        }
       });
 
       return { ok: true };
@@ -616,6 +741,7 @@ export const bookmarkRoutes = new Elysia()
         description: t.Optional(t.Nullable(t.String({ description: "New description. Pass null to clear the existing description." }))),
         tagIds: t.Optional(t.Array(t.Number(), { description: "Replacement tag ID list. When provided, ALL existing tag associations are replaced with this set. Pass an empty array to remove all tags." })),
         subcategoryIds: t.Optional(t.Array(t.Number(), { description: "Replacement sub-category ID list. When provided, ALL existing sub-category associations are replaced with this set. Pass an empty array to remove all sub-categories." })),
+        subSubcategoryIds: t.Optional(t.Array(t.Number(), { description: "Replacement sub-sub-category ID list. When provided, ALL existing sub-sub-category associations are replaced with this set. Pass an empty array to remove all nested selections." })),
         flags: t.Optional(t.Object({
           readLater: t.Optional(t.Boolean({ description: "Set or clear the Read Later flag." })),
           hotTopic: t.Optional(t.Boolean({ description: "Set or clear the Hot Topic flag." })),
@@ -629,10 +755,10 @@ export const bookmarkRoutes = new Elysia()
         description:
           "Partially updates a bookmark. Only fields present in the request body are changed - " +
           "omitting a field leaves its current value untouched.\n\n" +
-          "**Tag and sub-category replacement:** when `tagIds` or `subcategoryIds` are provided, " +
+          "**Tag, sub-category, and sub-sub-category replacement:** when `tagIds`, `subcategoryIds`, or `subSubcategoryIds` are provided, " +
           "the existing associations are **fully replaced** (not merged). " +
           "Removed associations are soft-archived; re-adding a previously removed association restores it. " +
-          "Send an empty array to detach all tags or sub-categories.\n\n" +
+          "Send an empty array to detach all tags, sub-categories, or sub-sub-categories.\n\n" +
           "**Flags:** each flag is independent. Omitting a flag key leaves it unchanged. " +
           "Pass `false` to clear a flag that was previously set.\n\n" +
           "**URL:** when provided, whitespace is trimmed and an empty string is rejected with 400.\n\n" +

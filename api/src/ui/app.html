@@ -1111,6 +1111,7 @@
   const PAGE_SIZE = 20;
   let state = {
     subcategoryId: null,   // null = all
+    subSubcategoryId: null,
     filterTagId:      null,   // null = all
     filterFlag:       null,   // null | 'readLater' | 'hotTopic' | 'cheatsheets' | 'forReview'
     categoryLabel: 'All bookmarks',
@@ -1147,7 +1148,12 @@
 
       // ── subtitle ─────────────────────────────────────────────────────────
       let totalCats = 0;
-      categories.forEach(g => totalCats += g.subcategories.length);
+      categories.forEach(g => {
+        g.subcategories.forEach(subcategory => {
+          totalCats += 1;
+          totalCats += (subcategory.subSubcategories || []).length;
+        });
+      });
       document.getElementById('sidebar-subtitle').textContent =
         `${totalCats} categories · ${tagItems.length} tags`;
 
@@ -1217,8 +1223,8 @@
           const btn = document.createElement('button');
           btn.className = 'nav-item cat-item';
           btn.dataset.id = String(c.id);
-          btn.title = c.name;
-          btn.onclick = () => selectSubcategory(c.id, c.name, btn);
+          btn.title = c.description || c.name;
+          btn.onclick = () => selectSubcategory(c.id, `${category.name} > ${c.name}`, btn);
 
           const label = document.createElement('span');
           label.className = 'nav-item-label';
@@ -1231,6 +1237,27 @@
           btn.appendChild(label);
           btn.appendChild(count);
           itemsContainer.appendChild(btn);
+
+          (c.subSubcategories || []).forEach(ssc => {
+            const childBtn = document.createElement('button');
+            childBtn.className = 'nav-item cat-item';
+            childBtn.dataset.subSubId = String(ssc.id);
+            childBtn.title = ssc.description || `${c.name} > ${ssc.name}`;
+            childBtn.style.paddingLeft = '34px';
+            childBtn.onclick = () => selectSubSubcategory(ssc.id, `${category.name} > ${c.name} > ${ssc.name}`, childBtn);
+
+            const childLabel = document.createElement('span');
+            childLabel.className = 'nav-item-label';
+            childLabel.textContent = `- ${ssc.name}`;
+
+            const childCount = document.createElement('span');
+            childCount.className = 'nav-item-count';
+            childCount.textContent = String(ssc.bookmarkCount ?? 0);
+
+            childBtn.appendChild(childLabel);
+            childBtn.appendChild(childCount);
+            itemsContainer.appendChild(childBtn);
+          });
         });
 
         nav.appendChild(itemsContainer);
@@ -1386,6 +1413,13 @@
               const cnt = btn.querySelector('.nav-item-count');
               if (cnt) cnt.textContent = String(c.bookmarkCount ?? 0);
             }
+            (c.subSubcategories || []).forEach(ssc => {
+              const childBtn = document.querySelector(`.nav-item[data-sub-sub-id="${ssc.id}"]`);
+              if (childBtn) {
+                const childCnt = childBtn.querySelector('.nav-item-count');
+                if (childCnt) childCnt.textContent = String(ssc.bookmarkCount ?? 0);
+              }
+            });
           });
         });
       }
@@ -1402,9 +1436,23 @@
     clearNavActive();
     btnEl.classList.add('active');
     state.subcategoryId = id;
+    state.subSubcategoryId = null;
     state.filterTagId      = null;
     state.filterFlag       = null;
     state.categoryLabel    = label;
+    state.page = 0;
+    document.getElementById('topbar-title').textContent = label;
+    fetchBookmarks();
+  }
+
+  function selectSubSubcategory(id, label, btnEl) {
+    clearNavActive();
+    btnEl.classList.add('active');
+    state.subcategoryId = null;
+    state.subSubcategoryId = id;
+    state.filterTagId = null;
+    state.filterFlag = null;
+    state.categoryLabel = label;
     state.page = 0;
     document.getElementById('topbar-title').textContent = label;
     fetchBookmarks();
@@ -1414,6 +1462,7 @@
     clearNavActive();
     btnEl.classList.add('active');
     state.subcategoryId = null;
+    state.subSubcategoryId = null;
     state.filterTagId      = null;
     state.filterFlag       = flag;
     state.categoryLabel    = label;
@@ -1426,6 +1475,7 @@
     clearNavActive();
     btnEl.classList.add('active');
     state.subcategoryId = null;
+    state.subSubcategoryId = null;
     state.filterTagId      = id;
     state.filterFlag       = null;
     state.categoryLabel    = label;
@@ -1496,6 +1546,7 @@
     });
     if (state.searchQuery)      params.set('q', state.searchQuery);
     if (state.subcategoryId) params.set('subcategoryId', String(state.subcategoryId));
+    if (state.subSubcategoryId) params.set('subSubcategoryId', String(state.subSubcategoryId));
     if (state.filterTagId)      params.set('tagId', String(state.filterTagId));
     if (state.filterFlag)       params.set('flag', state.filterFlag);
     if (state.showArchived)     params.set('archived', 'true');
@@ -1552,10 +1603,14 @@
       .map(t => `<span class="tag">#${esc(t.name)}</span>`)
       .join('');
 
-    const classes = (b.subcategories || [])
+    const classes = [
+      ...(b.subcategories || []).map(c => ({ label: c.categoryName ? `${c.categoryName} > ${c.name}` : c.name })),
+      ...(b.subSubcategories || []).map(c => ({ label: [c.categoryName, c.subcategoryName, c.name].filter(Boolean).join(' > ') })),
+    ]
       .map(c => {
-        const grp = c.categoryName ? `<span class="subcategory-category">${esc(c.categoryName)} ›</span>` : '';
-        return `<span class="subcategory-badge">${grp}${esc(c.name)}</span>`;
+        const parts = c.label.split(' > ');
+        if (parts.length === 1) return `<span class="subcategory-badge">${esc(c.label)}</span>`;
+        return `<span class="subcategory-badge"><span class="subcategory-category">${esc(parts.slice(0, -1).join(' > '))} ›</span>${esc(parts[parts.length - 1])}</span>`;
       })
       .join('');
 
@@ -1664,10 +1719,11 @@
   // ── Edit modal ─────────────────────────────────────────────────────────────
   let modalState = {
     bookmarkId: null,
-    allSubcategories: [],   // [{id, name, categoryName}]
+    allSubcategories: [],   // [{id, name, kind, label, categoryName, subcategoryName}]
     allCategories:  [],   // [{id, name}]  — for the create-subcategory sub-modal
     allTags:    [],   // [{id, name}]
     selSubcategoryIds: new Set(),
+    selSubSubcategoryIds: new Set(),
     selTagIds:   new Set(),
   };
 
@@ -1680,7 +1736,7 @@
     const { categories } = await cRes.json();
     const { items: tagItems } = await tRes.json();
 
-    // Flatten all active subcategories with category info
+    // Flatten all active subcategories and sub-sub-categories with breadcrumb info
     const flatSubcategories = [];
     const flatCategories = [];
     categories.forEach(category => {
@@ -1691,7 +1747,20 @@
         flatSubcategories.push({
           id: subcategory.id,
           name: subcategory.name,
+          kind: 'subcategory',
+          label: category.name !== 'Uncategorized' ? `${category.name} > ${subcategory.name}` : subcategory.name,
           categoryName: category.name !== 'Uncategorized' ? category.name : null,
+          subcategoryName: null,
+        });
+        (subcategory.subSubcategories || []).forEach(subSubcategory => {
+          flatSubcategories.push({
+            id: subSubcategory.id,
+            name: subSubcategory.name,
+            kind: 'subSubcategory',
+            label: [category.name !== 'Uncategorized' ? category.name : null, subcategory.name, subSubcategory.name].filter(Boolean).join(' > '),
+            categoryName: category.name !== 'Uncategorized' ? category.name : null,
+            subcategoryName: subcategory.name,
+          });
         });
       });
     });
@@ -1705,6 +1774,7 @@
 
     modalState.bookmarkId = bm.id;
     modalState.selSubcategoryIds = new Set((bm.subcategories || []).map(c => c.id));
+    modalState.selSubSubcategoryIds = new Set((bm.subSubcategories || []).map(c => c.id));
     modalState.selTagIds   = new Set((bm.tags || []).map(t => t.id));
 
     document.getElementById('edit-title').value = bm.title || '';
@@ -1752,14 +1822,16 @@
     const query = (document.getElementById(isClass ? 'subcategory-search' : 'tag-search').value || '').toLowerCase();
     const list  = document.getElementById(isClass ? 'subcategory-chips' : 'tag-chips');
     const items = isClass ? modalState.allSubcategories : modalState.allTags;
-    const selSet = isClass ? modalState.selSubcategoryIds : modalState.selTagIds;
-
-    const filtered = items.filter(item => item.name.toLowerCase().includes(query));
+    const filtered = isClass
+      ? items.filter(item => item.label.toLowerCase().includes(query) || item.name.toLowerCase().includes(query))
+      : items.filter(item => item.name.toLowerCase().includes(query));
 
     list.innerHTML = filtered.map(item => {
-      const label = isClass && item.categoryName ? `${item.categoryName} › ${item.name}` : item.name;
-      const sel = selSet.has(item.id) ? ' selected' : '';
-      return `<span class="picker-chip${sel}" data-id="${item.id}" data-type="${type}">${esc(label)}</span>`;
+      const label = isClass ? item.label : item.name;
+      const sel = isClass
+        ? (item.kind === 'subSubcategory' ? modalState.selSubSubcategoryIds.has(item.id) : modalState.selSubcategoryIds.has(item.id))
+        : modalState.selTagIds.has(item.id);
+      return `<span class="picker-chip${sel ? ' selected' : ''}" data-id="${item.id}" data-kind="${item.kind || ''}" data-type="${type}">${esc(label)}</span>`;
     }).join('');
 
     // Show "create" chip for tags if no exact match
@@ -1773,8 +1845,13 @@
     const chip = e.target.closest('.picker-chip');
     if (!chip) return;
     const id = Number(chip.dataset.id);
-    if (modalState.selSubcategoryIds.has(id)) modalState.selSubcategoryIds.delete(id);
-    else modalState.selSubcategoryIds.add(id);
+    if (chip.dataset.kind === 'subSubcategory') {
+      if (modalState.selSubSubcategoryIds.has(id)) modalState.selSubSubcategoryIds.delete(id);
+      else modalState.selSubSubcategoryIds.add(id);
+    } else {
+      if (modalState.selSubcategoryIds.has(id)) modalState.selSubcategoryIds.delete(id);
+      else modalState.selSubcategoryIds.add(id);
+    }
     renderChips('class');
   });
 
@@ -1877,7 +1954,14 @@
       }
 
       // Add to local state and auto-select
-      const newClass = { id: data.id, name: data.name, categoryName: resolvedCategoryName };
+      const newClass = {
+        id: data.id,
+        name: data.name,
+        kind: 'subcategory',
+        label: resolvedCategoryName ? `${resolvedCategoryName} > ${data.name}` : data.name,
+        categoryName: resolvedCategoryName,
+        subcategoryName: null,
+      };
       modalState.allSubcategories.push(newClass);
       modalState.selSubcategoryIds.add(data.id);
 
@@ -1963,6 +2047,7 @@
       url:               document.getElementById('edit-url').value.trim() || undefined,
       description:       document.getElementById('edit-description').value.trim() || null,
       subcategoryIds: [...modalState.selSubcategoryIds],
+      subSubcategoryIds: [...modalState.selSubSubcategoryIds],
       tagIds:            [...modalState.selTagIds],
       flags: {
         readLater:   document.getElementById('flag-readLater').checked,

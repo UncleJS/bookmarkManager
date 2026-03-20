@@ -5,6 +5,7 @@ import { eq } from "drizzle-orm";
 
 const FAILING_TAG_ID = 900001;
 const FAILING_CLASSIFICATION_ID = 900002;
+const FAILING_SUB_SUBCATEGORY_ID = 900003;
 
 type AppModule = typeof import("../server.ts");
 type DbModule = typeof import("../db/client.ts");
@@ -51,7 +52,10 @@ beforeAll(async () => {
 
   await adminConnection.query("DROP TRIGGER IF EXISTS fail_bookmark_tags_insert");
   await adminConnection.query("DROP TRIGGER IF EXISTS fail_bookmark_subcategories_insert");
+  await adminConnection.query("DROP TRIGGER IF EXISTS fail_bookmark_sub_subcategories_insert");
+  await adminConnection.query("DROP TABLE IF EXISTS bookmark_sub_subcategories");
   await adminConnection.query("DROP TABLE IF EXISTS bookmark_subcategories");
+  await adminConnection.query("DROP TABLE IF EXISTS sub_subcategories");
   await adminConnection.query("DROP TABLE IF EXISTS bookmark_tags");
   await adminConnection.query("DROP TABLE IF EXISTS bookmarks");
   await adminConnection.query("DROP TABLE IF EXISTS subcategories");
@@ -96,6 +100,17 @@ beforeAll(async () => {
     END
   `);
 
+  await adminConnection.query(`
+    CREATE TRIGGER fail_bookmark_sub_subcategories_insert
+    BEFORE INSERT ON bookmark_sub_subcategories
+    FOR EACH ROW
+    BEGIN
+      IF NEW.sub_subcategory_id = ${FAILING_SUB_SUBCATEGORY_ID} THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'forced sub-sub-category failure';
+      END IF;
+    END
+  `);
+
   ({ app } = await import("../server.ts"));
   ({ db, pool } = await import("../db/client.ts"));
   schema = await import("../db/schema.ts");
@@ -132,6 +147,56 @@ describe("create endpoint status codes", () => {
 
     expect(res.status).toBe(201);
     await expect(res.json()).resolves.toMatchObject({ name, order: 7 });
+  });
+
+  it("returns 201 for sub-sub-category creation", async () => {
+    const [{ id: subcategoryId }] = await db
+      .insert(schema.subcategories)
+      .values({ name: uniqueName("subsubcategory-parent"), categoryId: null })
+      .$returningId();
+    const name = uniqueName("subsubcategory-created");
+
+    const res = await app.handle(jsonRequest("/subSubcategories", "POST", { name, subcategoryId }));
+
+    expect(res.status).toBe(201);
+    await expect(res.json()).resolves.toMatchObject({ name, subcategoryId });
+  });
+});
+
+describe("sub-sub-category lifecycle", () => {
+  it("rejects duplicate active sub-sub-category names within the same parent sub-category", async () => {
+    const [{ id: subcategoryId }] = await db
+      .insert(schema.subcategories)
+      .values({ name: uniqueName("subsubcategory-duplicate-parent"), categoryId: null })
+      .$returningId();
+    const name = uniqueName("subsubcategory-duplicate");
+
+    const first = await app.handle(jsonRequest("/subSubcategories", "POST", { name, subcategoryId }));
+    const second = await app.handle(jsonRequest("/subSubcategories", "POST", { name, subcategoryId }));
+
+    expect(first.status).toBe(201);
+    expect(second.status).toBe(409);
+  });
+
+  it("blocks archiving sub-sub-categories that still have active bookmarks", async () => {
+    const [{ id: subcategoryId }] = await db
+      .insert(schema.subcategories)
+      .values({ name: uniqueName("subsubcategory-archive-parent"), categoryId: null })
+      .$returningId();
+    const [{ id: subSubcategoryId }] = await db
+      .insert(schema.subSubcategories)
+      .values({ name: uniqueName("subsubcategory-archive-blocked"), subcategoryId })
+      .$returningId();
+    const [{ id: bookmarkId }] = await db
+      .insert(schema.bookmarks)
+      .values({ url: uniqueUrl("subsubcategory-archive-blocked"), title: "Sub-sub-category archive blocked" })
+      .$returningId();
+
+    await db.insert(schema.bookmarkSubSubcategories).values({ bookmarkId, subSubcategoryId });
+
+    const res = await app.handle(request(`/subSubcategories/${subSubcategoryId}/archive`, "PATCH"));
+
+    expect(res.status).toBe(409);
   });
 });
 

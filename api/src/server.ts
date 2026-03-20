@@ -7,6 +7,7 @@ import { bookmarkRoutes } from "./routes/bookmarks.ts";
 import { categoryRoutes } from "./routes/categories.ts";
 import { createHealthRoutes } from "./routes/health.ts";
 import { getValidationErrorMessage } from "./routes/shared.ts";
+import { subSubcategoryRoutes } from "./routes/subSubcategories.ts";
 import { subcategoryRoutes } from "./routes/subcategories.ts";
 import { tagRoutes } from "./routes/tags.ts";
 
@@ -77,7 +78,7 @@ export function buildApp({ checkReadiness }: BuildAppOptions = {}) {
               version: "0.1.0",
               description:
                 "REST API for the Bookmark Manager Chrome extension.\n\n" +
-               "Manages bookmarks, tags, categories, and sub-categories.\n\n" +
+                "Manages bookmarks, tags, categories, sub-categories, and nested sub-sub-categories.\n\n" +
                "**Auth model:** all bookmark-management routes require `Authorization: Bearer <API_TOKEN>` " +
                "(set `API_TOKEN` in `api/.env`). " +
                "Health probes (`/health`, `/ready`), static UI pages (`/app`, `/manage-categories`), " +
@@ -94,6 +95,7 @@ export function buildApp({ checkReadiness }: BuildAppOptions = {}) {
             { name: "tags", description: "Manage tags and attach them to bookmarks" },
             { name: "categories", description: "Manage categories that organise sub-categories" },
             { name: "subcategories", description: "Manage sub-categories and assign them to bookmarks" },
+            { name: "subSubcategories", description: "Manage nested sub-sub-categories and assign them to bookmarks" },
             { name: "backup", description: "Generate authenticated MariaDB backup downloads" },
           ],
         },
@@ -107,6 +109,7 @@ export function buildApp({ checkReadiness }: BuildAppOptions = {}) {
       })
     )
     .use(tagRoutes)
+    .use(subSubcategoryRoutes)
     .use(subcategoryRoutes)
     .use(bookmarkRoutes)
     .use(categoryRoutes)
