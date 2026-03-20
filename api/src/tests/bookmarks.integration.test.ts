@@ -102,7 +102,7 @@ describe("create endpoint status codes", () => {
     await expect(res.json()).resolves.toMatchObject({ name });
   });
 
-  it("returns 201 for subcategory creation", async () => {
+  it("returns 201 for sub-category creation", async () => {
     const name = uniqueName("subcategory-created");
 
     const res = await app.handle(jsonRequest("/subcategories", "POST", { name }));
@@ -111,7 +111,7 @@ describe("create endpoint status codes", () => {
     await expect(res.json()).resolves.toMatchObject({ name, categoryId: null });
   });
 
-  it("returns 201 for subcategory category creation", async () => {
+  it("returns 201 for category creation", async () => {
     const name = uniqueName("category-created");
 
     const res = await app.handle(jsonRequest("/categories", "POST", { name, order: 7 }));
@@ -178,8 +178,8 @@ describe("tag lifecycle", () => {
   });
 });
 
-describe("subcategory lifecycle", () => {
-  it("rejects duplicate active subcategory names within the same category", async () => {
+describe("sub-category lifecycle", () => {
+  it("rejects duplicate active sub-category names within the same category", async () => {
     const [{ id: categoryId }] = await db
       .insert(schema.categories)
       .values({ name: uniqueName("subcategory-duplicate-category") })
@@ -201,7 +201,7 @@ describe("subcategory lifecycle", () => {
       .$returningId();
     const [{ id: bookmarkId }] = await db
       .insert(schema.bookmarks)
-      .values({ url: uniqueUrl("subcategory-archive-blocked"), title: "Subcategory archive blocked" })
+      .values({ url: uniqueUrl("subcategory-archive-blocked"), title: "Sub-category archive blocked" })
       .$returningId();
 
     await db.insert(schema.bookmarkSubcategories).values({ bookmarkId, subcategoryId });
@@ -247,7 +247,7 @@ describe("subcategory lifecycle", () => {
   });
 });
 
-describe("subcategory category lifecycle", () => {
+describe("category lifecycle", () => {
   it("blocks archiving categories that still have active bookmarked subcategories", async () => {
     const [{ id: categoryId }] = await db
       .insert(schema.categories)
@@ -320,10 +320,10 @@ describe("bookmark write transactions", () => {
     expect(links).toHaveLength(0);
   });
 
-  it("rejects bookmark-subcategory links that reference missing subcategories", async () => {
+  it("rejects bookmark/sub-category links that reference missing subcategories", async () => {
     const [{ id: bookmarkId }] = await db
       .insert(schema.bookmarks)
-      .values({ url: uniqueUrl("fk-subcategory"), title: "FK subcategory" })
+      .values({ url: uniqueUrl("fk-subcategory"), title: "FK sub-category" })
       .$returningId();
 
     await expect((async () => {
@@ -387,7 +387,7 @@ describe("bookmark write transactions", () => {
     expect(createdBookmarks).toHaveLength(0);
   });
 
-  it("rolls back bookmark updates when subcategory replacement fails", async () => {
+  it("rolls back bookmark updates when sub-category replacement fails", async () => {
     const [{ id: originalTagId }] = await db.insert(schema.tags).values({ name: uniqueName("tag-old") }).$returningId();
     const [{ id: replacementTagId }] = await db.insert(schema.tags).values({ name: uniqueName("tag-new") }).$returningId();
     const [{ id: originalSubcategoryId }] = await db
@@ -513,7 +513,7 @@ describe("bookmark write transactions", () => {
 
     const createRes = await app.handle(jsonRequest("/bookmarks", "POST", {
       url: uniqueUrl("subcategory-filter-removal"),
-      title: "Subcategory filter removal",
+      title: "Sub-category filter removal",
       subcategoryIds: [originalSubcategoryId, remainingSubcategoryId],
     }));
     expect(createRes.status).toBe(201);
@@ -666,7 +666,7 @@ describe("bookmark write transactions", () => {
   });
 });
 
-describe("subcategory category listing", () => {
+describe("category listing", () => {
   it("returns only active subcategories for active categories by default", async () => {
     const archivedAt = new Date();
     const [{ id: activeCategoryId }] = await db

@@ -4,7 +4,7 @@
  * Main user interface for the bookmark manager extension popup.
  * Handles the complete bookmark capture workflow including:
  * - Form initialization and data loading
- * - Tag and subcategory management with autocomplete
+ * - Tag and sub-category management with autocomplete
  * - Dynamic UI updates and chip-based selection display
  * - Real-time search and filtering
  * - Form validation and submission
@@ -37,18 +37,18 @@ const FOCUSABLE_SELECTOR = [
  */
 let state = {
   selectedTags: [], // Array of selected tag objects: { id, name }
-  selectedSubcategories: [], // Array of selected subcategory objects: { id, name, categoryName }
-  allSubcategories: [], // All available subcategories with categories from API
-  filteredSubcategories: [], // Filtered subcategories for display in search
+  selectedSubcategories: [], // Array of selected sub-category objects: { id, name, categoryName }
+  allSubcategories: [], // All available sub-categories with categories from API
+  filteredSubcategories: [], // Filtered sub-categories for display in search
   tagSuggestions: [], // Tag suggestions for autocomplete dropdown
-  existingCategories: [], // Available subcategory categories for modal: { id, name }
+  existingCategories: [], // Available categories for the sub-category modal: { id, name }
   prefetchedTags: [], // Cache for prefetched tag results
-  hasSubcategoriesPrefetched: false, // Track if subcategories are loaded
+  hasSubcategoriesPrefetched: false, // Track if sub-categories are loaded
   hasTagsPrefetched: false, // Track if initial tags are loaded
   pendingDuplicate: null, // Store duplicate entries requiring confirmation
   faviconUrl: '', // Active tab favicon for full-save payload
-  visibleSubcategories: [], // Currently rendered subcategory suggestions
-  activeSubcategoryIndex: -1, // Keyboard-selected subcategory suggestion
+  visibleSubcategories: [], // Currently rendered sub-category suggestions
+  activeSubcategoryIndex: -1, // Keyboard-selected sub-category suggestion
   activeTagIndex: -1, // Keyboard-selected tag suggestion
   lastFocusedElement: null, // Previously focused element before modal open
 };
@@ -103,12 +103,12 @@ function updateActiveSuggestion(containerId, activeIndex) {
 /**
  * Create Chip Component
  *
- * Creates a removable chip UI element for displaying selected tags/subcategories.
+ * Creates a removable chip UI element for displaying selected tags/sub-categories.
  * Chips show the selected item name and include a remove button with click handler.
  *
  * @param {string} text - Display text for the chip
  * @param {Function} onRemove - Callback function when remove button is clicked
- * @param {boolean} [isSubcategory=false] - Whether this is a subcategory chip (affects styling)
+ * @param {boolean} [isSubcategory=false] - Whether this is a sub-category chip (affects styling)
  * @returns {HTMLElement} Chip DOM element with remove functionality
  */
 function createChip(text, onRemove, isSubcategory = false) {
@@ -131,8 +131,8 @@ function createChip(text, onRemove, isSubcategory = false) {
 /**
  * Render Selected Sub-categories
  *
- * Updates the DOM to display all currently selected subcategories as chips.
- * Each chip shows the category name and subcategory name in hierarchical format.
+ * Updates the DOM to display all currently selected sub-categories as chips.
+ * Each chip shows the category name and sub-category name in hierarchical format.
  * Clears existing chips and rebuilds the entire list.
  */
 function renderSelectedSubcategories() {
@@ -153,7 +153,7 @@ function renderSelectedSubcategories() {
 /**
  * Remove Sub-category Handler
  *
- * Removes a subcategory from the selected list and updates the UI.
+ * Removes a sub-category from the selected list and updates the UI.
  *
  * @param {number} id - Sub-category ID to remove
  */
@@ -165,7 +165,7 @@ function removeSubcategory(id) {
 /**
  * Add Sub-category Handler
  *
- * Adds a subcategory to the selected list and updates the UI.
+ * Adds a sub-category to the selected list and updates the UI.
  * Ensures no duplicates are added.
  *
  * @param {Object} subcategory - Sub-category object to add
@@ -198,7 +198,7 @@ function renderSubcategorySuggestions(subcategories) {
     return;
   }
 
-  // Category subcategories by category name
+  // Group sub-categories by category name
   const groupedByCategory = {};
   subcategories.forEach(c => {
     const categoryName = c.categoryName || 'Uncategorized';
@@ -368,7 +368,7 @@ function hideTagSuggestions() {
 /**
  * Show Modal
  *
- * Displays the modal dialog for creating a new subcategory.
+ * Displays the modal dialog for creating a new sub-category.
  * Populates existing categories dropdown and sets up event handlers.
  */
 function showModal() {
@@ -484,7 +484,7 @@ function updateCategorySections() {
 /**
  * Handle Create Sub-category
  *
- * Validates and submits the new subcategory form in the modal.
+ * Validates and submits the new sub-category form in the modal.
  * Displays success or error messages based on the result.
  */
 async function handleCreateSubcategory() {
@@ -557,7 +557,7 @@ async function handleCreateSubcategory() {
  * Load Initial Data
  *
  * Fetches and loads the initial data for the popup including existing bookmarks,
- * subcategories, and tags. Populates the form fields and updates the UI state.
+ * sub-categories, and tags. Populates the form fields and updates the UI state.
  */
 async function loadInitial() {
   try {
@@ -572,7 +572,7 @@ async function loadInitial() {
     el('title').value = tab.title || '';
     state.faviconUrl = tab.faviconUrl || '';
 
-    // Process subcategories data
+    // Process sub-category data
     state.allSubcategories = [];
     state.existingCategories = [];
     if (subcategories.categories) {
@@ -757,7 +757,7 @@ async function onDuplicateConfirm() {
  * On Create Sub-category Button Click
  *
  * Event handler for the "Add Sub-category" button.
- * Shows the modal for creating a new subcategory.
+ * Shows the modal for creating a new sub-category.
  */
 async function onCreateSubcategory() {
   showModal();
@@ -789,8 +789,8 @@ const debouncedTagSearch = debounce(async (q) => {
 /**
  * On Sub-category Search Input
  *
- * Event handler for the subcategory search input field.
- * Triggers filtering of subcategories based on user query.
+ * Event handler for the sub-category search input field.
+ * Triggers filtering of sub-categories based on user query.
  *
  * @param {Event} e - Input event
  */
@@ -807,8 +807,8 @@ function onSubcategorySearch(e) {
 /**
  * On Sub-category Focus
  *
- * Event handler for focusing on the subcategory search input.
- * Prefetches subcategories to show initial suggestions.
+ * Event handler for focusing on the sub-category search input.
+ * Prefetches sub-categories to show initial suggestions.
  */
 function onSubcategoryFocus() {
   prefetchSubcategories();

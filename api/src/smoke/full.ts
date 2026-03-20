@@ -200,8 +200,8 @@ let subcategoryId: number;
   });
   check("POST /subcategories → 201", r.status, 201, r.body);
   subcategoryId = (r.body as any)?.id;
-  if (!subcategoryId) fail("subcategory id in response", `got: ${JSON.stringify(r.body)}`);
-  else pass("subcategory id returned");
+  if (!subcategoryId) fail("sub-category id in response", `got: ${JSON.stringify(r.body)}`);
+  else pass("sub-category id returned");
 }
 
 {
@@ -215,8 +215,8 @@ let subcategoryId: number;
       Array.isArray(g.subcategories) && g.subcategories.some((c: any) => c.id === subcategoryId)
     );
   found
-    ? pass("new subcategory present in list")
-    : fail("new subcategory present in list", `id ${subcategoryId} not found in any category`);
+    ? pass("new sub-category present in list")
+    : fail("new sub-category present in list", `id ${subcategoryId} not found in any category`);
 }
 
 {
@@ -340,7 +340,7 @@ section("Bookmarks — Read & Filter");
   found ? pass("search by title found bookmark") : fail("search by title found bookmark", `id ${bookmarkId} not in results`);
 }
 
-// ── 9. Bookmarks — Edit (flags, tag, subcategory) ─────────────────────────
+// ── 9. Bookmarks — Edit (flags, tag, sub-category) ─────────────────────────
 section("Bookmarks — Edit");
 
 {
@@ -371,7 +371,7 @@ section("Bookmarks — Edit");
     const hasTag = Array.isArray(b.tags) && b.tags.some((t: any) => t.id === tagId);
     hasTag ? pass("tag attached to bookmark") : fail("tag attached to bookmark", JSON.stringify(b.tags));
     const hasClass = Array.isArray(b.subcategories) && b.subcategories.some((c: any) => c.id === subcategoryId);
-    hasClass ? pass("subcategory attached to bookmark") : fail("subcategory attached to bookmark", JSON.stringify(b.subcategories));
+    hasClass ? pass("sub-category attached to bookmark") : fail("sub-category attached to bookmark", JSON.stringify(b.subcategories));
   }
 }
 
@@ -419,7 +419,7 @@ section("Flag Counts");
 section("Bookmarks — Archive & Restore");
 
 {
-  // Detach tag and subcategory before archive/restore cycle (so they can be archived later)
+  // Detach tag and sub-category before archive/restore cycle (so they can be archived later)
   await req("PATCH", `/bookmarks/${bookmarkId}`, {
     token: API_TOKEN,
     body: { tagIds: [], subcategoryIds: [] },
@@ -490,7 +490,7 @@ section("Sub-categories — Archive & Restore");
 section("Categories — Archive & Restore");
 
 {
-  // Archive subcategory first so category can be archived (no active subcategories with active bookmarks)
+  // Archive sub-category first so category can be archived (no active subcategories with active bookmarks)
   await req("PATCH", `/subcategories/${subcategoryId}/archive`, { token: API_TOKEN });
 
   const r = await req("PATCH", `/categories/${categoryId}/archive`, { token: API_TOKEN });
