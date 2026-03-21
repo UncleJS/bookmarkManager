@@ -1068,6 +1068,7 @@
         <button id="search-clear" onclick="clearSearch()" title="Clear search" tabindex="-1">×</button>
       </div>
       <a href="/manage-categories" class="nav-btn">⚙ Categories</a>
+      <a href="/manage-tags" class="nav-btn"># Tags</a>
       <button class="nav-btn" onclick="triggerBackup()">⬇ Backup</button>
       <div id="archive-toggle">
         <button class="toggle-btn active" id="btn-active"   onclick="setArchived(false)">Active</button>
@@ -1932,6 +1933,10 @@
     cascadeSubSubcategoryId: '',
   };
 
+  function compareTagNames(a, b) {
+    return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
+  }
+
   // Pre-load subcategories & tags for the modal (shared data, refreshed on open)
   async function loadModalData() {
     const [cRes, tRes] = await Promise.all([
@@ -1989,7 +1994,7 @@
     }));
     modalState.allTaxonomyItems = flatTaxonomyItems;
     modalState.allCategories  = flatCategories;
-    modalState.allTags = tagItems;
+    modalState.allTags = [...tagItems].sort(compareTagNames);
   }
 
   async function openModal(bm) {
@@ -2250,7 +2255,9 @@
     const query = (document.getElementById('tag-search').value || '').toLowerCase();
     const list  = document.getElementById('tag-chips');
     const items = modalState.allTags;
-    const filtered = items.filter(item => item.name.toLowerCase().includes(query));
+    const filtered = items
+      .filter(item => item.name.toLowerCase().includes(query))
+      .sort(compareTagNames);
 
     list.innerHTML = filtered.map(item => {
       const sel = modalState.selTagIds.has(item.id);
@@ -2439,6 +2446,7 @@
       const data = await res.json();
       if (!res.ok) { alert(data.error || 'Failed to create tag'); return; }
       modalState.allTags.push({ id: data.id, name: data.name });
+      modalState.allTags.sort(compareTagNames);
       modalState.selTagIds.add(data.id);
       document.getElementById('tag-search').value = '';
       renderChips('tag');

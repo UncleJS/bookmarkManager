@@ -229,6 +229,44 @@ describe("tag lifecycle", () => {
     expect(lookupBody.items[0]).toMatchObject({ name });
   });
 
+  it("renames tags through the API", async () => {
+    const originalName = uniqueName("tag-rename-old");
+    const renamedName = uniqueName("tag-rename-new");
+
+    const createRes = await app.handle(jsonRequest("/tags", "POST", { name: originalName }));
+    const created = await createRes.json() as { id: number };
+
+    const renameRes = await app.handle(jsonRequest(`/tags/${created.id}`, "PATCH", { name: `  ${renamedName}  ` }));
+    expect(renameRes.status).toBe(200);
+    await expect(renameRes.json()).resolves.toMatchObject({ ok: true, id: created.id, name: renamedName });
+
+    const lookupRes = await app.handle(
+      request(`/tags?query=${encodeURIComponent(renamedName)}&exact=true&limit=1`)
+    );
+    const lookupBody = await lookupRes.json() as { items: Array<{ id: number; name: string }> };
+
+    expect(lookupBody.items).toEqual([expect.objectContaining({ id: created.id, name: renamedName })]);
+  });
+
+  it("blocks archiving tags that still have active bookmarks", async () => {
+    const [{ id: tagId }] = await db
+      .insert(schema.tags)
+      .values({ name: uniqueName("tag-guarded") })
+      .$returningId();
+    const [{ id: bookmarkId }] = await db
+      .insert(schema.bookmarks)
+      .values({ url: uniqueUrl("tag-guarded"), title: "Tag Guard" })
+      .$returningId();
+
+    await db.insert(schema.bookmarkTags).values({ bookmarkId, tagId });
+
+    const archiveRes = await app.handle(request(`/tags/${tagId}/archive`, "PATCH"));
+    expect(archiveRes.status).toBe(409);
+    await expect(archiveRes.json()).resolves.toMatchObject({
+      error: "Cannot archive: 1 active bookmark linked to this tag",
+    });
+  });
+
   it("archives and restores tags through the API", async () => {
     const name = uniqueName("tag-lifecycle");
     const createRes = await app.handle(jsonRequest("/tags", "POST", { name }));
@@ -240,6 +278,11 @@ describe("tag lifecycle", () => {
     const hiddenRes = await app.handle(request(`/tags?query=${encodeURIComponent(name)}`));
     const hiddenBody = await hiddenRes.json() as { items: Array<{ name: string }> };
     expect(hiddenBody.items).toHaveLength(0);
+
+    const archivedRes = await app.handle(request(`/tags?query=${encodeURIComponent(name)}&archived=true`));
+    const archivedBody = await archivedRes.json() as { items: Array<{ name: string; archivedAt: string | null }> };
+    expect(archivedRes.status).toBe(200);
+    expect(archivedBody.items).toEqual([expect.objectContaining({ name, archivedAt: expect.any(String) })]);
 
     const duplicateArchiveRes = await app.handle(request(`/tags/${created.id}/archive`, "PATCH"));
     expect(duplicateArchiveRes.status).toBe(409);

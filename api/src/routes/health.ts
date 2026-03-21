@@ -81,6 +81,28 @@ export function createHealthRoutes({ checkReadiness }: HealthRoutesOptions = {})
       }
     )
     .get(
+      "/manage-tags",
+      () =>
+        new Response(readUI("tags.html"), {
+          headers: {
+            "Content-Type": "text/html; charset=utf-8",
+            "Cache-Control": "no-store",
+          },
+        }),
+      {
+        detail: {
+          tags: ["health"],
+          summary: "Tag management web UI",
+          description:
+            "Serves the static tag management page. " +
+            "Allows users to create, rename, archive, and restore tags with archive guardrails when active bookmarks still use them.",
+          responses: {
+            200: { description: "HTML page" },
+          },
+        },
+      }
+    )
+    .get(
       "/config",
       () => {
         const apiToken = process.env.API_TOKEN ?? "";

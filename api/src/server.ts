@@ -23,6 +23,7 @@ function isAuthExempt(path: string): boolean {
     path === "/ready" ||
     path === "/app" ||
     path === "/manage-categories" ||
+    path === "/manage-tags" ||
     path === "/config" ||
     path === "/openapi.json" ||
     path === "/backup" ||
@@ -81,7 +82,7 @@ export function buildApp({ checkReadiness }: BuildAppOptions = {}) {
                 "Manages bookmarks, tags, categories, sub-categories, and nested sub-sub-categories.\n\n" +
                "**Auth model:** all bookmark-management routes require `Authorization: Bearer <API_TOKEN>` " +
                "(set `API_TOKEN` in `api/.env`). " +
-               "Health probes (`/health`, `/ready`), static UI pages (`/app`, `/manage-categories`), " +
+                "Health probes (`/health`, `/ready`), static UI pages (`/app`, `/manage-categories`, `/manage-tags`), " +
                "and the API docs (`/docs`) are exempt. " +
                "The `GET /backup` endpoint additionally requires its own `Authorization: Bearer <BACKUP_TOKEN>`.\n\n" +
                "**Data lifecycle:** records are never hard-deleted. Entity rows and bookmark association rows " +

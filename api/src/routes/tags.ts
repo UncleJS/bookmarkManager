@@ -1,7 +1,7 @@
 import { Elysia, t } from "elysia";
-import { and, asc, desc, eq, isNull, like, sql } from "drizzle-orm";
+import { and, asc, desc, eq, isNotNull, isNull, like, sql } from "drizzle-orm";
 import { db } from "../db/client.ts";
-import { bookmarkTags, tags } from "../db/schema.ts";
+import { bookmarks, bookmarkTags, tags } from "../db/schema.ts";
 import { ErrorResp, OkResp, S, isDupEntry } from "./shared.ts";
 
 export const tagRoutes = new Elysia()
@@ -13,9 +13,10 @@ export const tagRoutes = new Elysia()
       const search = query.query?.trim() ?? "";
       const exact = query.exact === "true";
       const sort = query.sort === "alpha" ? "alpha" : "count";
+      const archived = query.archived === "true";
 
       const where = and(
-        isNull(tags.archivedAt),
+        archived ? isNotNull(tags.archivedAt) : isNull(tags.archivedAt),
         search
           ? exact
             ? sql`LOWER(${tags.name}) = LOWER(${search})`
@@ -32,6 +33,7 @@ export const tagRoutes = new Elysia()
           .select({
             id: tags.id,
             name: tags.name,
+            archivedAt: tags.archivedAt,
             bookmarkCount: sql<number>`COUNT(DISTINCT ${bookmarkTags.bookmarkId})`,
           })
           .from(tags)
@@ -43,7 +45,7 @@ export const tagRoutes = new Elysia()
             )
           )
           .where(where)
-          .groupBy(tags.id, tags.name)
+          .groupBy(tags.id, tags.name, tags.archivedAt)
           .orderBy(...orderBy)
           .limit(limit)
           .offset(offset),
@@ -53,7 +55,13 @@ export const tagRoutes = new Elysia()
           .where(where),
       ]);
 
-      return { items: rows.map((r) => ({ ...r, bookmarkCount: Number(r.bookmarkCount) })), total: Number(countRow.total) };
+      return {
+        items: rows.map((r) => ({
+          ...r,
+          bookmarkCount: Number(r.bookmarkCount),
+        })),
+        total: Number(countRow.total),
+      };
     },
     {
       query: t.Object({
@@ -62,12 +70,13 @@ export const tagRoutes = new Elysia()
         limit: t.Optional(t.String({ description: "Maximum number of tags to return. Default: 20, max: 100" })),
         offset: t.Optional(t.String({ description: "Zero-based offset for pagination. Default: 0" })),
         sort: t.Optional(t.String({ description: "Sort order. `count` (default) sorts by active bookmark count descending then name ascending. `alpha` sorts alphabetically ascending" })),
+        archived: t.Optional(t.String({ description: "When `true`, returns archived tags instead of active tags." })),
       }),
       detail: {
         tags: ["tags"],
         summary: "List / search tags",
         description:
-          "Returns a paginated list of active (non-archived) tags.\n\n" +
+          "Returns a paginated list of tags. By default this returns active (non-archived) tags; set `archived=true` to list archived tags instead.\n\n" +
           "Each item includes a `bookmarkCount` that reflects only **active** (non-archived) bookmarks. " +
           "Archived bookmarks are excluded from the count even if they retain tag associations.\n\n" +
           "Set `exact=true` with `query` to perform a case-insensitive exact-name lookup.\n\n" +
@@ -90,6 +99,7 @@ export const tagRoutes = new Elysia()
                         properties: {
                           id: S.num("Tag ID"),
                           name: S.str("Tag name"),
+                          archivedAt: S.nullable(S.str("UTC archive timestamp, or null while active")),
                           bookmarkCount: S.num("Number of active bookmarks using this tag"),
                         },
                       },
@@ -161,6 +171,61 @@ export const tagRoutes = new Elysia()
     }
   )
   .patch(
+    "/tags/:id",
+    async ({ params, body, set }) => {
+      const id = Number(params.id);
+      const [row] = await db.select({ id: tags.id })
+        .from(tags).where(eq(tags.id, id));
+      if (!row) { set.status = 404; return { error: "Tag not found" }; }
+
+      const name = body.name.trim();
+      if (!name) {
+        set.status = 400;
+        return { error: "name is required" };
+      }
+
+      try {
+        await db.update(tags).set({ name }).where(eq(tags.id, id));
+        return { ok: true, id, name };
+      } catch (err: unknown) {
+        if (isDupEntry(err)) {
+          set.status = 409;
+          return { error: "Tag already exists" };
+        }
+        throw err;
+      }
+    },
+    {
+      body: t.Object({
+        name: t.String({ description: "New tag name. Must be non-empty after trimming and unique among active tags." }),
+      }),
+      detail: {
+        tags: ["tags"],
+        summary: "Rename a tag",
+        description:
+          "Updates a tag name after trimming leading/trailing whitespace.\n\n" +
+          "Tag names must remain unique among active tags. Archived tags with the same name do not block the rename.",
+        responses: {
+          200: {
+            description: "Tag updated",
+            content: {
+              "application/json": {
+                schema: S.obj("Updated tag", {
+                  ok: { type: "boolean" as const, enum: [true], description: "Always true" },
+                  id: S.num("Tag ID"),
+                  name: S.str("New name as stored"),
+                }),
+              },
+            },
+          },
+          400: { ...ErrorResp, description: "Validation error - name is blank after trimming" },
+          404: { ...ErrorResp, description: "Tag not found" },
+          409: { ...ErrorResp, description: "Conflict - an active tag with this name already exists" },
+        },
+      },
+    }
+  )
+  .patch(
     "/tags/:id/archive",
     async ({ params, set }) => {
       const id = Number(params.id);
@@ -168,6 +233,24 @@ export const tagRoutes = new Elysia()
         .from(tags).where(eq(tags.id, id));
       if (!row) { set.status = 404; return { error: "Tag not found" }; }
       if (row.archivedAt) { set.status = 409; return { error: "Already archived" }; }
+
+      const [{ count }] = await db
+        .select({ count: sql<number>`COUNT(*)` })
+        .from(bookmarkTags)
+        .innerJoin(bookmarks, and(
+          eq(bookmarkTags.bookmarkId, bookmarks.id),
+          isNull(bookmarks.archivedAt),
+        ))
+        .where(and(
+          eq(bookmarkTags.tagId, id),
+          isNull(bookmarkTags.archivedAt),
+        ));
+      const total = Number(count);
+      if (total > 0) {
+        set.status = 409;
+        return { error: `Cannot archive: ${total} active bookmark${total === 1 ? "" : "s"} linked to this tag` };
+      }
+
       await db.update(tags).set({ archivedAt: sql`NOW()` }).where(eq(tags.id, id));
       return { ok: true };
     },
@@ -177,14 +260,13 @@ export const tagRoutes = new Elysia()
         summary: "Archive a tag",
         description:
           "Soft-deletes a tag by setting its `archivedAt` timestamp to the current UTC time.\n\n" +
-          "Unlike classifications, archiving a tag is **not blocked** by existing bookmark associations - " +
-          "the tag is archived immediately. Existing bookmark-tag links are preserved in the database " +
-          "and the tag can be fully restored at any time via `PATCH /tags/:id/restore`.\n\n" +
+          "**Safety check:** archiving is blocked if any active (non-archived) bookmarks are still linked to the tag. " +
+          "The error message reports the exact count. Reassign or archive those bookmarks first, then retry.\n\n" +
           "Archived tags are excluded from `GET /tags` and are not counted in bookmark counts.",
         responses: {
           200: { ...OkResp, description: "Tag archived" },
           404: { ...ErrorResp, description: "Tag not found" },
-          409: { ...ErrorResp, description: "Tag is already archived" },
+          409: { ...ErrorResp, description: "Already archived, or active bookmarks are linked to this tag" },
         },
       },
     }

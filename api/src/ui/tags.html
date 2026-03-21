@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tag Management - Bookmark Manager</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0a0a0a;
+      --surface: #111111;
+      --surface2: #1a1a1a;
+      --surface3: #222222;
+      --border: #2a2a2a;
+      --border2: #333333;
+      --text: #f0f0f0;
+      --text-muted: #ffffff;
+      --accent: #4f9cf9;
+      --accent-dim: #1d3d6b;
+      --danger: #ef4444;
+      --danger-dim: #3b1010;
+      --success: #4ade80;
+      --success-dim: #0d2b19;
+    }
+
+    html, body {
+      min-height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: ui-monospace, 'Cascadia Code', 'Fira Code', monospace;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    #topbar {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 12px 24px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+    }
+
+    #topbar a.back-link {
+      font-size: 12px;
+      color: var(--text-muted);
+      white-space: nowrap;
+    }
+
+    #topbar h1 {
+      font-size: 15px;
+      font-weight: 700;
+      flex: 1;
+    }
+
+    #archive-toggle {
+      display: flex;
+      border: 1px solid var(--border2);
+      border-radius: 4px;
+      overflow: hidden;
+    }
+
+    .toggle-btn {
+      background: var(--surface2);
+      border: none;
+      color: var(--text-muted);
+      font-family: inherit;
+      font-size: 12px;
+      padding: 4px 12px;
+      cursor: pointer;
+      transition: background 0.1s, color 0.1s;
+    }
+
+    .toggle-btn + .toggle-btn { border-left: 1px solid var(--border2); }
+    .toggle-btn.active {
+      background: var(--accent-dim);
+      color: var(--accent);
+      font-weight: 600;
+    }
+
+    #page {
+      max-width: 760px;
+      margin: 0 auto;
+      padding: 24px 20px 60px;
+    }
+
+    #add-tag-section {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+
+    #add-tag-input,
+    .inline-input {
+      flex: 1;
+      background: var(--surface3);
+      border: 1px solid var(--border2);
+      color: var(--text);
+      font-family: inherit;
+      font-size: 13px;
+      padding: 8px 12px;
+      border-radius: 6px;
+      outline: none;
+      transition: border-color 0.1s;
+    }
+
+    #add-tag-input:focus,
+    .inline-input:focus { border-color: var(--accent); }
+
+    #btn-add-tag,
+    .btn-icon {
+      background: none;
+      border: 1px solid var(--border2);
+      color: var(--text-muted);
+      font-family: inherit;
+      font-size: 11px;
+      padding: 8px 12px;
+      border-radius: 6px;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: border-color 0.1s, color 0.1s, background 0.1s;
+    }
+
+    #btn-add-tag:hover,
+    .btn-icon:hover { border-color: var(--accent); color: var(--accent); }
+    .btn-icon.danger:hover { border-color: var(--danger); color: var(--danger); }
+    .btn-icon.success:hover { border-color: var(--success); color: var(--success); }
+    .btn-icon.confirm { border-color: var(--accent); color: var(--accent); }
+
+    .tag-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 12px 14px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--surface);
+      margin-bottom: 10px;
+    }
+
+    .tag-row.archived-row { opacity: 0.6; }
+
+    .tag-name-wrap {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .tag-name {
+      font-size: 14px;
+      font-weight: 700;
+      word-break: break-word;
+    }
+
+    .tag-meta {
+      font-size: 11px;
+      color: var(--text-muted);
+      opacity: 0.7;
+    }
+
+    .count-badge,
+    .badge-archived {
+      font-size: 10px;
+      font-weight: 700;
+      border-radius: 999px;
+      padding: 2px 8px;
+      line-height: 1.4;
+    }
+
+    .count-badge {
+      background: rgba(79, 156, 249, 0.12);
+      color: var(--accent);
+      border: 1px solid rgba(79, 156, 249, 0.35);
+    }
+
+    .badge-archived {
+      background: var(--danger-dim);
+      color: var(--danger);
+    }
+
+    .state-box {
+      padding: 28px 18px;
+      text-align: center;
+      color: var(--text-muted);
+      border: 1px dashed var(--border2);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    #toast {
+      position: fixed;
+      right: 16px;
+      bottom: 16px;
+      max-width: 360px;
+      padding: 10px 12px;
+      border-radius: 8px;
+      background: var(--surface2);
+      border: 1px solid var(--border2);
+      color: var(--text);
+      display: none;
+      z-index: 100;
+    }
+
+    #toast.show { display: block; }
+    #toast.error { border-color: var(--danger); color: var(--danger); }
+    #toast.ok { border-color: var(--success); color: var(--success); }
+
+    footer {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      text-align: center;
+      padding: 0.3rem 0;
+      color: #ffffff;
+      font-size: 0.68rem;
+      background: var(--bg);
+      border-top: 1px solid var(--border);
+      z-index: 50;
+    }
+
+    @media (max-width: 720px) {
+      #topbar,
+      #add-tag-section,
+      .tag-row {
+        flex-wrap: wrap;
+      }
+
+      #topbar h1 {
+        flex-basis: 100%;
+      }
+
+      #archive-toggle {
+        margin-left: auto;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="topbar">
+    <a href="/app" class="back-link">&lt; Back to bookmarks</a>
+    <h1>Tag Management</h1>
+    <div id="archive-toggle">
+      <button class="toggle-btn active" id="btn-active" onclick="setView('active')">Active</button>
+      <button class="toggle-btn" id="btn-archived" onclick="setView('archived')">Archived</button>
+    </div>
+  </div>
+
+  <div id="page">
+    <div id="add-tag-section">
+      <input id="add-tag-input" type="text" placeholder="New tag name..." maxlength="255" onkeydown="if(event.key==='Enter') addTag()" />
+      <button id="btn-add-tag" onclick="addTag()">+ Add Tag</button>
+    </div>
+
+    <div id="tags-container">
+      <div class="state-box">Loading...</div>
+    </div>
+  </div>
+
+  <div id="toast"></div>
+
+  <footer>
+    Copyright 2026 Jaco Steyn - Licensed under CC BY-SA 4.0
+  </footer>
+
+  <script>
+    window.__apiToken = '';
+    let viewMode = 'active';
+    let tags = [];
+
+    async function bootstrapToken() {
+      try {
+        const res = await fetch('/config');
+        if (!res.ok) throw new Error('Server returned ' + res.status);
+        const data = await res.json();
+        if (!data.apiToken) throw new Error('apiToken missing in /config response');
+        window.__apiToken = data.apiToken;
+      } catch (e) {
+        document.getElementById('tags-container').innerHTML =
+          '<div class="state-box">Failed to load API configuration.<br><small>' + esc(e.message) + '</small></div>';
+        throw e;
+      }
+    }
+
+    function apiFetch(url, opts) {
+      const headers = Object.assign({ Authorization: 'Bearer ' + window.__apiToken }, (opts && opts.headers) || {});
+      return fetch(url, Object.assign({}, opts || {}, { headers }));
+    }
+
+    function setView(mode) {
+      viewMode = mode;
+      document.getElementById('btn-active').classList.toggle('active', mode === 'active');
+      document.getElementById('btn-archived').classList.toggle('active', mode === 'archived');
+      document.getElementById('add-tag-section').style.display = mode === 'active' ? 'flex' : 'none';
+      loadAll();
+    }
+
+    async function fetchAllTags() {
+      const items = [];
+      let offset = 0;
+      let total = 0;
+
+      do {
+        const params = new URLSearchParams({
+          limit: '100',
+          offset: String(offset),
+          sort: 'alpha',
+        });
+        if (viewMode === 'archived') params.set('archived', 'true');
+
+        const res = await apiFetch('/tags?' + params.toString());
+        if (!res.ok) throw new Error('Failed to fetch tags');
+        const data = await res.json();
+        items.push(...(data.items || []));
+        total = Number(data.total || 0);
+        offset += data.items.length;
+        if (!data.items.length) break;
+      } while (items.length < total);
+
+      return items;
+    }
+
+    async function loadAll() {
+      const container = document.getElementById('tags-container');
+      container.innerHTML = '<div class="state-box">Loading...</div>';
+
+      try {
+        tags = await fetchAllTags();
+        renderTags();
+      } catch (e) {
+        container.innerHTML = '<div class="state-box">Failed to load tags.<br><small>' + esc(e.message) + '</small></div>';
+      }
+    }
+
+    function renderTags() {
+      const container = document.getElementById('tags-container');
+      if (!tags.length) {
+        container.innerHTML = viewMode === 'archived'
+          ? '<div class="state-box">No archived tags.</div>'
+          : '<div class="state-box">No tags yet. Add one above.</div>';
+        return;
+      }
+
+      container.innerHTML = tags.map(renderTagRow).join('');
+    }
+
+    function renderTagRow(tag) {
+      const count = Number(tag.bookmarkCount || 0);
+      const isArchived = !!tag.archivedAt;
+      const countLabel = count + ' active bookmark' + (count === 1 ? '' : 's');
+      const actions = isArchived
+        ? '<button class="btn-icon success" onclick="restoreTag(' + tag.id + ')">Restore</button>'
+        : '<button class="btn-icon" onclick="startRenameTag(' + tag.id + ')">Rename</button><button class="btn-icon danger" onclick="archiveTag(' + tag.id + ')">Archive</button>';
+
+      return '<div class="tag-row ' + (isArchived ? 'archived-row' : '') + '" id="tag-row-' + tag.id + '">' +
+        '<div class="tag-name-wrap">' +
+        '<span class="tag-name">' + esc(tag.name) + '</span>' +
+        '<span class="tag-meta">Alphabetical order. Archive blocked while linked to active bookmarks.</span>' +
+        '</div>' +
+        '<span class="count-badge" title="' + countLabel + '">' + count + '</span>' +
+        (isArchived ? '<span class="badge-archived">ARCHIVED</span>' : '') +
+        actions +
+        '</div>';
+    }
+
+    async function addTag() {
+      const input = document.getElementById('add-tag-input');
+      const button = document.getElementById('btn-add-tag');
+      const name = input.value.trim();
+      if (!name) return;
+
+      button.disabled = true;
+      try {
+        const res = await apiFetch('/tags', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          toast(data.error || 'Failed to add tag', 'error');
+          return;
+        }
+
+        input.value = '';
+        toast('Tag "' + name + '" created', 'ok');
+        await loadAll();
+      } catch (e) {
+        toast(e.message, 'error');
+      } finally {
+        button.disabled = false;
+      }
+    }
+
+    function startRenameTag(tagId) {
+      const row = document.getElementById('tag-row-' + tagId);
+      const tag = tags.find(function(item) { return item.id === tagId; });
+      if (!row || !tag) return;
+
+      row.innerHTML = '';
+
+      const input = document.createElement('input');
+      input.className = 'inline-input';
+      input.maxLength = 255;
+      input.value = tag.name;
+
+      const saveBtn = document.createElement('button');
+      saveBtn.className = 'btn-icon confirm';
+      saveBtn.textContent = 'Save';
+
+      const cancelBtn = document.createElement('button');
+      cancelBtn.className = 'btn-icon';
+      cancelBtn.textContent = 'Cancel';
+
+      const nameWrap = document.createElement('div');
+      nameWrap.className = 'tag-name-wrap';
+      nameWrap.appendChild(input);
+
+      row.appendChild(nameWrap);
+      row.appendChild(saveBtn);
+      row.appendChild(cancelBtn);
+
+      input.focus();
+      input.select();
+
+      saveBtn.onclick = function() { commitRenameTag(tagId, input.value); };
+      cancelBtn.onclick = renderTags;
+      input.onkeydown = function(event) {
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          commitRenameTag(tagId, input.value);
+        }
+        if (event.key === 'Escape') renderTags();
+      };
+    }
+
+    async function commitRenameTag(tagId, newName) {
+      const name = (newName || '').trim();
+      if (!name) return;
+
+      try {
+        const res = await apiFetch('/tags/' + tagId, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: name }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          toast(data.error || 'Failed to rename tag', 'error');
+          renderTags();
+          return;
+        }
+
+        toast('Renamed to "' + name + '"', 'ok');
+        await loadAll();
+      } catch (e) {
+        toast(e.message, 'error');
+        renderTags();
+      }
+    }
+
+    async function archiveTag(tagId) {
+      if (!confirm('Archive this tag? This is blocked while active bookmarks still use it.')) return;
+
+      try {
+        const res = await apiFetch('/tags/' + tagId + '/archive', { method: 'PATCH' });
+        const data = await res.json();
+        if (!res.ok) {
+          toast(data.error || 'Failed to archive tag', 'error');
+          return;
+        }
+
+        toast('Tag archived', 'ok');
+        await loadAll();
+      } catch (e) {
+        toast(e.message, 'error');
+      }
+    }
+
+    async function restoreTag(tagId) {
+      try {
+        const res = await apiFetch('/tags/' + tagId + '/restore', { method: 'PATCH' });
+        const data = await res.json();
+        if (!res.ok) {
+          toast(data.error || 'Failed to restore tag', 'error');
+          return;
+        }
+
+        toast('Tag restored', 'ok');
+        await loadAll();
+      } catch (e) {
+        toast(e.message, 'error');
+      }
+    }
+
+    function esc(value) {
+      return String(value)
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#39;');
+    }
+
+    var toastTimer = null;
+    function toast(message, type) {
+      const el = document.getElementById('toast');
+      el.textContent = message;
+      el.className = 'show ' + (type || 'ok');
+      if (toastTimer) clearTimeout(toastTimer);
+      toastTimer = setTimeout(function() { el.className = ''; }, 3000);
+    }
+
+    bootstrapToken().then(loadAll);
+  </script>
+</body>
+</html>
