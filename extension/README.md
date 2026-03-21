@@ -12,6 +12,7 @@ Chrome Manifest V3 extension for capturing bookmarks and sending them to the loc
 
 ## Table of Contents
 
+- [README Links](#readme-links)
 - [Setup](#setup)
 - [Capture Methods](#capture-methods)
 - [Popup Form](#popup-form)
@@ -20,6 +21,16 @@ Chrome Manifest V3 extension for capturing bookmarks and sending them to the loc
 - [Architecture](#architecture)
 - [Permissions](#permissions)
 - [Edge Cases](#edge-cases)
+
+---
+
+## README Links
+
+- [Project Overview](../README.md)
+- [API README](../api/README.md)
+- [Extension README](./README.md)
+- [Scripts README](../scripts/README.md)
+- [E2E README](../e2e/README.md)
 
 ---
 

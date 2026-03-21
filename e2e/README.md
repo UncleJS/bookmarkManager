@@ -13,6 +13,27 @@ Tests cover four areas:
 
 ---
 
+## Table of Contents
+
+- [README Links](#readme-links)
+- [Prerequisites](#prerequisites)
+- [Running tests](#running-tests)
+- [How extension tests work](#how-extension-tests-work)
+- [Project structure](#project-structure)
+- [CI notes](#ci-notes)
+
+---
+
+## README Links
+
+- [Project Overview](../README.md)
+- [API README](../api/README.md)
+- [Extension README](../extension/README.md)
+- [Scripts README](../scripts/README.md)
+- [E2E README](./README.md)
+
+---
+
 ## Prerequisites
 
 1. **API pod running** — `./scripts/start.sh` from the repo root

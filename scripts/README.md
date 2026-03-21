@@ -23,6 +23,7 @@ Every script uses `set -euo pipefail` with colour-coded output:
 
 ## Table of Contents
 
+- [README Links](#readme-links)
 - [Quick Reference](#quick-reference)
 - [install.sh](#installsh)
 - [uninstall.sh](#uninstallsh)
@@ -39,6 +40,16 @@ Every script uses `set -euo pipefail` with colour-coded output:
 - [test-e2e.sh](#test-e2esh)
 - [import-library-categories.sh](#import-library-categoriessh)
 - [import-library-sub-subcategories.sh](#import-library-sub-subcategoriessh)
+
+---
+
+## README Links
+
+- [Project Overview](../README.md)
+- [API README](../api/README.md)
+- [Extension README](../extension/README.md)
+- [Scripts README](./README.md)
+- [E2E README](../e2e/README.md)
 
 ---
 

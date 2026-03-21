@@ -15,6 +15,7 @@ Bun + Elysia API for managing bookmarks, tags, and a 3-level category taxonomy. 
 
 ## Table of Contents
 
+- [README Links](#readme-links)
 - [Quick Start](#quick-start)
 - [Bun Scripts](#bun-scripts)
 - [Project Structure](#project-structure)
@@ -24,6 +25,16 @@ Bun + Elysia API for managing bookmarks, tags, and a 3-level category taxonomy. 
 - [Environment Variables](#environment-variables)
 - [Infrastructure Notes](#infrastructure-notes)
 - [phpMyAdmin](#phpmyadmin)
+
+---
+
+## README Links
+
+- [Project Overview](../README.md)
+- [API README](./README.md)
+- [Extension README](../extension/README.md)
+- [Scripts README](../scripts/README.md)
+- [E2E README](../e2e/README.md)
 
 ---
 

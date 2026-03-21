@@ -15,6 +15,8 @@ A self-hosted bookmark manager: a Chrome MV3 extension captures bookmarks and se
 
 ## Table of Contents
 
+- [README Links](#readme-links)
+- [Screenshots](#screenshots)
 - [Features](#features)
 - [Stack](#stack)
 - [Architecture](#architecture)
@@ -36,10 +38,29 @@ A self-hosted bookmark manager: a Chrome MV3 extension captures bookmarks and se
 
 ---
 
+## README Links
+
+- [Project Overview](./README.md)
+- [API README](./api/README.md)
+- [Extension README](./extension/README.md)
+- [Scripts README](./scripts/README.md)
+- [E2E README](./e2e/README.md)
+
+---
+
+# Screenshots
+
+</br>
+
+## Homepage
+</br>
+
+![Homepage](home.png)
 </br></br>
-![Homepage](screenshotMain.png)
-</br></br>
-![Edit Bookmark](screenshotEditBookmark.png)
+
+## Edit Modul
+![Edit Bookmark](editModul.png)
+</br>
 
 ---
 
