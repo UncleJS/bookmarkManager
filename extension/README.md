@@ -3,107 +3,85 @@
 [![License: CC BY-NC-SA 4.0](https://img.shields.io/badge/License-CC%20BY--NC--SA%204.0-lightgrey.svg)](https://creativecommons.org/licenses/by-nc-sa/4.0/)
 [![Chrome Extension](https://img.shields.io/badge/Extension-Manifest%20V3-4285F4?logo=googlechrome&logoColor=white)](https://developer.chrome.com/docs/extensions/mv3/)
 [![JavaScript](https://img.shields.io/badge/Language-JavaScript-f7df1e?logo=javascript&logoColor=black)](https://developer.mozilla.org/en-US/docs/Web/JavaScript)
-[![Bun](https://img.shields.io/badge/API%20Runtime-Bun-black?logo=bun)](https://bun.sh)
 
-A Chrome Manifest V3 extension that captures bookmarks and sends them to a local API for storage and organization.
+Chrome Manifest V3 extension for capturing bookmarks and sending them to the local Bun/Elysia API.
+
+> **Full project documentation:** [`../README.md`](../README.md)
 
 ---
 
 ## Table of Contents
 
-- [Features](#features)
-  - [Bookmark Capture](#bookmark-capture)
-  - [Organisation](#organisation)
-  - [User Interface](#user-interface)
-- [Installation](#installation)
-  - [Prerequisites](#prerequisites)
-  - [Load the extension in Chrome](#load-the-extension-in-chrome)
-  - [Configure API URL](#configure-api-url-if-needed)
+- [Setup](#setup)
+- [Capture Methods](#capture-methods)
+- [Popup Form](#popup-form)
+- [Duplicate URL Handling](#duplicate-url-handling)
+- [API Token](#api-token)
 - [Architecture](#architecture)
-  - [File/Folder Structure](#filefolder-structure)
-  - [Key Components](#key-components)
 - [Permissions](#permissions)
-- [Data Flow](#data-flow)
-  - [Quick Save](#quick-save)
-  - [Full Save](#full-save-popup)
-  - [Tag Autocomplete](#tag-autocomplete)
-  - [Duplicate Detection](#duplicate-detection)
-- [API Endpoints Used](#api-endpoints-used)
 - [Edge Cases](#edge-cases)
-- [Security Considerations](#security-considerations)
 
 ---
 
-## Features
+## Setup
 
-### Bookmark Capture
-
-- **Quick Save**: Right-click context menu for instant bookmark saving
-- **Full Save**: Detailed form with tags, subcategories, and metadata
-- **Auto-fill**: Automatically captures page title, URL, and favicon
-- **Duplicate Detection**: Highlights existing bookmarks with the same URL and prevents saving a second active bookmark with that URL
-
-[↑ Table of Contents](#table-of-contents)
-
-### Organisation
-
-- **Sub-categories**: Hierarchical categorisation system with categories; each subcategory can have an optional description
-- **Tags**: Flexible tagging with autocomplete and search
-- **Flags**: Boolean properties — `readLater`, `hotTopic`, `cheatsheets`, `forReview`
-
-[↑ Table of Contents](#table-of-contents)
-
-### User Interface
-
-- **Popup**: Main bookmark capture form
-- **Context Menus**: Quick access from right-click menu
-- **Options Page**: API base URL configuration
-- **Notifications**: Success/error feedback
+1. Start the API pod: `./scripts/start.sh` (from repo root)
+2. Open `chrome://extensions` → enable **Developer mode**
+3. Click **Load unpacked** → select the `extension/` directory
+4. Right-click the extension icon → **Options**
+5. Set **API Base URL** (default: `http://localhost:11650`) and **API Token** (value of `API_TOKEN` from `api/.env`)
+6. Click **Save**
 
 ---
 
 [↑ Table of Contents](#table-of-contents)
 
-## Installation
+## Capture Methods
 
-### Prerequisites
+| Method | How | Behaviour |
+|---|---|---|
+| **Full Save** | Click the extension icon | Opens popup pre-filled with current tab URL, title, and favicon |
+| **Quick Save** | Right-click → "Quick Save Bookmark" | Immediately `POST /bookmarks` with `forReview: true`; shows an in-page toast |
+| **Full Save via menu** | Right-click → "Open bookmark form…" | Opens the popup programmatically (fallback: new popup window) |
 
-The API pod must be running. From the repo root:
-
-```bash
-./scripts/install.sh   # first time
-# or
-./scripts/start.sh     # if already installed
-```
-
-Verify the API is up:
-
-```bash
-curl http://localhost:11650/health
-# → {"status":"ok"}
-```
+---
 
 [↑ Table of Contents](#table-of-contents)
 
-### Load the extension in Chrome
+## Popup Form
 
-1. Open `chrome://extensions`
-2. Enable **Developer mode** (top-right toggle)
-3. Click **Load unpacked**
-4. Select the `extension/` directory from this repo
-5. The extension icon appears in the toolbar
+| Field | Behaviour |
+|---|---|
+| **URL** | Read-only, pre-filled from active tab |
+| **Title** | Editable, pre-filled from active tab |
+| **Description** | Multiline textarea |
+| **Sub-categories** | Multi-select with category-grouped suggestions; supports sub-sub-category selection; removable chips; create new sub-category on the fly (name + optional description) |
+| **Tags** | Multi-select with debounced autocomplete (250 ms); removable chips; create new tag on the fly |
+| **Flags** | `readLater`, `hotTopic`, `cheatsheets`, `forReview` checkboxes |
+
+Sub-sub-category selection is available when a sub-category that has sub-sub-categories is chosen. The level selector (sub-category / sub-sub-category) appears inline.
+
+On submit: form is validated → message sent to background service worker → `POST /bookmarks` → success/error feedback shown in popup.
+
+---
 
 [↑ Table of Contents](#table-of-contents)
 
-### Configure API URL (if needed)
+## Duplicate URL Handling
 
-The extension defaults to `http://localhost:11650`. To change it:
+If the URL already has an active bookmark, the API returns `409` with a `duplicates` array. The popup surfaces the existing bookmarks for review without creating another active bookmark with the same URL. Archived bookmarks do not trigger the duplicate guard.
 
-1. Right-click the extension icon → **Options**
-2. Update the **API Base URL** field
-3. Click **Save**
+---
 
-The configured API base URL is stored in `chrome.storage.local`, so it stays on the current machine instead of syncing across Chrome profiles or devices. Existing synced values are migrated the next time the extension reads the setting.
+[↑ Table of Contents](#table-of-contents)
+
+## API Token
+
+The token is stored in `chrome.storage.local` (machine-local; never synced across Chrome profiles or devices). It is sent as `Authorization: Bearer <token>` on every API call from the background service worker.
+
+To update: right-click the extension icon → **Options** → update **API Token** → **Save**.
+
+If the token is wrong or missing, API calls return `401` and the popup shows an error.
 
 ---
 
@@ -111,50 +89,40 @@ The configured API base URL is stored in `chrome.storage.local`, so it stays on 
 
 ## Architecture
 
-### File/Folder Structure
-
 ```
 extension/
-├── manifest.json           # Extension configuration (Manifest V3)
+├── manifest.json               # MV3 extension config
 ├── popup/
-│   ├── popup.html          # Main capture form UI
-│   ├── popup.js            # Form logic and API communication
-│   └── popup.css           # Styling
+│   ├── popup.html              # Capture form UI
+│   ├── popup.js                # Form logic, API messaging
+│   └── popup.css
 ├── background/
-│   └── background.js       # Service worker — context menus, API calls, messaging
+│   └── background.js           # Service worker: context menus, API calls, messaging
 ├── options/
-│   ├── options.html        # Settings page
-│   └── options.js          # Configuration management
+│   ├── options.html            # Settings page
+│   └── options.js              # Save/load API base URL + token
+├── content/
+│   └── toast-inject.js         # On-demand toast injected into active page
 ├── lib/
-│   ├── api.js              # fetch wrapper + error mapping
-│   ├── dom.js              # DOM helpers
-│   └── storage.js          # chrome.storage.local wrapper + migration
-└── assets/
-    └── icons/              # Extension icons
+│   ├── storage.js              # chrome.storage.local wrapper + sync migration
+│   └── validate.js             # URL validation helpers
+└── assets/icons/
 ```
 
-[↑ Table of Contents](#table-of-contents)
+**Background service worker** — all API calls are centralised here. Reads base URL and token from storage, applies timeouts, and maps errors. Registers context menus on install/activate.
 
-### Key Components
+**Message types handled by the service worker:**
 
-#### Service Worker (`background.js`)
-- Registers context menus on install/activate
-- **Quick Save**: captures active tab → POST `/bookmarks` → notification
-- **Full Save**: opens popup programmatically (fallback to window if blocked)
-- Centralises all API calls (reads base URL from storage, fetch with timeouts, error mapping)
-- Message types: `fetchInitialData`, `createTag`, `createSubcategory`, `createBookmark`, `searchTags`
+| Type | Action |
+|---|---|
+| `fetchInitialData` | Gets active tab info + `GET /subcategories` + `GET /tags` |
+| `createTag` | `POST /tags` |
+| `createSubcategory` | `POST /subcategories` |
+| `createSubSubcategory` | `POST /subSubcategories` |
+| `createBookmark` | `POST /bookmarks` |
+| `searchTags` | `GET /tags?query=...` |
 
-#### Popup (`popup.js`)
-- On load: reads active tab, fetches subcategories + tag suggestions, populates form
-- Sub-categories multi-select: category-grouped suggestions, removable chips, create new on the fly
-- Tags multi-select: input + listbox, debounced API calls (250 ms), removable chips, create new on the fly
-- Sub-category creation: inline affordance → name + optional description inputs → POST `/subcategories` → refresh dropdown
-- Submission: validate → send via background message → disable button + loader → show success/error
-
-#### API Library (`api.js`)
-- HTTP request handling
-- Error management and timeout handling
-- Base URL configuration via `chrome.storage.local` with one-time migration from `chrome.storage.sync`
+**Storage** — settings are written to `chrome.storage.local`. A one-time migration from `chrome.storage.sync` runs on first read to move any previously synced values to local storage.
 
 ---
 
@@ -165,78 +133,12 @@ extension/
 | Permission | Purpose |
 |---|---|
 | `tabs` | Read active tab URL and title |
-| `activeTab` | Access current tab information |
+| `activeTab` | Access current tab |
 | `contextMenus` | Add right-click menu items |
 | `storage` | Save extension settings |
-| `notifications` | Show success/error messages |
-| `scripting` | Inject toast UI on demand in the active page |
-| `host_permissions` | Access API at `http://localhost:11650/*` |
-
----
-
-[↑ Table of Contents](#table-of-contents)
-
-## Data Flow
-
-### Quick Save
-
-```
-Right-click page
-  → "Quick Save Bookmark" selected
-  → background.js captures tab URL + title
-  → POST /bookmarks with default flags
-  → success/error notification
-```
-
-[↑ Table of Contents](#table-of-contents)
-
-### Full Save (popup)
-
-```
-Click extension icon
-  → popup.html opens
-  → background.js fetches /subcategories + /tags
-  → user fills form and submits
-  → popup sends message to background.js
-  → background.js POSTs to /bookmarks
-  → success/error shown in popup
-```
-
-[↑ Table of Contents](#table-of-contents)
-
-### Tag Autocomplete
-
-```
-User types in tag field
-  → 250 ms debounce
-  → background.js queries GET /tags?query=...
-  → results populate dropdown
-```
-
-[↑ Table of Contents](#table-of-contents)
-
-### Duplicate Detection
-
-```
-POST /bookmarks → API returns 409 with duplicates array
-  → popup shows existing bookmarks
-  → user reviews and closes the warning
-  → UI prevents saving a second active bookmark with the same URL
-```
-
----
-
-[↑ Table of Contents](#table-of-contents)
-
-## API Endpoints Used
-
-| Method | Path | Purpose |
-|---|---|---|
-| `GET` | `/subcategories` | Fetch categories with nested sub-categories for the dropdown |
-| `GET` | `/tags?query=...` | Search tags with autocomplete |
-| `POST` | `/tags` | Create a new tag on the fly |
-| `POST` | `/subcategories` | Create a new subcategory on the fly (name + optional description) |
-| `POST` | `/bookmarks` | Save a bookmark |
+| `notifications` | Fallback when toast injection is unavailable (e.g. `chrome://` pages) |
+| `scripting` | On-demand toast injection into the active page |
+| `host_permissions` | `http://localhost:11650/*` — configurable via Options |
 
 ---
 
@@ -247,22 +149,12 @@ POST /bookmarks → API returns 409 with duplicates array
 | Scenario | Behaviour |
 |---|---|
 | Very long title/URL | Truncated in UI display; full value sent to API |
-| Duplicate URL | `409` response → UI shows existing bookmarks → review and close the warning without creating another active bookmark |
-| Large tag set | Top N matches fetched; paginated suggestions |
-| API not configured | User prompted to open Options page |
-| API failure / timeout | Error shown in popup; POST is not retried |
-| Extension icon clicked on `chrome://` page | `activeTab` not available; graceful error shown |
-
----
-
-[↑ Table of Contents](#table-of-contents)
-
-## Security Considerations
-
-- No authentication (single-user local deployment on trusted network)
-- No always-on content scripts — toast UI is injected on demand only when needed
-- No sensitive data stored in `chrome.storage`
-- Input validation on both popup and API side
+| Duplicate URL | `409` → popup shows existing bookmarks → review without creating a duplicate |
+| Large tag set | Top N matches fetched; paginated via `limit` param |
+| API not configured | User prompted to open Options |
+| API failure / timeout | Error shown; `POST` is not retried |
+| Extension icon on `chrome://` page | `activeTab` unavailable; graceful error shown |
+| Quick Save on `chrome://` page | Toast injection fails; falls back to OS notification |
 
 [↑ Table of Contents](#table-of-contents)
 

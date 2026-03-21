@@ -6,94 +6,43 @@
 [![MariaDB](https://img.shields.io/badge/Database-MariaDB%2011-003545?logo=mariadb)](https://mariadb.org)
 [![Drizzle](https://img.shields.io/badge/ORM-Drizzle-c5f74f?logo=drizzle&logoColor=black)](https://orm.drizzle.team)
 [![OpenAPI](https://img.shields.io/badge/API-OpenAPI%203.0-85ea2d?logo=openapiinitiative&logoColor=black)](http://localhost:11650/docs)
-[![Podman](https://img.shields.io/badge/Container-Podman-892ca0?logo=podman)](https://podman.io)
 
-A Bun + Elysia API for managing bookmarks, tags, categories, subcategories, and nested sub-sub-categories. Backed by MariaDB with Drizzle ORM. Data is never hard-deleted — entity rows and bookmark association rows use archive/restore semantics via `archived_at`.
+Bun + Elysia API for managing bookmarks, tags, and a 3-level category taxonomy. Backed by MariaDB with Drizzle ORM. Nothing is hard-deleted — all tables use archive/restore semantics via `archived_at`.
+
+> **Full project documentation:** [`../README.md`](../README.md)
 
 ---
 
 ## Table of Contents
 
 - [Quick Start](#quick-start)
-  - [1. Configure environment](#1-configure-environment)
-  - [2. Install and start](#2-install-and-start-from-repo-root)
-  - [3. Health check](#3-health-check)
-  - [4. Boot persistence](#4-boot-persistence)
-- [Scripts](#scripts-from-repo-root)
-- [Bun scripts](#bun-scripts-in-api)
-- [API Endpoints](#api-endpoints)
-  - [Health & UI](#health--ui)
-  - [Bookmarks](#bookmarks)
-  - [Tags](#tags)
-  - [Sub-categories](#subcategories)
-  - [Categories](#categories)
+- [Bun Scripts](#bun-scripts)
+- [Project Structure](#project-structure)
+- [Authentication](#authentication)
+- [Endpoint Summary](#endpoint-summary)
 - [Database Schema](#database-schema)
 - [Environment Variables](#environment-variables)
-- [Infrastructure](#infrastructure)
+- [Infrastructure Notes](#infrastructure-notes)
 - [phpMyAdmin](#phpmyadmin)
 
 ---
 
 ## Quick Start
 
-### 1. Configure environment
-
 ```bash
+# From repo root — first time
 cp api/.env.example api/.env
-# Edit api/.env — set DB_PASSWORD, MARIADB_PASSWORD, MARIADB_ROOT_PASSWORD
-nano api/.env
-```
-
-> **Important:** `MARIADB_USER`/`MARIADB_PASSWORD` and `DB_USER`/`DB_PASSWORD` must match.
-
-`./scripts/install.sh` generates `api/.env.api`, `api/.env.db`, and `api/.env.pma` from `api/.env` so each container only receives the variables it needs.
-
-### 2. Install and start (from repo root)
-
-```bash
+nano api/.env   # set DB_PASSWORD, MARIADB_PASSWORD, MARIADB_ROOT_PASSWORD, API_TOKEN, BACKUP_TOKEN
 ./scripts/install.sh
+
+# Health checks
+curl http://localhost:11650/health   # → {"status":"ok","check":"liveness"}
+curl http://localhost:11650/ready    # → {"status":"ok","check":"readiness"}
 ```
 
-This will generate split env files, build the API image, copy Quadlet unit files, reload systemd, start the pod, and wait for `GET /ready` before reporting success.
+`./scripts/install.sh` generates `api/.env.api`, `api/.env.db`, and `api/.env.pma` from `api/.env`, builds the image, deploys Quadlet unit files, and waits for `/ready` before reporting success. Re-running it is safe (idempotent).
 
-Alternatively, run individual steps manually:
-
-```bash
-podman build -t localhost/bookmark-api:latest api/
-systemctl --user daemon-reload
-systemctl --user start bookmark-pod.service
-```
-
-This starts:
-- **MariaDB** — pod-internal only (not exposed to host)
-- **phpMyAdmin** on `http://localhost:11651` (localhost only, login required)
-- **API** on `http://localhost:11650` (runtime migrations wait for the DB, then run automatically on start)
-
-### 3. Health check
-
-```bash
-curl http://localhost:11650/health
-# → {"status":"ok","check":"liveness"}
-
-curl http://localhost:11650/ready
-# → {"status":"ok","check":"readiness"}
-```
-
-`/health` is a liveness probe for the HTTP process only. `/ready` is the DB-aware readiness probe used by container health checks and rebuild verification.
-
-| Service | URL |
-|---|---|
-| API | `http://localhost:11650` |
-| Swagger UI | `http://localhost:11650/docs` |
-| OpenAPI JSON | `http://localhost:11650/openapi.json` |
-| Bookmark viewer | `http://localhost:11650/app` |
-| Category manager | `http://localhost:11650/manage-categories` |
-| phpMyAdmin | `http://localhost:11651` |
-
-### 4. Boot persistence
-
-To start automatically at boot without an interactive login session:
-
+**Boot persistence** — run once per user:
 ```bash
 loginctl enable-linger $USER
 ```
@@ -102,145 +51,167 @@ loginctl enable-linger $USER
 
 [↑ Table of Contents](#table-of-contents)
 
-## Scripts (from repo root)
+## Bun Scripts
 
-| Script | Description |
-|---|---|
-| `./scripts/install.sh` | Full install: build image, deploy Quadlet files, start pod, wait for readiness |
-| `./scripts/uninstall.sh` | Stop services, remove Quadlet files, optionally remove image + data |
-| `./scripts/rebuild.sh` | Rebuild API image, restart `bookmark-api.service`, wait for readiness |
-| `./scripts/start.sh` | Start the pod (all services) |
-| `./scripts/stop.sh` | Stop the pod (all services) |
-| `./scripts/restart.sh [api\|db\|pma]` | Restart one service or whole pod |
-| `./scripts/logs.sh [api\|db\|pma\|all]` | Tail logs — defaults to `api` |
-| `./scripts/status.sh` | Show `systemctl --user status` for all services |
-| `./scripts/dev.sh` | Run API locally via `bun run dev` (no container, watch mode) |
-| `./scripts/test-integration.sh` | Run the Bun integration suite against the running pod DB |
-
----
-
-[↑ Table of Contents](#table-of-contents)
-
-## Bun scripts (in `api/`)
+Run from the `api/` directory.
 
 | Command | Description |
 |---|---|
 | `bun run dev` | Watch mode (`bun --watch src/server.ts`) |
 | `bun run start` | Production start |
-| `bun run test:integration` | Run the integration suite directly from `api/` when MariaDB is reachable from your shell |
+| `bun run test:integration` | Run integration suite when MariaDB is reachable from your shell |
 | `bun run db:generate` | Generate a new Drizzle migration from schema changes |
 | `bun run db:migrate` | Apply pending Drizzle migrations |
 | `bun run db:studio` | Open Drizzle Studio (visual DB browser) |
-| `bun run smoke` | Smoke test — verifies real app `/health` and `/ready` route behavior |
-| `bun run e2e` | Run the full Playwright E2E suite (delegates to `e2e/`) |
-| `bun run e2e:api` | Run API smoke tests only |
-| `bun run e2e:headed` | Run the E2E suite in headed (visible) browser mode |
+| `bun run smoke` | Smoke-test real `/health` + `/ready` behavior |
+| `bun run e2e` | Run the full Playwright E2E suite |
+| `bun run e2e:api` | API smoke tests only |
+| `bun run e2e:headed` | E2E suite in headed (visible) browser mode |
 | `bun run e2e:report` | Open the last Playwright HTML report |
 
-## Production runtime hardening
-
-- The API container installs production dependencies only; `drizzle-kit` stays out of the runtime image.
-- Startup migrations use `api/src/db/migrate.ts`, which waits for MariaDB and applies the checked-in SQL migrations before the server starts.
-- The API container runs as a non-root user with a read-only root filesystem, a tmpfs-backed `/tmp`, and `NoNewPrivileges=true`.
-- `mariadb-client` remains in the image only because the authenticated `/backup` endpoint streams `mariadb-dump`; this keeps deployment simple at the cost of a slightly larger runtime image.
-
-### Workflow for schema changes
+**Schema changes workflow:**
 
 ```bash
 # 1. Edit api/src/db/schema.ts
-# 2. Generate the migration
 cd api && bun run db:generate
-# 3. Rebuild and restart
-./scripts/rebuild.sh
+cd .. && ./scripts/rebuild.sh   # migrations run automatically on container start
 ```
 
 ---
 
 [↑ Table of Contents](#table-of-contents)
 
-## API Endpoints
+## Project Structure
 
-Interactive docs always available at **`http://localhost:11650/docs`**.
+```
+api/
+├── src/
+│   ├── server.ts               # Elysia app + route registration
+│   ├── routes/
+│   │   ├── bookmarks.ts
+│   │   ├── tags.ts
+│   │   ├── categories.ts
+│   │   ├── subcategories.ts
+│   │   ├── subSubcategories.ts
+│   │   ├── health.ts           # /health, /ready, /config, /app, /manage-*, /backup
+│   │   └── shared.ts           # Shared schema helpers + error types
+│   ├── db/
+│   │   ├── schema.ts           # Drizzle table definitions
+│   │   ├── client.ts           # Drizzle + mysql2 pool
+│   │   ├── migrate.ts          # Startup migration runner
+│   │   └── migrations/         # Drizzle-generated SQL files
+│   ├── ui/
+│   │   ├── app.html            # Bookmark viewer (served at /app)
+│   │   ├── categories.html     # Category manager (served at /manage-categories)
+│   │   └── tags.html           # Tag manager (served at /manage-tags)
+│   └── smoke/
+│       └── health.ts           # No-DB smoke test
+├── Dockerfile
+├── healthcheck.mjs             # Container healthcheck (reads $API_PORT)
+├── drizzle.config.ts
+├── package.json
+├── tsconfig.json
+├── .env.example                # Template — copy to .env
+└── .env                        # Live credentials (gitignored)
+```
+
+---
+
+[↑ Table of Contents](#table-of-contents)
+
+## Authentication
+
+All bookmark-management routes require `Authorization: Bearer <API_TOKEN>`.
+
+**Auth-exempt routes:**
+- `/health`, `/ready` — health probes
+- `/app`, `/manage-categories`, `/manage-tags` — static UI pages
+- `/config` — returns the `apiToken` for browser UI bootstrap
+- `/docs`, `/openapi.json` — Swagger
+
+**Backup auth** — `GET /backup` uses a separate `BACKUP_TOKEN` credential.
+
+Both `API_TOKEN` and `BACKUP_TOKEN` must be set to a strong random value in `api/.env`. The default placeholder `change_me_please` is explicitly rejected with `503`.
+
+The pod binds the API port to `127.0.0.1:11650` only — no LAN access is possible at the network level.
+
+---
+
+[↑ Table of Contents](#table-of-contents)
+
+## Endpoint Summary
+
+Interactive docs always at **`http://localhost:11650/docs`**.
 
 ### Health & UI
 
-| Method | Path | Description |
-|---|---|---|
-| `GET` | `/` | Redirect to `/app` |
-| `GET` | `/health` | Liveness check for the HTTP process |
-| `GET` | `/ready` | Readiness check that verifies MariaDB connectivity |
-| `GET` | `/docs` | Swagger UI |
-| `GET` | `/openapi.json` | OpenAPI spec |
-| `GET` | `/app` | Bookmark viewer UI |
-| `GET` | `/manage-categories` | Category management UI |
-| `GET` | `/flag-counts` | Count of active bookmarks per flag |
-| `GET` | `/backup` | Download a gzipped MariaDB dump (requires `Authorization: Bearer` header) |
-
-[↑ Table of Contents](#table-of-contents)
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| `GET` | `/` | No | Redirect to `/app` |
+| `GET` | `/health` | No | Liveness check (HTTP process) |
+| `GET` | `/ready` | No | Readiness check (verifies MariaDB) |
+| `GET` | `/config` | No | Returns `apiToken` for browser UI bootstrap |
+| `GET` | `/docs` | No | Swagger UI |
+| `GET` | `/openapi.json` | No | OpenAPI spec |
+| `GET` | `/app` | No | Bookmark viewer UI |
+| `GET` | `/manage-categories` | No | Category + sub-sub-category management UI |
+| `GET` | `/manage-tags` | No | Tag management UI |
+| `GET` | `/flag-counts` | Yes | Active bookmark count per flag |
+| `GET` | `/backup` | `BACKUP_TOKEN` | Download gzipped MariaDB dump |
 
 ### Bookmarks
 
 | Method | Path | Description |
 |---|---|---|
-| `GET` | `/bookmarks` | List/filter bookmarks (`?limit=&offset=&subcategoryId=&tagId=&flag=&sortBy=&archived=`) |
+| `GET` | `/bookmarks` | List/filter (`?limit=&offset=&subcategoryId=&tagId=&flag=&sortBy=&archived=`) |
 | `POST` | `/bookmarks` | Create bookmark |
-| `PATCH` | `/bookmarks/:id` | Edit title, description, flags, tags, sub-categories, and sub-sub-categories |
-| `PATCH` | `/bookmarks/:id/archive` | Soft-delete (sets `archivedAt`) |
-| `PATCH` | `/bookmarks/:id/restore` | Restore archived bookmark |
+| `PATCH` | `/bookmarks/:id` | Edit title, description, flags, tags, sub-categories, sub-sub-categories |
+| `PATCH` | `/bookmarks/:id/archive` | Soft-delete |
+| `PATCH` | `/bookmarks/:id/restore` | Restore |
 
-[↑ Table of Contents](#table-of-contents)
+`POST /bookmarks` body fields: `url`, `title`, `description?`, `subcategoryIds?`, `subSubcategoryIds?`, `categoryIds?`, `tags?`, `flags?`, `faviconUrl?`, `allowDuplicate?`.
+
+Returns `409` with a `duplicates` array if an active bookmark already has the same URL. Set `allowDuplicate: true` to bypass.
 
 ### Tags
 
 | Method | Path | Description |
 |---|---|---|
-| `GET` | `/tags` | List/search tags (`?query=&limit=&offset=&sort=`) |
+| `GET` | `/tags` | List/search (`?query=&exact=&limit=&offset=&sort=count\|alpha&archived=`) |
 | `POST` | `/tags` | Create tag |
-| `PATCH` | `/tags/:id/archive` | Archive tag |
-| `PATCH` | `/tags/:id/restore` | Restore archived tag |
-
-[↑ Table of Contents](#table-of-contents)
+| `PATCH` | `/tags/:id` | Rename tag |
+| `PATCH` | `/tags/:id/archive` | Archive (blocked if active bookmarks still use it) |
+| `PATCH` | `/tags/:id/restore` | Restore |
 
 ### Sub-categories
 
 | Method | Path | Description |
 |---|---|---|
-| `GET` | `/subcategories` | All active sub-categories, nested by category |
-| `POST` | `/subcategories` | Create sub-category with optional `description` (and optionally a new category) |
-| `PATCH` | `/subcategories/:id` | Rename sub-category and/or update its `description` |
-| `PATCH` | `/subcategories/:id/archive` | Archive sub-category |
-| `PATCH` | `/subcategories/:id/restore` | Restore archived sub-category |
-
-[↑ Table of Contents](#table-of-contents)
+| `GET` | `/subcategories` | All active sub-categories nested by category (includes sub-sub-categories + bookmark counts) |
+| `POST` | `/subcategories` | Create (`name`, `description?`, `categoryId?`, `categoryName?`) |
+| `PATCH` | `/subcategories/:id` | Rename / update description |
+| `PATCH` | `/subcategories/:id/archive` | Archive (blocked if active bookmarks still use it) |
+| `PATCH` | `/subcategories/:id/restore` | Restore |
 
 ### Sub-sub-categories
 
 | Method | Path | Description |
 |---|---|---|
-| `GET` | `/subSubcategories` | All active sub-sub-categories, grouped by parent sub-category |
-| `POST` | `/subSubcategories` | Create sub-sub-category with optional `description` |
-| `PATCH` | `/subSubcategories/:id` | Rename sub-sub-category and/or update its `description` |
-| `PATCH` | `/subSubcategories/:id/archive` | Archive sub-sub-category |
-| `PATCH` | `/subSubcategories/:id/restore` | Restore archived sub-sub-category |
-
-[↑ Table of Contents](#table-of-contents)
+| `GET` | `/subSubcategories` | All active sub-sub-categories grouped by sub-category |
+| `POST` | `/subSubcategories` | Create (`name`, `description?`, `subcategoryId`) |
+| `PATCH` | `/subSubcategories/:id` | Rename / update description |
+| `PATCH` | `/subSubcategories/:id/archive` | Archive (blocked if active bookmarks still use it) |
+| `PATCH` | `/subSubcategories/:id/restore` | Restore |
 
 ### Categories
 
 | Method | Path | Description |
 |---|---|---|
-| `GET` | `/categories` | List categories with nested sub-categories and sub-sub-categories (management view) |
-| `POST` | `/categories` | Create category with optional `description` |
-| `PATCH` | `/categories/:id` | Rename category and/or update its `description` |
-| `PATCH` | `/categories/:id/archive` | Archive category |
-| `PATCH` | `/categories/:id/restore` | Restore archived category |
-
-**Data lifecycle:** nothing is hard-deleted. Entity records and bookmark association rows are archived via `archivedAt`, and replacing bookmark tags/sub-categories/sub-sub-categories archives removed links instead of deleting them.
-
-**POST /bookmarks — duplicate detection:**
-- Returns `409` with a `duplicates` array if an active bookmark with the same URL already exists.
-- Enforcement happens in the database, so concurrent requests cannot create duplicate active URLs.
-- Archived bookmarks do not conflict with active saves.
+| `GET` | `/categories` | Management view — categories + nested sub-categories + sub-sub-categories + `archivedAt` |
+| `POST` | `/categories` | Create (`name`, `description?`) |
+| `PATCH` | `/categories/:id` | Rename / update description |
+| `PATCH` | `/categories/:id/archive` | Archive (blocked if any active bookmarks exist in the whole category branch) |
+| `PATCH` | `/categories/:id/restore` | Restore (sub-categories are not auto-restored) |
 
 ---
 
@@ -248,20 +219,20 @@ Interactive docs always available at **`http://localhost:11650/docs`**.
 
 ## Database Schema
 
-All tables include `archived_at DATETIME NULL`. A `NULL` value means the row is active. "Deleting" a row sets `archived_at = NOW()`. Bookmark association replacement archives removed junction rows and reactivates them if the same link is added later. Active queries filter on `archived_at IS NULL`.
+All tables carry `archived_at DATETIME NULL`. `NULL` = active. Setting `archived_at = NOW()` is the only form of deletion. Replaced bookmark associations (tags, sub-categories, sub-sub-categories) archive removed junction rows and reactivate them if the same link is added later.
 
 | Table | Purpose |
 |---|---|
 | `bookmarks` | Core bookmark store |
-| `categories` | Parent categories for organizing sub-categories; each category has an optional `description TEXT NULL` |
-| `subcategories` | Child items assigned to bookmarks; each sub-category has an optional `description TEXT NULL` |
-| `sub_subcategories` | Third-level items nested under `subcategories`; each sub-sub-category has an optional `description TEXT NULL` |
+| `categories` | Top-level taxonomy; optional `description` |
+| `subcategories` | Second-level taxonomy grouped under a category; optional `description` |
+| `sub_subcategories` | Third-level taxonomy nested under a sub-category; optional `description` |
 | `tags` | Flexible labels; many-to-many with bookmarks |
-| `bookmark_tags` | Junction table with archive/restore semantics |
-| `bookmark_subcategories` | Junction table with archive/restore semantics |
-| `bookmark_sub_subcategories` | Junction table linking bookmarks to sub-sub-categories with archive/restore semantics |
+| `bookmark_tags` | Junction: bookmarks ↔ tags |
+| `bookmark_subcategories` | Junction: bookmarks ↔ sub-categories |
+| `bookmark_sub_subcategories` | Junction: bookmarks ↔ sub-sub-categories |
 
-**Uniqueness among active rows** — `tags`, `subcategories`, and `sub_subcategories` use a generated column (`name_active`) that is `NULL` when archived, with a unique index on that column. This allows archived rows to share names with active rows.
+**Active-row uniqueness** — `tags`, `subcategories`, and `sub_subcategories` use a generated column (`name_active`) that is `NULL` when archived, with a unique index. Archived rows may share names with active rows.
 
 ---
 
@@ -269,26 +240,24 @@ All tables include `archived_at DATETIME NULL`. A `NULL` value means the row is 
 
 ## Environment Variables
 
-Set values in `api/.env` (gitignored). `./scripts/install.sh` splits that file into `api/.env.api`, `api/.env.db`, and `api/.env.pma` so each service only receives the variables it needs.
-
-Bookmark-management routes are unauthenticated for trusted local-network use. `GET /backup` is the exception and requires `Authorization: Bearer <BACKUP_TOKEN>`.
+Set values in `api/.env`. `./scripts/install.sh` splits that file into `api/.env.api`, `api/.env.db`, and `api/.env.pma`.
 
 | Variable | Default | Description |
 |---|---|---|
 | `API_PORT` | `11650` | HTTP port |
-| `API_TOKEN` | — | Bearer token required by all bookmark-management routes; the default placeholder is rejected with `503` |
 | `LOG_LEVEL` | `info` | Elysia log level |
 | `DB_HOST` | `127.0.0.1` | MariaDB host (must be `127.0.0.1` within the pod) |
 | `DB_PORT` | `3306` | MariaDB port |
 | `DB_USER` | `bookmark` | DB username |
 | `DB_PASSWORD` | — | DB password |
 | `DB_NAME` | `bookmarks` | DB name |
-| `BACKUP_TOKEN` | `change_me_please` | Bearer token required by `GET /backup`; the default placeholder is rejected with `503` |
-| `MARIADB_DATABASE` | — | Used by mariadb:11 container on first init |
-| `MARIADB_USER` | — | Used by mariadb:11 container on first init |
-| `MARIADB_PASSWORD` | — | Used by mariadb:11 container on first init |
-| `MARIADB_ROOT_PASSWORD` | — | Used by mariadb:11 container on first init |
-| `PMA_HOST` | `127.0.0.1` | phpMyAdmin DB host (within pod) |
+| `API_TOKEN` | `change_me_please` | Bearer token for all management routes; placeholder rejected with `503` |
+| `BACKUP_TOKEN` | `change_me_please` | Bearer token for `GET /backup`; placeholder rejected with `503` |
+| `MARIADB_DATABASE` | — | MariaDB container first-init |
+| `MARIADB_USER` | — | MariaDB container first-init |
+| `MARIADB_PASSWORD` | — | MariaDB container first-init |
+| `MARIADB_ROOT_PASSWORD` | — | MariaDB container first-init; also used by import scripts |
+| `PMA_HOST` | `127.0.0.1` | phpMyAdmin DB host |
 | `PMA_PORT` | `3306` | phpMyAdmin DB port |
 | `PMA_ABSOLUTE_URI` | `http://localhost:11651/` | phpMyAdmin canonical URL |
 
@@ -296,36 +265,13 @@ Bookmark-management routes are unauthenticated for trusted local-network use. `G
 
 [↑ Table of Contents](#table-of-contents)
 
-## Infrastructure
+## Infrastructure Notes
 
-### Pod: `bookmark.pod`
-
-| Port | Service | Access |
-|---|---|---|
-| `11650` | API | host + LAN |
-| `11651` | phpMyAdmin | `127.0.0.1` only |
-
-MariaDB is pod-internal only — never exposed to the host.
-
-### Quadlet unit files
-
-Canonical copies live in `quadlet/` (version-controlled). `scripts/install.sh` copies them to `~/.config/containers/systemd/`.
-
-```
-quadlet/
-├── bookmark.pod
-├── bookmark-api.container
-├── bookmark-db.container
-└── bookmark-pma.container
-```
-
-### DB data volume
-
-```
-~/.local/share/bookmark-manager/prod-db
-```
-
-Created automatically by `scripts/install.sh`. **Not removed by `uninstall.sh` unless explicitly confirmed.**
+- **Port binding** — `127.0.0.1:11650` (API) and `127.0.0.1:11651` (phpMyAdmin). MariaDB is pod-internal only.
+- **Startup migrations** — `api/src/db/migrate.ts` waits for MariaDB and applies pending SQL migrations before the HTTP server starts.
+- **Container hardening** — non-root user, read-only root filesystem, `tmpfs` at `/tmp`, `NoNewPrivileges=true`.
+- **`mariadb-client` in image** — required by the authenticated `GET /backup` endpoint which streams `mariadb-dump`.
+- **DB data volume** — `~/.local/share/bookmark-manager/prod-db`; never deleted automatically.
 
 ---
 
@@ -333,10 +279,7 @@ Created automatically by `scripts/install.sh`. **Not removed by `uninstall.sh` u
 
 ## phpMyAdmin
 
-Available at `http://localhost:11651`.
-
-- Auto-login is **disabled** — credentials required on every login.
-- Connect with the `bookmark` user (or `root` if needed).
+Available at `http://localhost:11651`. Auto-login is disabled — connect with the `bookmark` user or `root`.
 
 [↑ Table of Contents](#table-of-contents)
 
