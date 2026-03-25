@@ -13,6 +13,12 @@ Description=Bookmark Manager production pod
 After=default.target
 After=network-online.target
 Wants=network-online.target
+# Allow up to 10 restart attempts over 5 minutes.
+# Belt-and-suspenders: the real fix is the system-level drop-in in
+# quadlet/system-dropin/after-network.conf which delays the user session
+# until network-online.target is reached (see that file for install steps).
+StartLimitIntervalSec=300
+StartLimitBurst=10
 
 [Pod]
 # API — localhost only (127.0.0.1:11650 → container 11650)
