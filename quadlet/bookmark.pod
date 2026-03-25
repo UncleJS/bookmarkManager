@@ -11,6 +11,8 @@
 [Unit]
 Description=Bookmark Manager production pod
 After=default.target
+After=network-online.target
+Wants=network-online.target
 
 [Pod]
 # API — localhost only (127.0.0.1:11650 → container 11650)
