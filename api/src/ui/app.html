@@ -26,6 +26,7 @@
       --flag-rev:  #facc15;
       --danger:    #ef4444;
       --sidebar-w: 260px;
+      --license-footer-h: 28px;
     }
 
     html, body {
@@ -79,7 +80,7 @@
     #sidebar-nav {
       flex: 1;
       overflow-y: auto;
-      padding: 8px 0;
+      padding: 8px 0 calc(var(--license-footer-h) + 8px);
     }
 
     .nav-section-label {
@@ -457,7 +458,7 @@
       flex: 1;
       min-height: 0;
       overflow-y: auto;
-      padding: 16px 20px;
+      padding: 16px 20px calc(var(--license-footer-h) + 16px);
     }
 
     /* ── Bookmark card ───────────────────────────────────────────────────── */
@@ -1005,6 +1006,25 @@
       border-top: 1px solid var(--border);
       flex-shrink: 0;
       background: var(--surface);
+      margin-bottom: var(--license-footer-h);
+    }
+
+    .license-footer {
+      position: fixed;
+      bottom: 0;
+      left: var(--sidebar-w);
+      right: 0;
+      height: var(--license-footer-h);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      color: #ffffff;
+      font-size: 0.68rem;
+      background: var(--bg);
+      border-top: 1px solid var(--border);
+      z-index: 50;
+      padding: 0 8px;
     }
 
     .page-btn {
@@ -1082,7 +1102,7 @@
       <div class="state-box"><div class="icon">⏳</div>Loading…</div>
     </div>
 
-    <footer style="position:fixed;bottom:0;left:0;right:0;text-align:center;padding:0.3rem 0;color:#ffffff;font-size:0.68rem;background:var(--bg);border-top:1px solid var(--border);z-index:50;">
+    <footer class="license-footer">
       © 2026 Jaco Steyn — Licensed under CC BY-SA 4.0
     </footer>
 
