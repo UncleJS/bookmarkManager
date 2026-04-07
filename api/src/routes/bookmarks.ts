@@ -29,6 +29,12 @@ function uniqueIds(ids?: number[]): number[] {
   return [...new Set(ids ?? [])].filter(Boolean);
 }
 
+function normalizeOptionalFaviconUrl(faviconUrl?: string | null): string | null {
+  if (typeof faviconUrl !== "string") return null;
+  const trimmed = faviconUrl.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
 async function getActiveClassificationIds(bookmarkId: number): Promise<{
   categoryIds: number[];
   subcategoryIds: number[];
@@ -160,7 +166,7 @@ export const bookmarkRoutes = new Elysia()
               url,
               title,
               description: body.description ?? null,
-              faviconUrl: body.faviconUrl ?? null,
+              faviconUrl: normalizeOptionalFaviconUrl(body.faviconUrl),
               readLater: flags.readLater ? 1 : 0,
               hotTopic: flags.hotTopic ? 1 : 0,
               cheatsheets: flags.cheatsheets ? 1 : 0,
@@ -238,7 +244,7 @@ export const bookmarkRoutes = new Elysia()
             archived: t.Optional(t.Boolean({ description: "If true, the bookmark is created already archived (archivedAt set to NOW())." })),
           })
         ),
-        faviconUrl: t.Optional(t.String({ description: "URL of the page favicon, typically captured by the extension at save time." })),
+        faviconUrl: t.Optional(t.Nullable(t.String({ description: "URL of the page favicon, typically captured by the extension at save time. Pass null or empty string to clear." }))),
         allowDuplicate: t.Optional(t.Boolean({ description: "Set to true to skip the pre-insert duplicate lookup and rely on the database constraint. Active duplicate URLs still return 409." })),
       }),
       detail: {

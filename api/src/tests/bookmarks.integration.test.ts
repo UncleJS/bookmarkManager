@@ -511,6 +511,42 @@ describe("bookmark write transactions", () => {
     expect(bookmarkSubcategory?.subcategoryId).toBe(subcategoryId);
   });
 
+  it("accepts null faviconUrl for bookmark creation and stores null", async () => {
+    const res = await app.handle(jsonRequest("/bookmarks", "POST", {
+      url: uniqueUrl("create-null-favicon"),
+      title: "Null favicon create",
+      faviconUrl: null,
+    }));
+
+    expect(res.status).toBe(201);
+    const created = await res.json() as { id: number };
+
+    const [bookmark] = await db
+      .select({ faviconUrl: schema.bookmarks.faviconUrl })
+      .from(schema.bookmarks)
+      .where(eq(schema.bookmarks.id, created.id));
+
+    expect(bookmark?.faviconUrl).toBeNull();
+  });
+
+  it("trims faviconUrl before storing bookmark", async () => {
+    const res = await app.handle(jsonRequest("/bookmarks", "POST", {
+      url: uniqueUrl("create-trimmed-favicon"),
+      title: "Trim favicon create",
+      faviconUrl: "   https://example.com/favicon.ico   ",
+    }));
+
+    expect(res.status).toBe(201);
+    const created = await res.json() as { id: number };
+
+    const [bookmark] = await db
+      .select({ faviconUrl: schema.bookmarks.faviconUrl })
+      .from(schema.bookmarks)
+      .where(eq(schema.bookmarks.id, created.id));
+
+    expect(bookmark?.faviconUrl).toBe("https://example.com/favicon.ico");
+  });
+
   it("rejects bookmark creation when a parent and child classification overlap", async () => {
     const [{ id: subcategoryId }] = await db
       .insert(schema.subcategories)

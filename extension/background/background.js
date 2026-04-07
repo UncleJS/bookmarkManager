@@ -86,7 +86,7 @@ async function handleQuickSave(tab) {
         cheatsheets: false,
         archived: false
       },
-      faviconUrl: t.favIconUrl || null,
+      faviconUrl: t.favIconUrl || '',
     };
 
     // Send bookmark to API with timeout
