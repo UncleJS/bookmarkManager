@@ -104,7 +104,7 @@ api/
 │   │   ├── categories.ts
 │   │   ├── subcategories.ts
 │   │   ├── subSubcategories.ts
-│   │   ├── health.ts           # /health, /ready, /config, /app, /manage-*, /backup
+│   │   ├── health.ts           # /health, /ready, /app, /manage-*
 │   │   └── shared.ts           # Shared schema helpers + error types
 │   ├── db/
 │   │   ├── schema.ts           # Drizzle table definitions
@@ -132,15 +132,14 @@ api/
 
 ## Authentication
 
-All bookmark-management routes require `Authorization: Bearer <API_TOKEN>`.
+All bookmark-management routes accept `Authorization: Bearer <API_TOKEN>` or the HttpOnly `bm_session` cookie set by the browser UI pages.
 
 **Auth-exempt routes:**
 - `/health`, `/ready` — health probes
-- `/app`, `/manage-categories`, `/manage-tags` — static UI pages
-- `/config` — returns the `apiToken` for browser UI bootstrap
+- `/app`, `/manage-categories`, `/manage-tags` — static UI pages that set `bm_session`
 - `/docs`, `/openapi.json` — Swagger
 
-**Backup auth** — `GET /backup` uses a separate `BACKUP_TOKEN` credential.
+**Backup auth** — `GET /backup` uses a separate `BACKUP_TOKEN` credential. The database password is passed to `mariadb-dump` through a temporary defaults file, not the process command line.
 
 Both `API_TOKEN` and `BACKUP_TOKEN` must be set to a strong random value in `api/.env`. The default placeholder `change_me_please` is explicitly rejected with `503`.
 
@@ -161,7 +160,6 @@ Interactive docs always at **`http://localhost:11650/docs`**.
 | `GET` | `/` | No | Redirect to `/app` |
 | `GET` | `/health` | No | Liveness check (HTTP process) |
 | `GET` | `/ready` | No | Readiness check (verifies MariaDB) |
-| `GET` | `/config` | No | Returns `apiToken` for browser UI bootstrap |
 | `GET` | `/docs` | No | Swagger UI |
 | `GET` | `/openapi.json` | No | OpenAPI spec |
 | `GET` | `/app` | No | Bookmark viewer UI |

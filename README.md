@@ -108,7 +108,6 @@ A self-hosted bookmark manager: a Chrome MV3 extension captures bookmarks and se
   /app            ← bookmark viewer UI
   /manage-categories ← category + sub-sub-category management UI
   /manage-tags    ← tag management UI
-  /config         ← auth-exempt; returns apiToken for browser UIs
   /docs           ← Swagger UI
   /backup         ← authenticated DB dump download
         │
@@ -185,17 +184,16 @@ curl http://localhost:11650/ready    # → {"status":"ok","check":"readiness"}
 
 ## Auth and Security Model
 
-**All bookmark-management routes require `Authorization: Bearer <API_TOKEN>`.**
+**Bookmark-management routes accept `Authorization: Bearer <API_TOKEN>` or the HttpOnly `bm_session` cookie.**
 
 Set `API_TOKEN` in `api/.env` to a strong random value (`openssl rand -hex 32`). The default placeholder `change_me_please` is explicitly rejected by the API with `503`.
 
 **Auth-exempt routes** (no token needed):
 - `/health`, `/ready` — health probes
-- `/app`, `/manage-categories`, `/manage-tags` — static UI pages
-- `/config` — returns the `apiToken` value so browser UIs can bootstrap themselves on first load
+- `/app`, `/manage-categories`, `/manage-tags` — static UI pages. Each response sets `bm_session` so later API calls from that page send the cookie. Page scripts never read the token.
 - `/docs`, `/openapi.json` — Swagger
 
-**Backup auth** — `GET /backup` uses a separate `BACKUP_TOKEN` credential, also set in `api/.env`. Both tokens must be changed from the placeholder before the API will serve them.
+**Backup auth** — `GET /backup` uses a separate `BACKUP_TOKEN` credential, also set in `api/.env`. Both tokens must be changed from the placeholder before the API will serve them. The dump reads the database password from a temporary defaults file, not from the process command line.
 
 **Network model** — the Quadlet pod binds the API port to `127.0.0.1:11650` only. No LAN access is possible at the network level regardless of token configuration. phpMyAdmin (`11651`) is also `127.0.0.1` only.
 
@@ -209,15 +207,15 @@ Set `API_TOKEN` in `api/.env` to a strong random value (`openssl rand -hex 32`).
 
 | Service | URL | Auth required |
 |---|---|---|
-| Bookmark viewer | `http://localhost:11650/app` | No (bootstraps token from `/config`) |
-| Category manager | `http://localhost:11650/manage-categories` | No (bootstraps token from `/config`) |
-| Tag manager | `http://localhost:11650/manage-tags` | No (bootstraps token from `/config`) |
+| Bookmark viewer | `http://localhost:11650/app` | No (sets an HttpOnly session cookie) |
+| Category manager | `http://localhost:11650/manage-categories` | No (sets an HttpOnly session cookie) |
+| Tag manager | `http://localhost:11650/manage-tags` | No (sets an HttpOnly session cookie) |
 | Swagger UI | `http://localhost:11650/docs` | No |
 | OpenAPI JSON | `http://localhost:11650/openapi.json` | No |
 | API | `http://localhost:11650` | Bearer token |
 | phpMyAdmin | `http://localhost:11651` | MariaDB credentials |
 
-The browser UIs call `GET /config` on load to retrieve the API token, then attach it as a Bearer header on all subsequent API calls. This avoids baking the token into the static HTML.
+The browser UIs receive an HttpOnly `bm_session` cookie with the HTML response and send it on later API calls. The token is not written into the page.
 
 ---
 
@@ -294,7 +292,6 @@ Send `Authorization: Bearer <API_TOKEN>` on all management endpoints. See [Auth 
 | `GET` | `/` | No | Redirect to `/app` |
 | `GET` | `/health` | No | Liveness check (HTTP process only) |
 | `GET` | `/ready` | No | Readiness check (verifies MariaDB connectivity) |
-| `GET` | `/config` | No | Returns `apiToken` for browser UI bootstrap |
 | `GET` | `/docs` | No | Swagger UI |
 | `GET` | `/openapi.json` | No | OpenAPI spec (alias: `/docs/json`) |
 | `GET` | `/app` | No | Bookmark viewer UI |
@@ -518,7 +515,7 @@ curl -H "Authorization: Bearer <BACKUP_TOKEN>" \
      -o backup.sql.gz
 ```
 
-Returns a `bookmark_YYYY-MM-DD_HHMMSS.sql.gz` download. The **⬇ Backup** button in the `/app` topbar calls this endpoint directly. Returns `503` if `BACKUP_TOKEN` is still the default placeholder.
+Returns a `bookmark_YYYY-MM-DD_HHMMSS.sql.gz` download. The **⬇ Backup** button in the `/app` topbar calls this endpoint directly. Returns `503` if `BACKUP_TOKEN` is still the default placeholder. A failed dump or gzip returns `500` without the command's error text.
 
 ### Restore
 

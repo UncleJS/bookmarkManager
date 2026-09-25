@@ -41,6 +41,7 @@ export const tagRoutes = new Elysia()
             bookmarkTags,
             and(
               eq(bookmarkTags.tagId, tags.id),
+              isNull(bookmarkTags.archivedAt),
               sql`EXISTS (SELECT 1 FROM bookmarks b WHERE b.id = ${bookmarkTags.bookmarkId} AND b.archived_at IS NULL)`
             )
           )

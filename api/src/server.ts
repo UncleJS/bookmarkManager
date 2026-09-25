@@ -24,11 +24,26 @@ function isAuthExempt(path: string): boolean {
     path === "/app" ||
     path === "/manage-categories" ||
     path === "/manage-tags" ||
-    path === "/config" ||
     path === "/openapi.json" ||
     path === "/backup" ||
     path.startsWith("/docs")
   );
+}
+
+function readCookie(header: string | undefined, name: string): string {
+  if (!header) return "";
+  for (const part of header.split(";")) {
+    const trimmed = part.trim();
+    const eq = trimmed.indexOf("=");
+    if (eq === -1) continue;
+    if (trimmed.slice(0, eq) !== name) continue;
+    try {
+      return decodeURIComponent(trimmed.slice(eq + 1));
+    } catch {
+      return "";
+    }
+  }
+  return "";
 }
 
 type BuildAppOptions = {
@@ -63,7 +78,7 @@ export function buildApp({ checkReadiness }: BuildAppOptions = {}) {
 
       const authHeader = headers["authorization"] ?? "";
       const bearerMatch = authHeader.match(/^Bearer\s+(.+)$/i);
-      const providedToken = bearerMatch ? bearerMatch[1] : "";
+      const providedToken = bearerMatch?.[1] || readCookie(headers["cookie"], "bm_session");
 
       if (!providedToken || providedToken !== configuredToken) {
         set.status = 401;
@@ -80,8 +95,8 @@ export function buildApp({ checkReadiness }: BuildAppOptions = {}) {
               description:
                 "REST API for the Bookmark Manager Chrome extension.\n\n" +
                 "Manages bookmarks, tags, categories, sub-categories, and nested sub-sub-categories.\n\n" +
-               "**Auth model:** all bookmark-management routes require `Authorization: Bearer <API_TOKEN>` " +
-               "(set `API_TOKEN` in `api/.env`). " +
+               "**Auth model:** bookmark-management routes accept `Authorization: Bearer <API_TOKEN>` " +
+               "or the HttpOnly `bm_session` cookie set by the browser UI pages. " +
                 "Health probes (`/health`, `/ready`), static UI pages (`/app`, `/manage-categories`, `/manage-tags`), " +
                "and the API docs (`/docs`) are exempt. " +
                "The `GET /backup` endpoint additionally requires its own `Authorization: Bearer <BACKUP_TOKEN>`.\n\n" +

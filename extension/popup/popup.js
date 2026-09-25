@@ -116,17 +116,24 @@ function createChip(text, onRemove, isSubcategory = false) {
   const chip = document.createElement('span');
   chip.className = `chip ${isSubcategory ? 'chip-subcategory' : ''}`;
   chip.title = text;
-  chip.innerHTML = `
-    <span class="chip-text">${text}</span>
-    <button type="button" class="chip-remove" title="Remove">
-      <svg width="12" height="12" fill="currentColor" viewBox="0 0 20 20">
-        <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z"/>
-      </svg>
-    </button>
-  `;
-  const removeButton = chip.querySelector('.chip-remove');
+
+  const label = document.createElement('span');
+  label.className = 'chip-text';
+  label.textContent = text;
+
+  const removeButton = document.createElement('button');
+  removeButton.type = 'button';
+  removeButton.className = 'chip-remove';
+  removeButton.title = 'Remove';
   removeButton.setAttribute('aria-label', `Remove ${text}`);
+  removeButton.innerHTML = `
+    <svg width="12" height="12" fill="currentColor" viewBox="0 0 20 20">
+      <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z"/>
+    </svg>
+  `;
   removeButton.addEventListener('click', onRemove);
+
+  chip.append(label, removeButton);
   return chip;
 }
 
@@ -638,7 +645,8 @@ async function handleCreateSubcategory() {
       name: res.data.name,
       description: res.data.description ?? null,
       categoryId: res.data.categoryId ?? categoryId ?? null,
-      categoryName: resolvedCategoryName
+      categoryName: resolvedCategoryName,
+      kind: 'subcategory',
     };
     state.allSubcategories.push(newSubcategory);
 

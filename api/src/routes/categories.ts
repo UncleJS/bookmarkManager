@@ -69,7 +69,7 @@ export const categoryRoutes = new Elysia()
       const categoryWhere = includeArchived ? undefined : isNull(categories.archivedAt);
       const subcategoryArchivedWhere = includeArchived ? undefined : isNull(subcategories.archivedAt);
 
-      const [rows, countRows, childCountRows] = await Promise.all([
+      const [rows, directLinkRows, childLinkRows] = await Promise.all([
         db
           .select({
             id: categories.id,
@@ -83,27 +83,25 @@ export const categoryRoutes = new Elysia()
         db
           .select({
             subcategoryId: bookmarkSubcategories.subcategoryId,
-            count: sql<number>`COUNT(*)`,
+            bookmarkId: bookmarkSubcategories.bookmarkId,
           })
           .from(bookmarkSubcategories)
           .innerJoin(bookmarks, and(
             eq(bookmarkSubcategories.bookmarkId, bookmarks.id),
             isNull(bookmarks.archivedAt),
           ))
-          .where(isNull(bookmarkSubcategories.archivedAt))
-          .groupBy(bookmarkSubcategories.subcategoryId),
+          .where(isNull(bookmarkSubcategories.archivedAt)),
         db
           .select({
             subSubcategoryId: bookmarkSubSubcategories.subSubcategoryId,
-            count: sql<number>`COUNT(*)`,
+            bookmarkId: bookmarkSubSubcategories.bookmarkId,
           })
           .from(bookmarkSubSubcategories)
           .innerJoin(bookmarks, and(
             eq(bookmarkSubSubcategories.bookmarkId, bookmarks.id),
             isNull(bookmarks.archivedAt),
           ))
-          .where(isNull(bookmarkSubSubcategories.archivedAt))
-          .groupBy(bookmarkSubSubcategories.subSubcategoryId),
+          .where(isNull(bookmarkSubSubcategories.archivedAt)),
       ]);
 
       const categoryIds = rows.map((category) => category.id);
@@ -145,21 +143,25 @@ export const categoryRoutes = new Elysia()
             .orderBy(subSubcategories.name),
       ]);
 
-      const directCountMap = new Map<number, number>(
-        countRows.map((row) => [row.subcategoryId, Number(row.count)])
-      );
-      const childCountMap = new Map<number, number>(
-        childCountRows.map((row) => [row.subSubcategoryId, Number(row.count)])
-      );
+      const directBookmarkIdsBySubcategory = new Map<number, Set<number>>();
+      for (const row of directLinkRows) {
+        const bucket = directBookmarkIdsBySubcategory.get(row.subcategoryId) ?? new Set<number>();
+        bucket.add(row.bookmarkId);
+        directBookmarkIdsBySubcategory.set(row.subcategoryId, bucket);
+      }
+      const childBookmarkIdsBySubSubcategory = new Map<number, Set<number>>();
+      for (const row of childLinkRows) {
+        const bucket = childBookmarkIdsBySubSubcategory.get(row.subSubcategoryId) ?? new Set<number>();
+        bucket.add(row.bookmarkId);
+        childBookmarkIdsBySubSubcategory.set(row.subSubcategoryId, bucket);
+      }
 
-      const subSubcategoriesBySubcategory = new Map<number, Array<typeof subSubcategoryRows[number]>>();
-      const nestedCountBySubcategory = new Map<number, number>();
+      const subSubcategoriesBySubcategory = new Map<number, Array<typeof subSubcategoryRows[number] & { bookmarkCount: number }>>();
       for (const item of subSubcategoryRows) {
         const bucket = subSubcategoriesBySubcategory.get(item.subcategoryId);
-        const enriched = { ...item, bookmarkCount: childCountMap.get(item.id) ?? 0 };
+        const enriched = { ...item, bookmarkCount: childBookmarkIdsBySubSubcategory.get(item.id)?.size ?? 0 };
         if (bucket) bucket.push(enriched);
         else subSubcategoriesBySubcategory.set(item.subcategoryId, [enriched]);
-        nestedCountBySubcategory.set(item.subcategoryId, (nestedCountBySubcategory.get(item.subcategoryId) ?? 0) + enriched.bookmarkCount);
       }
 
       const subcategoriesByCategory = new Map<number | null, Array<typeof subcategoryRows[number]>>();
@@ -178,8 +180,16 @@ export const categoryRoutes = new Elysia()
         subcategories: (subcategoriesByCategory.get(category.id) ?? [])
           .map((subcategory) => ({
             ...subcategory,
-            bookmarkCount: (directCountMap.get(subcategory.id) ?? 0) + (nestedCountBySubcategory.get(subcategory.id) ?? 0),
-            directBookmarkCount: directCountMap.get(subcategory.id) ?? 0,
+            bookmarkCount: (() => {
+              const branch = new Set(directBookmarkIdsBySubcategory.get(subcategory.id) ?? []);
+              for (const child of subSubcategoriesBySubcategory.get(subcategory.id) ?? []) {
+                for (const bookmarkId of childBookmarkIdsBySubSubcategory.get(child.id) ?? []) {
+                  branch.add(bookmarkId);
+                }
+              }
+              return branch.size;
+            })(),
+            directBookmarkCount: directBookmarkIdsBySubcategory.get(subcategory.id)?.size ?? 0,
             subSubcategories: subSubcategoriesBySubcategory.get(subcategory.id) ?? [],
           })),
       }));

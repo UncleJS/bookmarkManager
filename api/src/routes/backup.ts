@@ -1,4 +1,7 @@
 import { Elysia } from "elysia";
+import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "fs";
+import { tmpdir } from "os";
+import { join } from "path";
 
 import { ErrorResp } from "./shared.ts";
 
@@ -50,14 +53,26 @@ export function createBackupRoutes({ spawn = bunSpawn }: { spawn?: SpawnProcess 
         .replace(/:/g, "")
         .slice(0, 15);
       const filename = `bookmark_${timestamp}.sql.gz`;
+      const defaultsDir = mkdtempSync(join(tmpdir(), "bm-backup-"));
+      const defaultsFile = join(defaultsDir, "client.cnf");
+      writeFileSync(
+        defaultsFile,
+        [
+          "[client]",
+          `host=${quoteDefaults(dbHost)}`,
+          `port=${quoteDefaults(dbPort)}`,
+          `user=${quoteDefaults(dbUser)}`,
+          `password=${quoteDefaults(dbPassword)}`,
+          "",
+        ].join("\n"),
+      );
+      chmodSync(defaultsFile, 0o600);
 
+      try {
       const dump = spawn(
         [
           "mariadb-dump",
-          `--host=${dbHost}`,
-          `--port=${dbPort}`,
-          `--user=${dbUser}`,
-          `--password=${dbPassword}`,
+          `--defaults-extra-file=${defaultsFile}`,
           "--single-transaction",
           "--routines",
           "--triggers",
@@ -68,7 +83,7 @@ export function createBackupRoutes({ spawn = bunSpawn }: { spawn?: SpawnProcess 
 
       if (!dump.stdout) {
         set.status = 500;
-        return { error: "mysqldump failed: stdout pipe was not available" };
+        return { error: "Backup failed" };
       }
 
       const gz = spawn(["gzip", "-9"], {
@@ -77,14 +92,20 @@ export function createBackupRoutes({ spawn = bunSpawn }: { spawn?: SpawnProcess 
         stderr: "pipe",
       });
 
-      const exitCode = await dump.exited;
-      if (exitCode !== 0) {
-        const errText = await new Response(dump.stderr).text();
+      if (!gz.stdout) {
         set.status = 500;
-        return { error: `mysqldump failed (exit ${exitCode}): ${errText.trim()}` };
+        return { error: "Backup failed" };
       }
 
-      const gzBuffer = await new Response(gz.stdout).arrayBuffer();
+      const gzBody = new Response(gz.stdout).arrayBuffer();
+      const dumpExit = await dump.exited;
+      const gzExit = await gz.exited;
+      const gzBuffer = await gzBody;
+
+      if (dumpExit !== 0 || gzExit !== 0) {
+        set.status = 500;
+        return { error: "Backup failed" };
+      }
 
       return new Response(gzBuffer, {
         headers: {
@@ -93,6 +114,9 @@ export function createBackupRoutes({ spawn = bunSpawn }: { spawn?: SpawnProcess 
           "Cache-Control": "no-store",
         },
       });
+      } finally {
+        rmSync(defaultsDir, { recursive: true, force: true });
+      }
     },
     {
       detail: {
@@ -118,3 +142,7 @@ export function createBackupRoutes({ spawn = bunSpawn }: { spawn?: SpawnProcess 
 }
 
 export const backupRoutes = createBackupRoutes();
+
+function quoteDefaults(value: string): string {
+  return `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\r?\n/g, "")}"`;
+}

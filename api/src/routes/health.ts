@@ -7,9 +7,33 @@ type HealthRoutesOptions = {
 };
 
 const UI_DIR = join(import.meta.dir, "..", "ui");
+const HTML_CSP = [
+  "default-src 'self'",
+  "script-src 'unsafe-inline'",
+  "style-src 'unsafe-inline'",
+  "img-src 'self' data: http: https:",
+  "connect-src 'self'",
+].join("; ");
 
 function readUI(name: string): string {
   return readFileSync(join(UI_DIR, name), "utf-8");
+}
+
+function sessionCookie(): string | null {
+  const token = process.env.API_TOKEN ?? "";
+  if (!token || token === "change_me_please") return null;
+  return `bm_session=${encodeURIComponent(token)}; HttpOnly; SameSite=Strict; Path=/`;
+}
+
+function htmlResponse(name: string): Response {
+  const headers: Record<string, string> = {
+    "Content-Type": "text/html; charset=utf-8",
+    "Cache-Control": "no-store",
+    "Content-Security-Policy": HTML_CSP,
+  };
+  const cookie = sessionCookie();
+  if (cookie) headers["Set-Cookie"] = cookie;
+  return new Response(readUI(name), { headers });
 }
 
 export function createHealthRoutes({ checkReadiness }: HealthRoutesOptions = {}) {
@@ -38,13 +62,7 @@ export function createHealthRoutes({ checkReadiness }: HealthRoutesOptions = {})
     })
     .get(
       "/app",
-      () =>
-        new Response(readUI("app.html"), {
-          headers: {
-            "Content-Type": "text/html; charset=utf-8",
-            "Cache-Control": "no-store",
-          },
-        }),
+      () => htmlResponse("app.html"),
       {
         detail: {
           tags: ["health"],
@@ -60,13 +78,7 @@ export function createHealthRoutes({ checkReadiness }: HealthRoutesOptions = {})
     )
     .get(
       "/manage-categories",
-      () =>
-        new Response(readUI("categories.html"), {
-          headers: {
-            "Content-Type": "text/html; charset=utf-8",
-            "Cache-Control": "no-store",
-          },
-        }),
+      () => htmlResponse("categories.html"),
       {
         detail: {
           tags: ["health"],
@@ -82,13 +94,7 @@ export function createHealthRoutes({ checkReadiness }: HealthRoutesOptions = {})
     )
     .get(
       "/manage-tags",
-      () =>
-        new Response(readUI("tags.html"), {
-          headers: {
-            "Content-Type": "text/html; charset=utf-8",
-            "Cache-Control": "no-store",
-          },
-        }),
+      () => htmlResponse("tags.html"),
       {
         detail: {
           tags: ["health"],
@@ -98,47 +104,6 @@ export function createHealthRoutes({ checkReadiness }: HealthRoutesOptions = {})
             "Allows users to create, rename, archive, and restore tags with archive guardrails when active bookmarks still use them.",
           responses: {
             200: { description: "HTML page" },
-          },
-        },
-      }
-    )
-    .get(
-      "/config",
-      () => {
-        const apiToken = process.env.API_TOKEN ?? "";
-        if (!apiToken || apiToken === "change_me_please") {
-          return new Response(
-            JSON.stringify({ error: "API_TOKEN is not configured on the server" }),
-            { status: 503, headers: { "Content-Type": "application/json" } }
-          );
-        }
-        return new Response(JSON.stringify({ apiToken }), {
-          headers: { "Content-Type": "application/json" },
-        });
-      },
-      {
-        detail: {
-          tags: ["health"],
-          summary: "Client configuration",
-          description:
-            "Returns the `API_TOKEN` needed by the browser UI to authenticate its requests. " +
-            "This endpoint is auth-exempt so the UI can bootstrap itself on first load. " +
-            "Returns `503` if `API_TOKEN` is not yet configured on the server.",
-          responses: {
-            200: {
-              description: "Configuration for browser UI",
-              content: {
-                "application/json": {
-                  schema: {
-                    type: "object" as const,
-                    properties: {
-                      apiToken: { type: "string" as const, description: "Bearer token to send with all API requests" },
-                    },
-                  },
-                },
-              },
-            },
-            503: { description: "API_TOKEN is not configured on the server" },
           },
         },
       }

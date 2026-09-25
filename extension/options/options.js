@@ -46,12 +46,34 @@ window.addEventListener('DOMContentLoaded', async () => {
  * Settings Save Handler
  *
  * Saves the updated API base URL and API token to Chrome storage and provides
- * visual feedback to the user.
+ * visual feedback to the user. A non-default origin needs an optional host permission.
  */
+function requestApiOrigin(baseUrl) {
+  const pattern = `${new URL(baseUrl).origin}/*`;
+  if (pattern === 'http://localhost:11650/*') return Promise.resolve();
+
+  return new Promise((resolve, reject) => {
+    chrome.permissions.request({ origins: [pattern] }, (granted) => {
+      const runtimeError = chrome.runtime.lastError;
+      if (runtimeError) {
+        reject(new Error(runtimeError.message));
+        return;
+      }
+      if (!granted) {
+        reject(new Error('Browser permission for that API origin was not granted.'));
+        return;
+      }
+      resolve();
+    });
+  });
+}
+
 el('save').addEventListener('click', async () => {
   try {
     await setApiBaseUrl(el('apiBaseUrl').value);
-    el('apiBaseUrl').value = await getApiBaseUrl();
+    const savedBaseUrl = await getApiBaseUrl();
+    el('apiBaseUrl').value = savedBaseUrl;
+    await requestApiOrigin(savedBaseUrl);
 
     await setApiToken(el('apiToken').value.trim());
 

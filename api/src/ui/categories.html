@@ -452,27 +452,8 @@
   <div id="toast"></div>
 
 <script>
-  // ── API token bootstrap ────────────────────────────────────────────────────
-  window.__apiToken = '';
-
-  async function bootstrapToken() {
-    try {
-      const res = await fetch('/config');
-      if (!res.ok) throw new Error('Server returned ' + res.status);
-      const { apiToken } = await res.json();
-      if (!apiToken) throw new Error('apiToken missing in /config response');
-      window.__apiToken = apiToken;
-    } catch (e) {
-      document.getElementById('categories-container').innerHTML =
-        `<div style="padding:2rem;text-align:center;color:#ef4444;">` +
-        `Failed to load API configuration: ${e.message}</div>`;
-      throw e;
-    }
-  }
-
   function apiFetch(url, opts = {}) {
-    const headers = Object.assign({ 'Authorization': 'Bearer ' + window.__apiToken }, opts.headers || {});
-    return fetch(url, Object.assign({}, opts, { headers }));
+    return fetch(url, Object.assign({}, opts, { credentials: 'include' }));
   }
 
   // ── State ──────────────────────────────────────────────────────────────────
@@ -512,7 +493,7 @@
   }
 
   // ── Boot ───────────────────────────────────────────────────────────────────
-  bootstrapToken().then(() => loadAll());
+  loadAll();
 
   // ── View toggle ────────────────────────────────────────────────────────────
   function setView(mode) {

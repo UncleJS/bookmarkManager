@@ -273,28 +273,12 @@
   </footer>
 
   <script>
-    window.__apiToken = '';
+    function apiFetch(url, opts) {
+      return fetch(url, Object.assign({}, opts || {}, { credentials: 'include' }));
+    }
+
     let viewMode = 'active';
     let tags = [];
-
-    async function bootstrapToken() {
-      try {
-        const res = await fetch('/config');
-        if (!res.ok) throw new Error('Server returned ' + res.status);
-        const data = await res.json();
-        if (!data.apiToken) throw new Error('apiToken missing in /config response');
-        window.__apiToken = data.apiToken;
-      } catch (e) {
-        document.getElementById('tags-container').innerHTML =
-          '<div class="state-box">Failed to load API configuration.<br><small>' + esc(e.message) + '</small></div>';
-        throw e;
-      }
-    }
-
-    function apiFetch(url, opts) {
-      const headers = Object.assign({ Authorization: 'Bearer ' + window.__apiToken }, (opts && opts.headers) || {});
-      return fetch(url, Object.assign({}, opts || {}, { headers }));
-    }
 
     function setView(mode) {
       viewMode = mode;
@@ -520,7 +504,7 @@
       toastTimer = setTimeout(function() { el.className = ''; }, 3000);
     }
 
-    bootstrapToken().then(loadAll);
+    loadAll();
   </script>
 </body>
 </html>

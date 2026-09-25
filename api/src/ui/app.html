@@ -1234,30 +1234,10 @@
 </div>
 
 <script>
-  // ── API token bootstrap ────────────────────────────────────────────────────
-  // The token is fetched from /config (auth-exempt) once on load and stored in
-  // window.__apiToken. All API calls must use apiFetch() instead of fetch()
-  // so the Authorization header is always included.
-  window.__apiToken = '';
-
-  async function bootstrapToken() {
-    try {
-      const res = await fetch('/config');
-      if (!res.ok) throw new Error('Server returned ' + res.status);
-      const { apiToken } = await res.json();
-      if (!apiToken) throw new Error('apiToken missing in /config response');
-      window.__apiToken = apiToken;
-    } catch (e) {
-      document.getElementById('content').innerHTML =
-        `<div class="state-box"><div class="icon">⚠️</div>` +
-        `Failed to load API configuration.<br><small>${e.message}</small></div>`;
-      throw e; // prevent further boot
-    }
-  }
-
+  // The HTML response sets an HttpOnly bm_session cookie. apiFetch sends it
+  // with credentials so page scripts never read the API token.
   function apiFetch(url, opts = {}) {
-    const headers = Object.assign({ 'Authorization': 'Bearer ' + window.__apiToken }, opts.headers || {});
-    return fetch(url, Object.assign({}, opts, { headers }));
+    return fetch(url, Object.assign({}, opts, { credentials: 'include' }));
   }
 
   // ── Backup ─────────────────────────────────────────────────────────────────
@@ -1312,10 +1292,8 @@
   };
 
   // ── Boot ───────────────────────────────────────────────────────────────────
-  bootstrapToken().then(() => {
-    loadSidebar();
-    fetchBookmarks();
-  });
+  loadSidebar();
+  fetchBookmarks();
 
   function syncOpenAncestorHeights(startEl) {
     let el = startEl?.parentElement || null;
@@ -1807,11 +1785,17 @@
 
   // ── Card renderer ──────────────────────────────────────────────────────────
   function renderCard(b) {
-    const domain = (() => {
-      try { return new URL(b.url).hostname; } catch { return ''; }
+    const safeHttp = (() => {
+      try {
+        const parsed = new URL(b.url);
+        return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+      } catch { return false; }
     })();
+    const domain = safeHttp ? new URL(b.url).hostname : '';
 
-    const favicon = b.faviconUrl
+    const favicon = !safeHttp
+      ? ''
+      : b.faviconUrl
       ? `<img class="card-favicon" src="${esc(b.faviconUrl)}" alt="" onerror="this.style.display='none'" />`
       : `<img class="card-favicon" src="https://www.google.com/s2/favicons?domain=${esc(domain)}&sz=16" alt="" onerror="this.style.display='none'" />`;
 
@@ -1863,7 +1847,9 @@
       <div class="card-title-row">
         ${favicon}
         <div class="card-title">
-          <a href="${esc(b.url)}" target="_blank" rel="noopener noreferrer">${esc(b.title)}</a>
+          ${safeHttp
+            ? `<a href="${esc(b.url)}" target="_blank" rel="noopener noreferrer">${esc(b.title)}</a>`
+            : `<span>${esc(b.title)}</span>`}
         </div>
       </div>
       <div class="card-url">${esc(b.url)}</div>

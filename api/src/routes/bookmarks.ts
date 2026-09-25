@@ -29,6 +29,15 @@ function uniqueIds(ids?: number[]): number[] {
   return [...new Set(ids ?? [])].filter(Boolean);
 }
 
+function isHttpUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
 function normalizeOptionalFaviconUrl(faviconUrl?: string | null): string | null {
   if (typeof faviconUrl !== "string") return null;
   const trimmed = faviconUrl.trim();
@@ -133,6 +142,10 @@ export const bookmarkRoutes = new Elysia()
       if (!url || !title) {
         set.status = 400;
         return { error: "url and title are required" };
+      }
+      if (!isHttpUrl(url)) {
+        set.status = 400;
+        return { error: "url must use http or https" };
       }
 
       if (!body.allowDuplicate) {
@@ -718,6 +731,7 @@ export const bookmarkRoutes = new Elysia()
       if (body.url !== undefined) {
         const url = body.url.trim();
         if (!url) { set.status = 400; return { error: "url cannot be empty" }; }
+        if (!isHttpUrl(url)) { set.status = 400; return { error: "url must use http or https" }; }
         updates.url = url;
       }
       if (body.description !== undefined) updates.description = body.description ?? null;
