@@ -100,12 +100,11 @@ INNER JOIN __STAGE_DB__.parent_map staged
   ON live.subcategory_id = staged.live_subcategory_id
  AND CONVERT(TRIM(live.name) USING utf8mb4) COLLATE utf8mb4_bin = CONVERT(staged.seed_name USING utf8mb4) COLLATE utf8mb4_bin
  AND live.archived_at IS NULL
-SET live.description = staged.description,
-    live.`order` = staged.sort_order;
+SET live.description = staged.description;
 SET @updated_rows := ROW_COUNT();
 
-INSERT INTO __DB_NAME__.sub_subcategories (subcategory_id, name, description, `order`)
-SELECT staged.live_subcategory_id, staged.seed_name, staged.description, staged.sort_order
+INSERT INTO __DB_NAME__.sub_subcategories (subcategory_id, name, description)
+SELECT staged.live_subcategory_id, staged.seed_name, staged.description
 FROM __STAGE_DB__.parent_map staged
 LEFT JOIN __DB_NAME__.sub_subcategories live
   ON live.subcategory_id = staged.live_subcategory_id

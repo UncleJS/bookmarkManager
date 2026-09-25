@@ -14,13 +14,24 @@ import { sql } from "drizzle-orm";
 // ---------------------------------------------------------------------------
 // categories
 // ---------------------------------------------------------------------------
-export const categories = mysqlTable("categories", {
-  id: int("id").autoincrement().primaryKey(),
-  name: varchar("name", { length: 255 }).notNull(),
-  description: text("description"),
-  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`),
-  archivedAt: datetime("archived_at"),
-});
+export const categories = mysqlTable(
+  "categories",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    name: varchar("name", { length: 255 }).notNull(),
+    description: text("description"),
+    createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`),
+    archivedAt: datetime("archived_at"),
+    // Generated column: non-null only when active — enables unique-among-active index
+    nameActive: varchar("name_active", { length: 255 }).generatedAlwaysAs(
+      sql`CASE WHEN archived_at IS NULL THEN name ELSE NULL END`,
+      { mode: "stored" }
+    ),
+  },
+  (t) => [
+    uniqueIndex("uniq_active_categories_name").on(t.nameActive),
+  ]
+);
 
 // ---------------------------------------------------------------------------
 // subcategories

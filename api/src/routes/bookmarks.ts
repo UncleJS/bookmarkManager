@@ -763,6 +763,7 @@ export const bookmarkRoutes = new Elysia()
         body.subcategoryIds !== undefined ||
         body.subSubcategoryIds !== undefined;
 
+      try {
       await db.transaction(async (tx) => {
         // Always touch updatedAt when anything changes (scalar or associations)
         if (Object.keys(updates).length > 0 || hasAssociationChanges) {
@@ -941,6 +942,13 @@ export const bookmarkRoutes = new Elysia()
       });
 
       return { ok: true };
+      } catch (err: unknown) {
+        if (isDupEntry(err)) {
+          set.status = 409;
+          return { error: "An active bookmark with this URL already exists" };
+        }
+        throw err;
+      }
     },
     {
       params: PositiveIdParam,
@@ -972,13 +980,14 @@ export const bookmarkRoutes = new Elysia()
           "A bookmark cannot be linked to a direct category and also to a deeper link in that same category branch.\n\n" +
           "**Flags:** each flag is independent. Omitting a flag key leaves it unchanged. " +
           "Pass `false` to clear a flag that was previously set.\n\n" +
-          "**URL:** when provided, whitespace is trimmed and an empty string is rejected with 400.\n\n" +
+          "**URL:** when provided, whitespace is trimmed and an empty string is rejected with 400. " +
+          "Changing the URL to one already used by another active bookmark returns 409.\n\n" +
           "The `updatedAt` timestamp is refreshed whenever any field or association changes.",
         responses: {
           200: { ...OkResp, description: "Bookmark updated successfully" },
           400: { ...ErrorResp, description: "Validation error - invalid id, or title/url is blank after trimming" },
           404: { ...ErrorResp, description: "Bookmark not found" },
-          409: { ...ErrorResp, description: "Conflicting taxonomy assignments in the same category branch" },
+          409: { ...ErrorResp, description: "Conflicting taxonomy assignments, or another active bookmark already uses this URL" },
         },
       },
     }
@@ -1021,8 +1030,16 @@ export const bookmarkRoutes = new Elysia()
         .from(bookmarks).where(eq(bookmarks.id, id));
       if (!row) { set.status = 404; return { error: "Bookmark not found" }; }
       if (!row.archivedAt) { set.status = 409; return { error: "Not archived" }; }
-      await db.update(bookmarks).set({ archivedAt: null }).where(eq(bookmarks.id, id));
-      return { ok: true };
+      try {
+        await db.update(bookmarks).set({ archivedAt: null }).where(eq(bookmarks.id, id));
+        return { ok: true };
+      } catch (err: unknown) {
+        if (isDupEntry(err)) {
+          set.status = 409;
+          return { error: "An active bookmark with this URL already exists" };
+        }
+        throw err;
+      }
     },
     {
       params: PositiveIdParam,
@@ -1037,7 +1054,7 @@ export const bookmarkRoutes = new Elysia()
           200: { ...OkResp, description: "Bookmark restored to active" },
           400: { ...ErrorResp, description: "id must be a positive integer" },
           404: { ...ErrorResp, description: "Bookmark not found" },
-          409: { ...ErrorResp, description: "Bookmark is not archived - cannot restore an active bookmark" },
+          409: { ...ErrorResp, description: "Bookmark is not archived, or another active bookmark already uses this URL" },
         },
       },
     }

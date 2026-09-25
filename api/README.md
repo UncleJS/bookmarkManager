@@ -182,7 +182,7 @@ Interactive docs always at **`http://localhost:11650/docs`**.
 
 `POST /bookmarks` body fields: `url`, `title`, `description?`, `subcategoryIds?`, `subSubcategoryIds?`, `categoryIds?`, `tags?`, `flags?`, `faviconUrl?`, `allowDuplicate?`.
 
-Returns `409` with a `duplicates` array if an active bookmark already has the same URL. Set `allowDuplicate: true` to bypass.
+Returns `409` with a `duplicates` array if an active bookmark already has the same URL. `allowDuplicate: true` skips the preflight lookup only; the active-URL unique index still returns `409`.
 
 ### Tags
 
@@ -240,10 +240,11 @@ All tables carry `archived_at DATETIME NULL`. `NULL` = active. Setting `archived
 | `sub_subcategories` | Third-level taxonomy nested under a sub-category; optional `description` |
 | `tags` | Flexible labels; many-to-many with bookmarks |
 | `bookmark_tags` | Junction: bookmarks ↔ tags |
+| `bookmark_categories` | Junction: bookmarks ↔ categories |
 | `bookmark_subcategories` | Junction: bookmarks ↔ sub-categories |
 | `bookmark_sub_subcategories` | Junction: bookmarks ↔ sub-sub-categories |
 
-**Active-row uniqueness** — `tags`, `subcategories`, and `sub_subcategories` use a generated column (`name_active`) that is `NULL` when archived, with a unique index. Archived rows may share names with active rows.
+**Active-row uniqueness** — `categories`, `tags`, `subcategories`, and `sub_subcategories` use a generated column (`name_active`) that is `NULL` when archived, with a unique index. Archived rows may share names with active rows. Active bookmarks are unique by URL via `url_hash_active`.
 
 ---
 

@@ -193,8 +193,13 @@ export const subSubcategoryRoutes = new Elysia()
         .from(subSubcategories).where(eq(subSubcategories.id, id));
       if (!row) { set.status = 404; return { error: "Sub-sub-category not found" }; }
       if (!row.archivedAt) { set.status = 409; return { error: "Not archived" }; }
-      await db.update(subSubcategories).set({ archivedAt: null }).where(eq(subSubcategories.id, id));
-      return { ok: true };
+      try {
+        await db.update(subSubcategories).set({ archivedAt: null }).where(eq(subSubcategories.id, id));
+        return { ok: true };
+      } catch (err: unknown) {
+        if (isDupEntry(err)) { set.status = 409; return { error: "Sub-sub-category name already exists in this sub-category" }; }
+        throw err;
+      }
     },
     {
       params: PositiveIdParam,
@@ -205,7 +210,7 @@ export const subSubcategoryRoutes = new Elysia()
         responses: {
           200: { ...OkResp, description: "Sub-sub-category restored" },
           404: { ...ErrorResp, description: "Sub-sub-category not found" },
-          409: { ...ErrorResp, description: "Sub-sub-category is not archived" },
+          409: { ...ErrorResp, description: "Sub-sub-category is not archived, or an active sub-sub-category with this name already exists in the parent" },
         },
       },
     }

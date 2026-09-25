@@ -266,12 +266,11 @@ UPDATE \
 INNER JOIN __STAGE_DB__.level1_seed s
   ON CONVERT(TRIM(c.name) USING utf8mb4) COLLATE utf8mb4_bin = CONVERT(s.seed_name USING utf8mb4) COLLATE utf8mb4_bin
  AND c.archived_at IS NULL
-SET c.description = s.description,
-    c.`order` = s.sort_order;
+SET c.description = s.description;
 SET @updated_categories := ROW_COUNT();
 
-INSERT INTO __DB_NAME__.categories (name, description, `order`)
-SELECT s.seed_name, s.description, s.sort_order
+INSERT INTO __DB_NAME__.categories (name, description)
+SELECT s.seed_name, s.description
 FROM __STAGE_DB__.level1_seed s
 LEFT JOIN __DB_NAME__.categories c
   ON CONVERT(TRIM(c.name) USING utf8mb4) COLLATE utf8mb4_bin = CONVERT(s.seed_name USING utf8mb4) COLLATE utf8mb4_bin
@@ -293,12 +292,11 @@ INNER JOIN __STAGE_DB__.level2_seed s
 INNER JOIN __STAGE_DB__.category_map m
   ON m.seed_category_id = s.parent_seed_category_id
  AND sc.category_id = m.live_category_id
-SET sc.description = s.description,
-    sc.`order` = s.sort_order;
+SET sc.description = s.description;
 SET @updated_subcategories := ROW_COUNT();
 
-INSERT INTO __DB_NAME__.subcategories (category_id, name, description, `order`)
-SELECT m.live_category_id, s.seed_name, s.description, s.sort_order
+INSERT INTO __DB_NAME__.subcategories (category_id, name, description)
+SELECT m.live_category_id, s.seed_name, s.description
 FROM __STAGE_DB__.level2_seed s
 INNER JOIN __STAGE_DB__.category_map m
   ON m.seed_category_id = s.parent_seed_category_id
@@ -342,7 +340,7 @@ SELECT c.name, sc.name, sc.description
 FROM __DB_NAME__.subcategories sc
 INNER JOIN __DB_NAME__.categories c ON c.id = sc.category_id
 WHERE c.name IN ('Technology', 'Science_Engineering')
-ORDER BY c.`order`, c.name, sc.`order`, sc.name
+ORDER BY c.name, sc.name
 LIMIT 8;
 SQL
 sed -i "s/__DB_NAME__/${DB_NAME}/g" "${VERIFY_SQL_FILE}"

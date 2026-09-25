@@ -375,7 +375,7 @@ Bulk-imports levels 1 (categories) and 2 (sub-categories) from a seed SQL file.
 - All level-2 rows have a valid level-1 parent in seed
 
 **What `--apply` does (single transaction):**
-- Updates `description` and `order` for existing categories/sub-categories (matched by name)
+- Updates `description` for existing categories/sub-categories (matched by name)
 - Inserts new categories and sub-categories not yet in the live DB
 - Level-3 rows from the seed are skipped (handled by the sub-subcategories script)
 
@@ -403,7 +403,7 @@ Maps level-3 entries to live sub-categories created by the categories script. Re
 **Run order:** always run `import-library-categories.sh --apply` first so the parent sub-categories exist.
 
 **What `--apply` does:**
-- Updates `description` and `order` for existing sub-sub-categories (matched by name within their parent)
+- Updates `description` for existing sub-sub-categories (matched by name within their parent)
 - Inserts new sub-sub-categories not yet in the live DB
 
 **Prerequisites:** same as `import-library-categories.sh`.

@@ -279,8 +279,13 @@ export const tagRoutes = new Elysia()
         .from(tags).where(eq(tags.id, id));
       if (!row) { set.status = 404; return { error: "Tag not found" }; }
       if (!row.archivedAt) { set.status = 409; return { error: "Not archived" }; }
-      await db.update(tags).set({ archivedAt: null }).where(eq(tags.id, id));
-      return { ok: true };
+      try {
+        await db.update(tags).set({ archivedAt: null }).where(eq(tags.id, id));
+        return { ok: true };
+      } catch (err: unknown) {
+        if (isDupEntry(err)) { set.status = 409; return { error: "Tag already exists" }; }
+        throw err;
+      }
     },
     {
       detail: {
@@ -293,7 +298,7 @@ export const tagRoutes = new Elysia()
         responses: {
           200: { ...OkResp, description: "Tag restored to active" },
           404: { ...ErrorResp, description: "Tag not found" },
-          409: { ...ErrorResp, description: "Tag is not archived" },
+          409: { ...ErrorResp, description: "Tag is not archived, or an active tag already uses this name" },
         },
       },
     }

@@ -251,8 +251,13 @@ export const categoryRoutes = new Elysia()
         : undefined;
       const updateValues: Record<string, unknown> = { name };
       if (description !== undefined) updateValues.description = description;
-      await db.update(categories).set(updateValues).where(eq(categories.id, id));
-      return { ok: true, id, name, description: description ?? null };
+      try {
+        await db.update(categories).set(updateValues).where(eq(categories.id, id));
+        return { ok: true, id, name, description: description ?? null };
+      } catch (err: unknown) {
+        if (isDupEntry(err)) { set.status = 409; return { error: "Category already exists" }; }
+        throw err;
+      }
     },
     {
       body: t.Object({
@@ -281,6 +286,7 @@ export const categoryRoutes = new Elysia()
           },
           400: { ...ErrorResp, description: "Validation error - name is blank after trimming" },
           404: { ...ErrorResp, description: "Category not found" },
+          409: { ...ErrorResp, description: "An active category with this name already exists" },
         },
       },
     }
@@ -373,8 +379,13 @@ export const categoryRoutes = new Elysia()
         .from(categories).where(eq(categories.id, id));
       if (!row) { set.status = 404; return { error: "Category not found" }; }
       if (!row.archivedAt) { set.status = 409; return { error: "Not archived" }; }
-      await db.update(categories).set({ archivedAt: null }).where(eq(categories.id, id));
-      return { ok: true };
+      try {
+        await db.update(categories).set({ archivedAt: null }).where(eq(categories.id, id));
+        return { ok: true };
+      } catch (err: unknown) {
+        if (isDupEntry(err)) { set.status = 409; return { error: "Category already exists" }; }
+        throw err;
+      }
     },
     {
       detail: {
@@ -387,7 +398,7 @@ export const categoryRoutes = new Elysia()
         responses: {
           200: { ...OkResp, description: "Category restored to active" },
           404: { ...ErrorResp, description: "Category not found" },
-          409: { ...ErrorResp, description: "Category is not archived" },
+          409: { ...ErrorResp, description: "Category is not archived, or an active category already uses this name" },
         },
       },
     }

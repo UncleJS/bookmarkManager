@@ -23,7 +23,17 @@ BACKUP_FILE=""
 KEEP_FILE=0
 TEMP_DB=""
 GENERATED_FILE=0
-EXPECTED_TABLES=(bookmarks tags subcategories categories bookmark_tags bookmark_subcategories)
+EXPECTED_TABLES=(
+  bookmarks
+  tags
+  categories
+  subcategories
+  sub_subcategories
+  bookmark_tags
+  bookmark_categories
+  bookmark_subcategories
+  bookmark_sub_subcategories
+)
 
 # ---- colours -----------------------------------------------------------------
 RED='\033[0;31m'; YELLOW='\033[1;33m'; GREEN='\033[0;32m'; CYAN='\033[0;36m'; NC='\033[0m'

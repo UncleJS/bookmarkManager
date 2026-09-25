@@ -1,0 +1,2 @@
+ALTER TABLE `categories` ADD `name_active` varchar(255) GENERATED ALWAYS AS (CASE WHEN archived_at IS NULL THEN name ELSE NULL END) STORED;--> statement-breakpoint
+ALTER TABLE `categories` ADD CONSTRAINT `uniq_active_categories_name` UNIQUE(`name_active`);

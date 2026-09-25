@@ -331,8 +331,8 @@ Send `Authorization: Bearer <API_TOKEN>` on all management endpoints. See [Auth 
 ```
 
 - `subcategoryIds` and `subSubcategoryIds` can be used independently or together
-- `allowDuplicate: true` bypasses the active-URL uniqueness check
-- Returns `409` with a `duplicates` array when an active bookmark has the same URL
+- `allowDuplicate: true` skips the pre-insert duplicate lookup. The active-URL unique index still rejects a second active bookmark with the same URL
+- Returns `409` with a `duplicates` array when an active bookmark has the same URL. Editing or restoring a bookmark onto that URL also returns `409`
 
 ### Tags
 
@@ -392,10 +392,11 @@ All tables carry `archived_at DATETIME NULL`. `NULL` = active. "Deleting" sets `
 | `sub_subcategories` | Third-level taxonomy, nested under a sub-category; optional `description` |
 | `tags` | Flexible labels; many-to-many with bookmarks |
 | `bookmark_tags` | Junction: bookmarks ↔ tags (archive/restore semantics) |
+| `bookmark_categories` | Junction: bookmarks ↔ categories (archive/restore semantics) |
 | `bookmark_subcategories` | Junction: bookmarks ↔ sub-categories (archive/restore semantics) |
 | `bookmark_sub_subcategories` | Junction: bookmarks ↔ sub-sub-categories (archive/restore semantics) |
 
-**Uniqueness among active rows** — `tags`, `subcategories`, and `sub_subcategories` use a generated column (`name_active`) that is `NULL` when the row is archived, with a unique index on that column. This lets archived rows share names with active rows without constraint violations.
+**Uniqueness among active rows** — `categories`, `tags`, `subcategories`, and `sub_subcategories` use a generated column (`name_active`) that is `NULL` when the row is archived, with a unique index on that column. This lets archived rows share names with active rows without constraint violations. Active bookmarks are unique by URL the same way, via `url_hash_active`.
 
 **Replacing associations** — when you edit a bookmark's tags or sub-categories, removed junction rows are archived (not deleted) and reactivated if the same link is added again later.
 
@@ -567,7 +568,7 @@ Both scripts default to `--dry-run` and must be given `--apply` to make changes.
 - All level-2 rows have a valid level-1 parent in the seed
 
 **What `--apply` does (wrapped in a single transaction):**
-- Updates `description` and `order` for categories/sub-categories that already exist (matched by name)
+- Updates `description` for categories/sub-categories that already exist (matched by name)
 - Inserts new categories and sub-categories that do not yet exist
 - Level-3 rows from the seed are silently skipped (handled by the sub-subcategory script)
 
@@ -628,7 +629,10 @@ Run once per user to enable auto-start without an interactive session.
 
 | File | Purpose | Committed |
 |---|---|---|
-| `api/.env.example` | Template — copy to `api/.env` | Yes |
+| `api/.env.example` | Combined template — copy to `api/.env` before install | Yes |
+| `api/.env.api.example` | Reference for the API split file, including `API_TOKEN` | Yes |
+| `api/.env.db.example` | Reference for the MariaDB split file | Yes |
+| `api/.env.pma.example` | Reference for the phpMyAdmin split file | Yes |
 | `api/.env` | Live credentials (source of truth) | **No** |
 | `api/.env.api` | Split file for API container | **No** |
 | `api/.env.db` | Split file for MariaDB container | **No** |
