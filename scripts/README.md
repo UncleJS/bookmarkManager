@@ -87,14 +87,15 @@ Full first-time install. Run once after cloning.
 1. Verifies `api/` and `quadlet/` directories exist
 2. Copies `api/.env.example → api/.env` if missing, then exits so you can fill in passwords
 3. Generates `api/.env.api`, `api/.env.db`, `api/.env.pma` from `api/.env`
-4. Verifies `podman` is on `PATH`
-5. Pulls `docker.io/mariadb:11` and `docker.io/phpmyadmin:5`
-6. Builds `localhost/bookmark-api:latest` from `api/Dockerfile`
-7. Creates DB data volume: `~/.local/share/bookmark-manager/prod-db`
-8. Copies `quadlet/*.{pod,container}` → `~/.config/containers/systemd/`
-9. Runs `systemctl --user daemon-reload`
-10. Runs `systemctl --user enable --now bookmark-pod.service`
-11. Polls `GET /ready` until the API is up, then prints service URLs
+4. Copies those files to `~/.config/bookmark-manager/env.api`, `env.db`, and `env.pma` (mode `600`)
+5. Verifies `podman` is on `PATH`
+6. Pulls `docker.io/mariadb:11` and `docker.io/phpmyadmin:5`
+7. Builds `localhost/bookmark-api:latest` from `api/Dockerfile`
+8. Creates DB data volume: `~/.local/share/bookmark-manager/prod-db`
+9. Copies `quadlet/*.{pod,container}` → `~/.config/containers/systemd/`
+10. Runs `systemctl --user daemon-reload`
+11. Restarts `bookmark-pod.service` and the three container services (Quadlet `WantedBy` handles boot start; generated units cannot be `enable`d)
+12. Polls `GET /ready` until the API is up, then prints service URLs
 
 Re-running is safe — idempotent.
 
@@ -111,7 +112,7 @@ Stops and removes all services. Interactively prompts before removing image or d
 ```
 
 1. Stops and disables `bookmark-pod.service`
-2. Removes Quadlet unit files from `~/.config/containers/systemd/`
+2. Removes Quadlet unit files from `~/.config/containers/systemd/` and `~/.config/bookmark-manager/env.api`, `env.db`, and `env.pma` (repo `api/.env` files are kept)
 3. Runs `systemctl --user daemon-reload`
 4. **Asks:** remove `localhost/bookmark-api:latest`? (default: **N**)
 5. **Asks:** delete DB data at `~/.local/share/bookmark-manager/prod-db`? (default: **N**)

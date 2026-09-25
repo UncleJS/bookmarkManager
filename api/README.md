@@ -51,7 +51,7 @@ curl http://localhost:11650/health   # → {"status":"ok","check":"liveness"}
 curl http://localhost:11650/ready    # → {"status":"ok","check":"readiness"}
 ```
 
-`./scripts/install.sh` generates `api/.env.api`, `api/.env.db`, and `api/.env.pma` from `api/.env`, builds the image, deploys Quadlet unit files, and waits for `/ready` before reporting success. Re-running it is safe (idempotent).
+`./scripts/install.sh` generates `api/.env.api`, `api/.env.db`, and `api/.env.pma` from `api/.env`, copies them to `~/.config/bookmark-manager/`, builds the image, deploys Quadlet unit files, and waits for `/ready` before reporting success. Re-running it is safe (idempotent).
 
 **Boot persistence** — run once per user:
 ```bash
@@ -252,7 +252,7 @@ All tables carry `archived_at DATETIME NULL`. `NULL` = active. Setting `archived
 
 ## Environment Variables
 
-Set values in `api/.env`. `./scripts/install.sh` splits that file into `api/.env.api`, `api/.env.db`, and `api/.env.pma`.
+Set values in `api/.env`. `./scripts/install.sh` splits that file into `api/.env.api`, `api/.env.db`, and `api/.env.pma`, then copies them to `~/.config/bookmark-manager/env.api`, `env.db`, and `env.pma` for the Quadlet units.
 
 | Variable | Default | Description |
 |---|---|---|

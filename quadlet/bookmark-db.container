@@ -15,7 +15,7 @@ Image=docker.io/mariadb:11
 ContainerName=bookmark-db
 
 # Load only MariaDB init env vars from generated prod env file
-EnvironmentFile=%h/0_opencode/bookmarkManager/api/.env.db
+EnvironmentFile=%h/.config/bookmark-manager/env.db
 
 # Persistent data volume (named Podman volume)
 Volume=bookmark-db.volume:/var/lib/mysql:Z

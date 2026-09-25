@@ -6,7 +6,7 @@
 # Steps:
 #   1. Stop bookmark-pod.service
 #   2. Disable bookmark-pod.service
-#   3. Remove Quadlet unit files
+#   3. Remove Quadlet unit files and ~/.config/bookmark-manager env copies
 #   4. systemctl --user daemon-reload
 #   5. (Interactive) Remove localhost/bookmark-api image?
 #   6. (Interactive) Remove DB data volume?
@@ -14,6 +14,7 @@
 set -euo pipefail
 
 QUADLET_DEST="${HOME}/.config/containers/systemd"
+ENV_INSTALL_DIR="${HOME}/.config/bookmark-manager"
 DB_VOLUME_NAME="bookmark-db-data"
 
 # ---- colours -----------------------------------------------------------------
@@ -32,7 +33,7 @@ info "Disabling bookmark-pod.service (if enabled)..."
 systemctl --user disable bookmark-pod.service 2>/dev/null || true
 success "Disabled."
 
-# ---- 3. remove Quadlet files -------------------------------------------------
+# ---- 3. remove Quadlet files and installed env copies -----------------------
 info "Removing Quadlet unit files..."
 REMOVED=0
 for f in bookmark.pod bookmark-db.volume bookmark-api.container bookmark-db.container bookmark-pma.container; do
@@ -46,6 +47,16 @@ for f in bookmark.pod bookmark-db.volume bookmark-api.container bookmark-db.cont
   fi
 done
 [[ ${REMOVED} -gt 0 ]] && success "Quadlet files removed." || warn "No Quadlet files found to remove."
+
+info "Removing installed env copies..."
+for f in env.api env.db env.pma; do
+  TARGET="${ENV_INSTALL_DIR}/${f}"
+  if [[ -f "${TARGET}" ]]; then
+    rm -f "${TARGET}"
+    info "  Removed: ${TARGET}"
+  fi
+done
+success "Installed env copies removed (repo api/.env files were kept)."
 
 # ---- 4. daemon-reload --------------------------------------------------------
 info "Reloading systemd user daemon..."

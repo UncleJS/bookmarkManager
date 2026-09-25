@@ -141,7 +141,7 @@ cp api/.env.example api/.env
 nano api/.env
 ```
 
-`./scripts/install.sh` splits `api/.env` into `api/.env.api`, `api/.env.db`, and `api/.env.pma` so each container only receives the variables it needs. Never commit `api/.env` or the generated split files — they contain credentials.
+`./scripts/install.sh` splits `api/.env` into `api/.env.api`, `api/.env.db`, and `api/.env.pma` so each container only receives the variables it needs. It then copies those files to `~/.config/bookmark-manager/`, which is the path the Quadlet units read on any machine. Never commit `api/.env` or the generated split files — they contain credentials.
 
 ### 2. Install
 
@@ -151,12 +151,12 @@ nano api/.env
 
 `install.sh` will:
 1. Copy `api/.env.example → api/.env` if missing (then exit so you can set passwords)
-2. Generate `api/.env.api`, `api/.env.db`, `api/.env.pma` from `api/.env`
+2. Generate `api/.env.api`, `api/.env.db`, `api/.env.pma` from `api/.env` and copy them to `~/.config/bookmark-manager/`
 3. Pull `mariadb:11` and `phpmyadmin:5`
 4. Build `localhost/bookmark-api:latest`
 5. Create the DB data volume at `~/.local/share/bookmark-manager/prod-db`
 6. Copy `quadlet/` unit files to `~/.config/containers/systemd/`
-7. Run `systemctl --user daemon-reload && systemctl --user enable --now bookmark-pod.service`
+7. Run `systemctl --user daemon-reload` and restart `bookmark-pod.service`
 8. Poll `GET /ready` and report success when the API is up
 
 Re-running `install.sh` is safe — it is idempotent.
@@ -634,9 +634,12 @@ Run once per user to enable auto-start without an interactive session.
 | `api/.env.db.example` | Reference for the MariaDB split file | Yes |
 | `api/.env.pma.example` | Reference for the phpMyAdmin split file | Yes |
 | `api/.env` | Live credentials (source of truth) | **No** |
-| `api/.env.api` | Split file for API container | **No** |
-| `api/.env.db` | Split file for MariaDB container | **No** |
-| `api/.env.pma` | Split file for phpMyAdmin container | **No** |
+| `api/.env.api` | Split file generated in the repo for scripts and for install to copy | **No** |
+| `api/.env.db` | Split file generated in the repo for scripts and for install to copy | **No** |
+| `api/.env.pma` | Split file generated in the repo for scripts and for install to copy | **No** |
+| `~/.config/bookmark-manager/env.api` | Copy read by the API container | **No** |
+| `~/.config/bookmark-manager/env.db` | Copy read by the MariaDB container | **No** |
+| `~/.config/bookmark-manager/env.pma` | Copy read by the phpMyAdmin container | **No** |
 
 ### Environment variables reference
 

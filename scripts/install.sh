@@ -12,7 +12,7 @@
 #   7. Create DB data volume directory
 #   8. Copy Quadlet unit files into ~/.config/containers/systemd/
 #   9. systemctl --user daemon-reload
-#  10. Enable + start bookmark-pod.service
+#  10. Start bookmark-pod.service (Quadlet WantedBy handles boot start)
 #  11. Wait for API readiness
 #  12. Print service URLs
 # =============================================================================
@@ -21,6 +21,7 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 QUADLET_SRC="${REPO_ROOT}/quadlet"
 QUADLET_DEST="${HOME}/.config/containers/systemd"
+ENV_INSTALL_DIR="${HOME}/.config/bookmark-manager"
 ENV_FILE="${REPO_ROOT}/api/.env"
 ENV_EXAMPLE="${REPO_ROOT}/api/.env.example"
 API_ENV_FILE="${REPO_ROOT}/api/.env.api"
@@ -95,6 +96,13 @@ write_env_file "${ENV_FILE}" "${PMA_ENV_FILE}" \
   PMA_HOST PMA_PORT PMA_ABSOLUTE_URI
 success "Generated api/.env.api, api/.env.db, and api/.env.pma"
 
+info "Copying split env files to ${ENV_INSTALL_DIR}/"
+mkdir -p "${ENV_INSTALL_DIR}"
+install -m 600 "${API_ENV_FILE}" "${ENV_INSTALL_DIR}/env.api"
+install -m 600 "${DB_ENV_FILE}" "${ENV_INSTALL_DIR}/env.db"
+install -m 600 "${PMA_ENV_FILE}" "${ENV_INSTALL_DIR}/env.pma"
+success "Installed env.api, env.db, and env.pma"
+
 # ---- 4. podman check ---------------------------------------------------------
 if ! command -v podman &>/dev/null; then
   error "podman not found on PATH. Install Podman before continuing."
@@ -154,8 +162,10 @@ systemctl --user daemon-reload
 success "Daemon reloaded."
 
 # ---- 10. enable + start ------------------------------------------------------
-info "Enabling and starting bookmark-pod.service..."
-systemctl --user enable --now bookmark-pod.service
+info "Starting bookmark-pod.service..."
+systemctl --user reset-failed bookmark-pod.service bookmark-api.service bookmark-db.service bookmark-pma.service 2>/dev/null || true
+# restart applies a re-install; it also starts units that are not running
+systemctl --user restart bookmark-pod.service bookmark-db.service bookmark-api.service bookmark-pma.service
 success "bookmark-pod.service started."
 
 # ---- 11. readiness check -----------------------------------------------------
