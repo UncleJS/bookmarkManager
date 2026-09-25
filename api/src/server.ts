@@ -12,6 +12,22 @@ import { subcategoryRoutes } from "./routes/subcategories.ts";
 import { tagRoutes } from "./routes/tags.ts";
 
 const PORT = Number(process.env.API_PORT ?? 11650);
+const LOG_LEVELS = ["error", "warn", "info", "debug"] as const;
+type LogLevel = (typeof LOG_LEVELS)[number];
+
+function resolveLogLevel(): LogLevel {
+  const configured = (process.env.LOG_LEVEL ?? "info").toLowerCase();
+  if ((LOG_LEVELS as readonly string[]).includes(configured)) return configured as LogLevel;
+  console.warn(`Unknown LOG_LEVEL "${process.env.LOG_LEVEL}", using info`);
+  return "info";
+}
+
+const logLevel = resolveLogLevel();
+const logRank: Record<LogLevel, number> = { error: 0, warn: 1, info: 2, debug: 3 };
+
+function logAt(level: LogLevel, message: string) {
+  if (logRank[logLevel] >= logRank[level]) console.log(message);
+}
 
 // Returns true for paths that do not require API_TOKEN authentication:
 // infrastructure probes, static HTML pages, the API docs, and the backup
@@ -57,6 +73,23 @@ export function buildApp({ checkReadiness }: BuildAppOptions = {}) {
         set.status = 400;
         return { error: getValidationErrorMessage(error) };
       }
+    })
+    .onAfterResponse(({ request, set, path }) => {
+      const pathname = typeof path === "string" ? path : "";
+      if (!pathname || pathname === "/health" || pathname === "/ready") return;
+      const status = typeof set.status === "number" ? set.status : 200;
+      let target = pathname;
+      if (logLevel === "debug" && request.url) {
+        try {
+          const url = new URL(request.url);
+          target = `${url.pathname}${url.search}`;
+        } catch {
+          target = pathname;
+        }
+      }
+      if (status >= 500) logAt("error", `${request.method} ${target} ${status}`);
+      else if (status >= 400) logAt("warn", `${request.method} ${target} ${status}`);
+      else logAt("info", `${request.method} ${target} ${status}`);
     })
     // ---------------------------------------------------------------------------
     // Global authentication guard

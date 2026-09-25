@@ -427,6 +427,18 @@ export const bookmarkRoutes = new Elysia()
         tagId = n;
       }
 
+      // --- categoryId ---
+      const rawCategoryId = query.categoryId;
+      let categoryId: number | null = null;
+      if (rawCategoryId !== undefined) {
+        const n = Number(rawCategoryId);
+        if (!Number.isInteger(n) || n < 1) {
+          set.status = 400;
+          return { error: "categoryId must be a positive integer" };
+        }
+        categoryId = n;
+      }
+
       // --- flag ---
       const flag = query.flag ?? null;
       if (flag !== null && !BOOKMARK_FLAG_VALUES.includes(flag as typeof BOOKMARK_FLAG_VALUES[number])) {
@@ -523,6 +535,41 @@ export const bookmarkRoutes = new Elysia()
             isNull(bookmarkTags.archivedAt),
           ));
         conditions.push(inArray(bookmarks.id, matchingIds));
+      }
+
+      if (categoryId) {
+        const directCategoryIds = db
+          .select({ bookmarkId: bookmarkCategories.bookmarkId })
+          .from(bookmarkCategories)
+          .where(and(
+            eq(bookmarkCategories.categoryId, categoryId),
+            isNull(bookmarkCategories.archivedAt),
+          ));
+        const subcategoryBranchIds = db
+          .select({ bookmarkId: bookmarkSubcategories.bookmarkId })
+          .from(bookmarkSubcategories)
+          .innerJoin(subcategories, eq(bookmarkSubcategories.subcategoryId, subcategories.id))
+          .where(and(
+            eq(subcategories.categoryId, categoryId),
+            isNull(subcategories.archivedAt),
+            isNull(bookmarkSubcategories.archivedAt),
+          ));
+        const childBranchIds = db
+          .select({ bookmarkId: bookmarkSubSubcategories.bookmarkId })
+          .from(bookmarkSubSubcategories)
+          .innerJoin(subSubcategories, eq(bookmarkSubSubcategories.subSubcategoryId, subSubcategories.id))
+          .innerJoin(subcategories, eq(subSubcategories.subcategoryId, subcategories.id))
+          .where(and(
+            eq(subcategories.categoryId, categoryId),
+            isNull(subcategories.archivedAt),
+            isNull(subSubcategories.archivedAt),
+            isNull(bookmarkSubSubcategories.archivedAt),
+          ));
+        conditions.push(or(
+          inArray(bookmarks.id, directCategoryIds),
+          inArray(bookmarks.id, subcategoryBranchIds),
+          inArray(bookmarks.id, childBranchIds),
+        )!);
       }
 
       const where = and(...conditions);
@@ -643,6 +690,7 @@ export const bookmarkRoutes = new Elysia()
         q: t.Optional(t.String({ description: "Full-text search query. Matches against title, URL, and description using a case-insensitive LIKE search. Combinable with all other filters." })),
         subcategoryId: t.Optional(t.String({ description: "Filter to bookmarks assigned to this subcategory ID. Must be a positive integer." })),
         subSubcategoryId: t.Optional(t.String({ description: "Filter to bookmarks assigned to this sub-sub-category ID. Must be a positive integer." })),
+        categoryId: t.Optional(t.String({ description: "Filter to bookmarks linked directly to this category, or to an active sub-category or sub-sub-category inside it. Must be a positive integer." })),
         tagId: t.Optional(t.String({ description: "Filter to bookmarks that have this tag ID attached. Must be a positive integer." })),
         flag: t.Optional(t.String({ description: "Filter to bookmarks with a specific flag set. Allowed values: `readLater`, `hotTopic`, `cheatsheets`, `forReview`." })),
         sortBy: t.Optional(t.String({ description: "Sort order by creation date. `newest` (default) or `oldest`." })),
@@ -658,6 +706,7 @@ export const bookmarkRoutes = new Elysia()
           "- `q` - full-text search on title, URL, and description (case-insensitive LIKE)\n" +
           "- `subcategoryId` - bookmarks assigned directly to that subcategory or any nested sub-sub-category\n" +
           "- `subSubcategoryId` - bookmarks assigned to that sub-sub-category\n" +
+          "- `categoryId` - bookmarks linked directly to that category or anywhere in its active branch\n" +
           "- `tagId` - bookmarks that have that tag\n" +
           "- `flag` - bookmarks with that flag set (`readLater` | `hotTopic` | `cheatsheets` | `forReview`)\n" +
           "- `archived=true` - show archived bookmarks (mutually exclusive with active)\n\n" +
@@ -735,6 +784,7 @@ export const bookmarkRoutes = new Elysia()
         updates.url = url;
       }
       if (body.description !== undefined) updates.description = body.description ?? null;
+      if (body.faviconUrl !== undefined) updates.faviconUrl = normalizeOptionalFaviconUrl(body.faviconUrl);
       if (body.flags !== undefined) {
         const flags = body.flags;
         if (flags.readLater !== undefined) updates.readLater = flags.readLater ? 1 : 0;
@@ -970,6 +1020,7 @@ export const bookmarkRoutes = new Elysia()
         title: t.Optional(t.String({ description: "New title. Whitespace is trimmed. Cannot be set to an empty string." })),
         url: t.Optional(t.String({ description: "New URL. Whitespace is trimmed. Cannot be set to an empty string." })),
         description: t.Optional(t.Nullable(t.String({ description: "New description. Pass null to clear the existing description." }))),
+        faviconUrl: t.Optional(t.Nullable(t.String({ description: "New favicon URL. Pass null or an empty string to clear it. Whitespace is trimmed." }))),
         tagIds: t.Optional(t.Array(t.Number(), { description: "Replacement tag ID list. When provided, ALL existing tag associations are replaced with this set. Pass an empty array to remove all tags." })),
         categoryIds: t.Optional(t.Array(t.Number(), { description: "Replacement top-level category ID list. When provided, ALL existing direct category associations are replaced with this set. Pass an empty array to remove all direct categories." })),
         subcategoryIds: t.Optional(t.Array(t.Number(), { description: "Replacement sub-category ID list. When provided, ALL existing sub-category associations are replaced with this set. Pass an empty array to remove all sub-categories." })),
@@ -996,6 +1047,7 @@ export const bookmarkRoutes = new Elysia()
           "Pass `false` to clear a flag that was previously set.\n\n" +
           "**URL:** when provided, whitespace is trimmed and an empty string is rejected with 400. " +
           "Changing the URL to one already used by another active bookmark returns 409.\n\n" +
+          "**Favicon:** when `faviconUrl` is provided, whitespace is trimmed and an empty string or null clears the stored value.\n\n" +
           "The `updatedAt` timestamp is refreshed whenever any field or association changes.",
         responses: {
           200: { ...OkResp, description: "Bookmark updated successfully" },

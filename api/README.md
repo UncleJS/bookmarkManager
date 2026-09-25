@@ -1,6 +1,6 @@
 # Bookmark Manager API
 
-[![License: CC BY-NC-SA 4.0](https://img.shields.io/badge/License-CC%20BY--NC--SA%204.0-lightgrey.svg)](https://creativecommons.org/licenses/by-nc-sa/4.0/)
+[![License: CC BY-SA 4.0](https://img.shields.io/badge/License-CC%20BY--SA%204.0-lightgrey.svg)](https://creativecommons.org/licenses/by-sa/4.0/)
 [![Bun](https://img.shields.io/badge/Runtime-Bun-black?logo=bun)](https://bun.sh)
 [![Elysia](https://img.shields.io/badge/Framework-Elysia-5f67ff)](https://elysiajs.com)
 [![MariaDB](https://img.shields.io/badge/Database-MariaDB%2011-003545?logo=mariadb)](https://mariadb.org)
@@ -172,9 +172,9 @@ Interactive docs always at **`http://localhost:11650/docs`**.
 
 | Method | Path | Description |
 |---|---|---|
-| `GET` | `/bookmarks` | List/filter (`?limit=&offset=&subcategoryId=&tagId=&flag=&sortBy=&archived=`) |
+| `GET` | `/bookmarks` | List/filter (`?limit=&offset=&categoryId=&subcategoryId=&tagId=&flag=&sortBy=&archived=`) |
 | `POST` | `/bookmarks` | Create bookmark |
-| `PATCH` | `/bookmarks/:id` | Edit title, description, flags, tags, sub-categories, sub-sub-categories |
+| `PATCH` | `/bookmarks/:id` | Edit title, URL, description, favicon, flags, tags, categories, sub-categories, sub-sub-categories |
 | `PATCH` | `/bookmarks/:id/archive` | Soft-delete |
 | `PATCH` | `/bookmarks/:id/restore` | Restore |
 
@@ -255,11 +255,11 @@ Set values in `api/.env`. `./scripts/install.sh` splits that file into `api/.env
 | Variable | Default | Description |
 |---|---|---|
 | `API_PORT` | `11650` | HTTP port |
-| `LOG_LEVEL` | `info` | Elysia log level |
+| `LOG_LEVEL` | `info` | Request log level: `error`, `warn`, `info`, or `debug` |
 | `DB_HOST` | `127.0.0.1` | MariaDB host (must be `127.0.0.1` within the pod) |
 | `DB_PORT` | `3306` | MariaDB port |
-| `DB_USER` | `bookmark` | DB username |
-| `DB_PASSWORD` | — | DB password |
+| `DB_USER` | — | Required DB username |
+| `DB_PASSWORD` | — | Required DB password |
 | `DB_NAME` | `bookmarks` | DB name |
 | `API_TOKEN` | `change_me_please` | Bearer token for all management routes; placeholder rejected with `503` |
 | `BACKUP_TOKEN` | `change_me_please` | Bearer token for `GET /backup`; placeholder rejected with `503` |
@@ -295,4 +295,4 @@ Available at `http://localhost:11651`. Auto-login is disabled — connect with t
 
 ---
 
-© 2026 Jaco Steyn — Licensed under CC BY-NC-SA 4.0
+© 2026 Jaco Steyn — Licensed under CC BY-SA 4.0

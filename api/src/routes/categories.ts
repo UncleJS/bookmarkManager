@@ -10,7 +10,7 @@ import {
   subcategories,
   subSubcategories,
 } from "../db/schema.ts";
-import { ErrorResp, OkResp, S, isDupEntry } from "./shared.ts";
+import { ErrorResp, OkResp, PositiveIdParam, S, isDupEntry } from "./shared.ts";
 
 export const categoryRoutes = new Elysia()
   .post(
@@ -251,7 +251,7 @@ export const categoryRoutes = new Elysia()
     "/categories/:id",
     async ({ params, body, set }) => {
       const id = Number(params.id);
-      const [row] = await db.select({ id: categories.id })
+      const [row] = await db.select({ id: categories.id, description: categories.description })
         .from(categories).where(eq(categories.id, id));
       if (!row) { set.status = 404; return { error: "Category not found" }; }
       const name = body.name.trim();
@@ -263,13 +263,14 @@ export const categoryRoutes = new Elysia()
       if (description !== undefined) updateValues.description = description;
       try {
         await db.update(categories).set(updateValues).where(eq(categories.id, id));
-        return { ok: true, id, name, description: description ?? null };
+        return { ok: true, id, name, description: description !== undefined ? description : row.description };
       } catch (err: unknown) {
         if (isDupEntry(err)) { set.status = 409; return { error: "Category already exists" }; }
         throw err;
       }
     },
     {
+      params: PositiveIdParam,
       body: t.Object({
         name: t.String({ description: "New category name. Must be non-empty after trimming." }),
         description: t.Optional(t.Union([t.String(), t.Null()], { description: "Optional description. Pass null or empty string to clear." })),
@@ -290,6 +291,7 @@ export const categoryRoutes = new Elysia()
                   ok: { type: "boolean" as const, enum: [true], description: "Always true" },
                   id: S.num("Category ID"),
                   name: S.str("New name as stored"),
+                  description: S.nullable(S.str("Description as stored. Unchanged when omitted from the request.")),
                 }),
               },
             },
@@ -363,6 +365,7 @@ export const categoryRoutes = new Elysia()
       return { ok: true };
     },
     {
+      params: PositiveIdParam,
       detail: {
         tags: ["categories"],
         summary: "Archive a category",
@@ -398,6 +401,7 @@ export const categoryRoutes = new Elysia()
       }
     },
     {
+      params: PositiveIdParam,
       detail: {
         tags: ["categories"],
         summary: "Restore an archived category",

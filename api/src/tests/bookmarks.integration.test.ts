@@ -1300,6 +1300,82 @@ describe("bookmark request validation", () => {
   });
 });
 
+describe("remaining review fixes", () => {
+  it("rejects invalid tag pagination and non-numeric taxonomy ids", async () => {
+    const badLimit = await app.handle(request("/tags?limit=abc"));
+    expect(badLimit.status).toBe(400);
+    const badOffset = await app.handle(request("/tags?offset=-1"));
+    expect(badOffset.status).toBe(400);
+    const badTag = await app.handle(jsonRequest("/tags/abc", "PATCH", { name: "Nope" }));
+    expect(badTag.status).toBe(400);
+    const badCategory = await app.handle(jsonRequest("/categories/abc", "PATCH", { name: "Nope" }));
+    expect(badCategory.status).toBe(400);
+    const badSubcategory = await app.handle(request("/subcategories/abc/archive", "PATCH"));
+    expect(badSubcategory.status).toBe(400);
+  });
+
+  it("keeps the stored category description when a rename omits it", async () => {
+    const name = uniqueName("category-description");
+    const created = await app.handle(jsonRequest("/categories", "POST", { name, description: "keep me" }));
+    expect(created.status).toBe(201);
+    const { id } = await created.json() as { id: number };
+
+    const renamed = await app.handle(jsonRequest(`/categories/${id}`, "PATCH", { name: `${name}-renamed` }));
+    expect(renamed.status).toBe(200);
+    await expect(renamed.json()).resolves.toMatchObject({ description: "keep me" });
+  });
+
+  it("updates a bookmark favicon and filters bookmarks linked only to a category", async () => {
+    const categoryName = uniqueName("direct-category");
+    const categoryRes = await app.handle(jsonRequest("/categories", "POST", { name: categoryName }));
+    const { id: categoryId } = await categoryRes.json() as { id: number };
+    const url = uniqueUrl("direct-category");
+    const created = await app.handle(jsonRequest("/bookmarks", "POST", {
+      url,
+      title: "Direct category bookmark",
+      categoryIds: [categoryId],
+    }));
+    expect(created.status).toBe(201);
+    const { id } = await created.json() as { id: number };
+
+    const patched = await app.handle(jsonRequest(`/bookmarks/${id}`, "PATCH", {
+      faviconUrl: "  https://cdn.example/icon.png  ",
+    }));
+    expect(patched.status).toBe(200);
+
+    const [stored] = await db
+      .select({ faviconUrl: schema.bookmarks.faviconUrl })
+      .from(schema.bookmarks)
+      .where(eq(schema.bookmarks.id, id));
+    expect(stored?.faviconUrl).toBe("https://cdn.example/icon.png");
+
+    const other = await app.handle(jsonRequest("/bookmarks", "POST", {
+      url: uniqueUrl("outside-category"),
+      title: "Outside category",
+    }));
+    expect(other.status).toBe(201);
+
+    const listed = await app.handle(request(`/bookmarks?categoryId=${categoryId}`));
+    expect(listed.status).toBe(200);
+    const body = await listed.json() as { items: Array<{ id: number }> };
+    expect(body.items.map((item) => item.id)).toEqual([id]);
+  });
+
+  it("does not keep a new category when the sub-category insert fails", async () => {
+    const categoryName = uniqueName("rolled-back-category");
+    const res = await app.handle(jsonRequest("/subcategories", "POST", {
+      name: "n".repeat(300),
+      categoryName,
+    }));
+    expect(res.status).toBeGreaterThanOrEqual(400);
+    const rows = await db
+      .select({ name: schema.categories.name })
+      .from(schema.categories)
+      .where(eq(schema.categories.name, categoryName));
+    expect(rows).toHaveLength(0);
+  });
+});
+
 function jsonRequest(path: string, method: string, body: unknown): Request {
   return new Request(`http://localhost${path}`, {
     method,

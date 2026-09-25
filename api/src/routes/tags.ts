@@ -2,14 +2,32 @@ import { Elysia, t } from "elysia";
 import { and, asc, desc, eq, isNotNull, isNull, like, sql } from "drizzle-orm";
 import { db } from "../db/client.ts";
 import { bookmarks, bookmarkTags, tags } from "../db/schema.ts";
-import { ErrorResp, OkResp, S, isDupEntry } from "./shared.ts";
+import { ErrorResp, OkResp, PositiveIdParam, S, isDupEntry } from "./shared.ts";
 
 export const tagRoutes = new Elysia()
   .get(
     "/tags",
-    async ({ query }) => {
-      const limit = Math.min(Number(query.limit ?? 20), 100);
-      const offset = Number(query.offset ?? 0);
+    async ({ query, set }) => {
+      const rawLimit = query.limit;
+      let limit = 20;
+      if (rawLimit !== undefined) {
+        const n = Number(rawLimit);
+        if (!Number.isInteger(n) || n < 1 || n > 100) {
+          set.status = 400;
+          return { error: "limit must be an integer between 1 and 100" };
+        }
+        limit = n;
+      }
+      const rawOffset = query.offset;
+      let offset = 0;
+      if (rawOffset !== undefined) {
+        const n = Number(rawOffset);
+        if (!Number.isInteger(n) || n < 0) {
+          set.status = 400;
+          return { error: "offset must be a non-negative integer" };
+        }
+        offset = n;
+      }
       const search = query.query?.trim() ?? "";
       const exact = query.exact === "true";
       const sort = query.sort === "alpha" ? "alpha" : "count";
@@ -197,6 +215,7 @@ export const tagRoutes = new Elysia()
       }
     },
     {
+      params: PositiveIdParam,
       body: t.Object({
         name: t.String({ description: "New tag name. Must be non-empty after trimming and unique among active tags." }),
       }),
@@ -256,6 +275,7 @@ export const tagRoutes = new Elysia()
       return { ok: true };
     },
     {
+      params: PositiveIdParam,
       detail: {
         tags: ["tags"],
         summary: "Archive a tag",
@@ -289,6 +309,7 @@ export const tagRoutes = new Elysia()
       }
     },
     {
+      params: PositiveIdParam,
       detail: {
         tags: ["tags"],
         summary: "Restore an archived tag",

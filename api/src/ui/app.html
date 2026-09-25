@@ -99,8 +99,25 @@
       user-select: none;
     }
 
+    .nav-section-label.active,
     .nav-section-label:hover {
       color: var(--text);
+    }
+
+    .nav-section-name,
+    .nav-section-chevron {
+      background: none;
+      border: 0;
+      color: inherit;
+      font: inherit;
+      letter-spacing: inherit;
+      text-transform: inherit;
+      padding: 0;
+      cursor: pointer;
+    }
+
+    .nav-section-name {
+      text-align: left;
     }
 
     .nav-section-label::before {
@@ -1277,6 +1294,7 @@
   let state = {
     subcategoryId: null,   // null = all
     subSubcategoryId: null,
+    categoryId: null,
     filterTagId:      null,   // null = all
     filterFlag:       null,   // null | 'readLater' | 'hotTopic' | 'cheatsheets' | 'forReview'
     categoryLabel: 'All bookmarks',
@@ -1316,7 +1334,7 @@
   }
 
   function isAllBookmarksActive() {
-    return state.subcategoryId == null && state.subSubcategoryId == null && state.filterTagId == null && state.filterFlag == null;
+    return state.categoryId == null && state.subcategoryId == null && state.subSubcategoryId == null && state.filterTagId == null && state.filterFlag == null;
   }
 
   // ── Sidebar ────────────────────────────────────────────────────────────────
@@ -1324,7 +1342,7 @@
     try {
       const [classRes, tagRes, flagRes] = await Promise.all([
         apiFetch('/subcategories'),
-        apiFetch(`/tags?limit=200&sort=${state.tagSortOrder}`),
+        apiFetch(`/tags?limit=100&sort=${state.tagSortOrder}`),
         apiFetch('/flag-counts'),
       ]);
       if (!classRes.ok) throw new Error(classRes.statusText);
@@ -1389,35 +1407,54 @@
       nav.appendChild(catHeading);
 
       categories.forEach(category => {
-        if (!category.subcategories.length) return;
-
-        const categoryId = `cat-category-${category.id}`;
-        const categoryHasSelection = category.subcategories.some(c =>
+        const categoryDomId = `cat-category-${category.id}`;
+        const childItems = category.subcategories || [];
+        const categoryHasSelection = state.categoryId === category.id || childItems.some(c =>
           state.subcategoryId === c.id || (c.subSubcategories || []).some(ssc => state.subSubcategoryId === ssc.id)
         );
-        const isOpen = (state.openCategories && state.openCategories.has(categoryId)) || categoryHasSelection;
-        if (categoryHasSelection) state.openCategories.add(categoryId);
+        const isOpen = (state.openCategories && state.openCategories.has(categoryDomId)) || categoryHasSelection;
+        if (categoryHasSelection && childItems.length > 0) state.openCategories.add(categoryDomId);
 
         const heading = document.createElement('div');
-        heading.className = 'nav-section-label' + (isOpen ? ' open' : '');
-        heading.dataset.categoryId = categoryId;
+        heading.className = 'nav-section-label' + (isOpen ? ' open' : '') + (state.categoryId === category.id ? ' active' : '');
+        heading.dataset.categoryId = categoryDomId;
 
-        const labelSpan = document.createElement('span');
-        labelSpan.textContent = category.name;
+        const labelButton = document.createElement('button');
+        labelButton.type = 'button';
+        labelButton.className = 'nav-section-name';
+        labelButton.textContent = category.name;
+        labelButton.onclick = (event) => {
+          event.stopPropagation();
+          selectCategory(category.id, category.name);
+        };
+        heading.appendChild(labelButton);
 
-        const chevron = document.createElement('span');
-        chevron.className = 'nav-section-chevron';
-        chevron.textContent = '▶';
-
-        heading.appendChild(labelSpan);
-        heading.appendChild(chevron);
+        let itemsContainer = null;
+        if (childItems.length > 0) {
+          const chevron = document.createElement('button');
+          chevron.type = 'button';
+          chevron.className = 'nav-section-chevron';
+          chevron.textContent = '▶';
+          chevron.setAttribute('aria-label', `Toggle ${category.name}`);
+          chevron.onclick = (event) => {
+            event.stopPropagation();
+            const open = heading.classList.toggle('open');
+            setCollapsibleOpen(itemsContainer, open);
+            if (!state.openCategories) state.openCategories = new Set();
+            if (open) state.openCategories.add(categoryDomId);
+            else state.openCategories.delete(categoryDomId);
+          };
+          heading.appendChild(chevron);
+        }
         nav.appendChild(heading);
 
-        const itemsContainer = document.createElement('div');
-        itemsContainer.className = 'nav-category-items' + (isOpen ? ' open' : '');
-        itemsContainer.dataset.categoryId = categoryId;
+        if (childItems.length === 0) return;
 
-        category.subcategories.forEach(c => {
+        itemsContainer = document.createElement('div');
+        itemsContainer.className = 'nav-category-items' + (isOpen ? ' open' : '');
+        itemsContainer.dataset.categoryId = categoryDomId;
+
+        childItems.forEach(c => {
           const branch = document.createElement('div');
           branch.className = 'nav-subcategory-branch';
 
@@ -1516,14 +1553,6 @@
 
         nav.appendChild(itemsContainer);
         setCollapsibleOpen(itemsContainer, isOpen);
-
-        heading.onclick = () => {
-          const open = heading.classList.toggle('open');
-          setCollapsibleOpen(itemsContainer, open);
-          if (!state.openCategories) state.openCategories = new Set();
-          if (open) state.openCategories.add(categoryId);
-          else state.openCategories.delete(categoryId);
-        };
       });
 
       // ── Tags ──────────────────────────────────────────────────────────────
@@ -1627,12 +1656,13 @@
   }
 
   function clearNavActive() {
-    document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.nav-item, .nav-section-label').forEach(el => el.classList.remove('active'));
   }
 
   function selectSubcategory(id, label, btnEl) {
     clearNavActive();
-    btnEl.classList.add('active');
+    if (btnEl) btnEl.classList.add('active');
+    state.categoryId = null;
     state.subcategoryId = id;
     state.subSubcategoryId = null;
     state.filterTagId      = null;
@@ -1646,6 +1676,7 @@
   function selectSubSubcategory(id, label, btnEl) {
     clearNavActive();
     btnEl.classList.add('active');
+    state.categoryId = null;
     state.subcategoryId = null;
     state.subSubcategoryId = id;
     state.filterTagId = null;
@@ -1659,6 +1690,7 @@
   function selectFlag(flag, label, btnEl) {
     clearNavActive();
     btnEl.classList.add('active');
+    state.categoryId = null;
     state.subcategoryId = null;
     state.subSubcategoryId = null;
     state.filterTagId      = null;
@@ -1672,11 +1704,27 @@
   function selectTag(id, label, btnEl) {
     clearNavActive();
     btnEl.classList.add('active');
+    state.categoryId = null;
     state.subcategoryId = null;
     state.subSubcategoryId = null;
     state.filterTagId      = id;
     state.filterFlag       = null;
     state.categoryLabel    = label;
+    state.page = 0;
+    document.getElementById('topbar-title').textContent = label;
+    fetchBookmarks();
+  }
+
+  function selectCategory(id, label) {
+    clearNavActive();
+    const heading = document.querySelector(`.nav-section-label[data-category-id="cat-category-${id}"]`);
+    if (heading) heading.classList.add('active');
+    state.categoryId = id;
+    state.subcategoryId = null;
+    state.subSubcategoryId = null;
+    state.filterTagId = null;
+    state.filterFlag = null;
+    state.categoryLabel = label;
     state.page = 0;
     document.getElementById('topbar-title').textContent = label;
     fetchBookmarks();
@@ -1743,6 +1791,7 @@
       sortBy: state.sortBy,
     });
     if (state.searchQuery)      params.set('q', state.searchQuery);
+    if (state.categoryId)       params.set('categoryId', String(state.categoryId));
     if (state.subcategoryId) params.set('subcategoryId', String(state.subcategoryId));
     if (state.subSubcategoryId) params.set('subSubcategoryId', String(state.subSubcategoryId));
     if (state.filterTagId)      params.set('tagId', String(state.filterTagId));

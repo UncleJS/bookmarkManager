@@ -9,7 +9,20 @@ import {
   subcategories,
   subSubcategories,
 } from "../db/schema.ts";
-import { ErrorResp, OkResp, S, isDupEntry } from "./shared.ts";
+import { ErrorResp, OkResp, PositiveIdParam, S, isDupEntry } from "./shared.ts";
+
+function isCategoryExists(err: unknown): boolean {
+  if (err instanceof CategoryExistsError) return true;
+  if (typeof err === "object" && err !== null && "cause" in err) return isCategoryExists(err.cause);
+  return false;
+}
+
+class CategoryExistsError extends Error {
+  constructor() {
+    super("Category already exists");
+    this.name = "CategoryExistsError";
+  }
+}
 
 export const subcategoryRoutes = new Elysia()
   .get(
@@ -195,25 +208,37 @@ export const subcategoryRoutes = new Elysia()
       const description = body.description?.trim() || null;
       let categoryId: number | null = body.categoryId ?? null;
 
-      if (body.categoryName && !categoryId) {
-        const categoryName = body.categoryName.trim();
-        if (categoryName) {
-          const [category] = await db
-            .insert(categories)
-            .values({ name: categoryName })
-            .$returningId();
-          categoryId = category.id;
-        }
-      }
-
       try {
-        const [result] = await db
-          .insert(subcategories)
-          .values({ name, description, categoryId })
-          .$returningId();
+        const created = await db.transaction(async (tx) => {
+          if (body.categoryName && !categoryId) {
+            const categoryName = body.categoryName.trim();
+            if (categoryName) {
+              try {
+                const [category] = await tx
+                  .insert(categories)
+                  .values({ name: categoryName })
+                  .$returningId();
+                categoryId = category.id;
+              } catch (err: unknown) {
+                if (isDupEntry(err)) throw new CategoryExistsError();
+                throw err;
+              }
+            }
+          }
+
+          const [result] = await tx
+            .insert(subcategories)
+            .values({ name, description, categoryId })
+            .$returningId();
+          return { id: result.id, name, description, categoryId };
+        });
         set.status = 201;
-        return { id: result.id, name, description, categoryId };
+        return created;
       } catch (err: unknown) {
+        if (isCategoryExists(err)) {
+          set.status = 409;
+          return { error: "Category already exists" };
+        }
         if (isDupEntry(err)) {
           set.status = 409;
           return { error: "Sub-category already exists in this category" };
@@ -305,6 +330,7 @@ export const subcategoryRoutes = new Elysia()
       return { ok: true };
     },
     {
+      params: PositiveIdParam,
       detail: {
         tags: ["subcategories"],
         summary: "Archive a sub-category",
@@ -340,6 +366,7 @@ export const subcategoryRoutes = new Elysia()
       }
     },
     {
+      params: PositiveIdParam,
       detail: {
         tags: ["subcategories"],
         summary: "Restore an archived sub-category",
@@ -379,6 +406,7 @@ export const subcategoryRoutes = new Elysia()
       }
     },
     {
+      params: PositiveIdParam,
       body: t.Object({
         name: t.String({ description: "New sub-category name. Must be non-empty after trimming. Must be unique within the same category among active sub-categories." }),
         description: t.Optional(t.Nullable(t.String({ description: "New description. Pass null or empty string to clear. Omit to leave unchanged." }))),

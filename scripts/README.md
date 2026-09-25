@@ -1,6 +1,6 @@
 # scripts/
 
-[![License: CC BY-NC-SA 4.0](https://img.shields.io/badge/License-CC%20BY--NC--SA%204.0-lightgrey.svg)](https://creativecommons.org/licenses/by-nc-sa/4.0/)
+[![License: CC BY-SA 4.0](https://img.shields.io/badge/License-CC%20BY--SA%204.0-lightgrey.svg)](https://creativecommons.org/licenses/by-sa/4.0/)
 [![Shell](https://img.shields.io/badge/Language-Bash-4EAA25?logo=gnubash&logoColor=white)](https://www.gnu.org/software/bash/)
 [![Podman](https://img.shields.io/badge/Container-Podman-892ca0?logo=podman)](https://podman.io)
 [![systemd](https://img.shields.io/badge/Init-systemd-black?logo=systemd)](https://systemd.io)
@@ -26,6 +26,7 @@ Every script uses `set -euo pipefail` with colour-coded output:
 - [README Links](#readme-links)
 - [Quick Reference](#quick-reference)
 - [install.sh](#installsh)
+- [install-after-network.sh](#install-after-networksh)
 - [uninstall.sh](#uninstallsh)
 - [rebuild.sh](#rebuildsh)
 - [start.sh](#startsh)
@@ -98,6 +99,20 @@ Full first-time install. Run once after cloning.
 12. Polls `GET /ready` until the API is up, then prints service URLs
 
 Re-running is safe — idempotent.
+
+[↑ Table of Contents](#table-of-contents)
+
+---
+
+## install-after-network.sh
+
+Installs a system drop-in so the current user's lingering session starts after `network-online.target`. This needs root because the unit lives under `/etc/systemd/system/`.
+
+```bash
+sudo ./scripts/install-after-network.sh
+```
+
+The destination is `user@<uid>.service.d`, using the account that invoked sudo.
 
 [↑ Table of Contents](#table-of-contents)
 
@@ -413,4 +428,4 @@ Maps level-3 entries to live sub-categories created by the categories script. Re
 
 ---
 
-© 2026 Jaco Steyn — Licensed under CC BY-NC-SA 4.0
+© 2026 Jaco Steyn — Licensed under CC BY-SA 4.0

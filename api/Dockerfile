@@ -16,12 +16,13 @@ RUN bun install --frozen-lockfile --production
 COPY src/ ./src/
 COPY tsconfig.json ./
 COPY healthcheck.mjs ./
+COPY docker-entrypoint.sh ./
 
-RUN chown -R app:app /app
+RUN chmod 755 docker-entrypoint.sh && chown -R app:app /app
 
 USER app
 
 EXPOSE 11650
 
-# Run migrations then start the server
-CMD ["sh", "-c", "bun run src/db/migrate.ts && bun run src/server.ts"]
+# Migrate, then replace the shell so Bun is PID 1
+CMD ["./docker-entrypoint.sh"]

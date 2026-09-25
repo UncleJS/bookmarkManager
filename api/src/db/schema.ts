@@ -40,7 +40,7 @@ export const subcategories = mysqlTable(
   "subcategories",
   {
     id: int("id").autoincrement().primaryKey(),
-    categoryId: int("category_id"),
+    categoryId: int("category_id").references(() => categories.id),
     name: varchar("name", { length: 255 }).notNull(),
     description: text("description"),
     createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`),
