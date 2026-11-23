@@ -1,6 +1,6 @@
 # scripts/
 
-[![License: CC BY-SA 4.0](https://img.shields.io/badge/License-CC%20BY--SA%204.0-lightgrey.svg)](https://creativecommons.org/licenses/by-sa/4.0/)
+[![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](../LICENSE)
 [![Shell](https://img.shields.io/badge/Language-Bash-4EAA25?logo=gnubash&logoColor=white)](https://www.gnu.org/software/bash/)
 [![Podman](https://img.shields.io/badge/Container-Podman-892ca0?logo=podman)](https://podman.io)
 [![systemd](https://img.shields.io/badge/Init-systemd-black?logo=systemd)](https://systemd.io)
@@ -439,4 +439,4 @@ Maps level-3 entries to live sub-categories created by the categories script. Re
 
 ---
 
-© 2026 Jaco Steyn — Licensed under CC BY-SA 4.0
+© 2026 UncleJS — Licensed under [AGPL-3.0-or-later](https://www.gnu.org/licenses/agpl-3.0.txt)

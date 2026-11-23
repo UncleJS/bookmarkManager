@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 UncleJS
+
 import { readFile } from "fs/promises";
 import mysql from "mysql2/promise";
 

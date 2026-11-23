@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 UncleJS
 # =============================================================================
 # scripts/restart.sh — Restart the Bookmark Manager pod or one service.
 # =============================================================================

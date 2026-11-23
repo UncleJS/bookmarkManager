@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 UncleJS
+
 # shellcheck shell=bash
 # =============================================================================
 # scripts/common.sh — Shared names, ports and helpers. Sourced, not executed.

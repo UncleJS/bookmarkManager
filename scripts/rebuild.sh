@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 UncleJS
 # =============================================================================
 # scripts/rebuild.sh — Rebuild the API image and restart only the API.
 # =============================================================================

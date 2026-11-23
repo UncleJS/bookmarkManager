@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 UncleJS
+
 # shellcheck shell=bash
 # Sourced library (not executable): inherits set -euo pipefail from the caller.
 # =============================================================================
