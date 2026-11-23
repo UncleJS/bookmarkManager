@@ -281,7 +281,7 @@ export const bookmarkRoutes = new Elysia()
               hotTopic: flags.hotTopic ? 1 : 0,
               cheatsheets: flags.cheatsheets ? 1 : 0,
               forReview: flags.forReview ? 1 : 0,
-              archivedAt: flags.archived ? sql`NOW()` : null,
+              archivedAt: flags.archived ? sql`UTC_TIMESTAMP()` : null,
             })
             .$returningId();
 
@@ -356,7 +356,7 @@ export const bookmarkRoutes = new Elysia()
             hotTopic: t.Optional(t.Boolean({ description: "Flag this bookmark as a Hot Topic." })),
             cheatsheets: t.Optional(t.Boolean({ description: "Flag this bookmark as a Cheatsheet." })),
             forReview: t.Optional(t.Boolean({ description: "Flag this bookmark as needing Review." })),
-            archived: t.Optional(t.Boolean({ description: "If true, the bookmark is created already archived (archivedAt set to NOW())." })),
+            archived: t.Optional(t.Boolean({ description: "If true, the bookmark is created already archived (archivedAt set to the current UTC time)." })),
           })
         ),
         faviconUrl: t.Optional(t.Nullable(t.String({ maxLength: LIMITS.faviconUrl, description: "URL of the page favicon (http/https up to 2048 characters, or a data:image URL up to 32768, base64 or inline SVG), typically captured by the extension at save time. Pass null or empty string to clear. Any other value is dropped and the bookmark is saved without a favicon." }))),
@@ -958,7 +958,7 @@ export const bookmarkRoutes = new Elysia()
         // Always touch updatedAt when anything changes (scalar or associations)
         if (Object.keys(updates).length > 0 || hasAssociationChanges) {
           await tx.update(bookmarks)
-            .set({ ...updates, updatedAt: sql`NOW()` })
+            .set({ ...updates, updatedAt: sql`UTC_TIMESTAMP()` })
             .where(eq(bookmarks.id, id));
         }
 
@@ -977,7 +977,7 @@ export const bookmarkRoutes = new Elysia()
 
           if (tagsToArchive.length > 0) {
             await tx.update(bookmarkTags)
-              .set({ archivedAt: sql`NOW()` })
+              .set({ archivedAt: sql`UTC_TIMESTAMP()` })
               .where(inArray(bookmarkTags.id, tagsToArchive));
           }
 
@@ -1019,7 +1019,7 @@ export const bookmarkRoutes = new Elysia()
 
           if (categoriesToArchive.length > 0) {
             await tx.update(bookmarkCategories)
-              .set({ archivedAt: sql`NOW()` })
+              .set({ archivedAt: sql`UTC_TIMESTAMP()` })
               .where(inArray(bookmarkCategories.id, categoriesToArchive));
           }
 
@@ -1061,7 +1061,7 @@ export const bookmarkRoutes = new Elysia()
 
           if (subcategoriesToArchive.length > 0) {
             await tx.update(bookmarkSubcategories)
-              .set({ archivedAt: sql`NOW()` })
+              .set({ archivedAt: sql`UTC_TIMESTAMP()` })
               .where(inArray(bookmarkSubcategories.id, subcategoriesToArchive));
           }
 
@@ -1103,7 +1103,7 @@ export const bookmarkRoutes = new Elysia()
 
           if (subSubcategoriesToArchive.length > 0) {
             await tx.update(bookmarkSubSubcategories)
-              .set({ archivedAt: sql`NOW()` })
+              .set({ archivedAt: sql`UTC_TIMESTAMP()` })
               .where(inArray(bookmarkSubSubcategories.id, subSubcategoriesToArchive));
           }
 
@@ -1196,7 +1196,7 @@ export const bookmarkRoutes = new Elysia()
         .from(bookmarks).where(eq(bookmarks.id, id));
       if (!row) { set.status = 404; return { error: "Bookmark not found" }; }
       if (row.archivedAt) { set.status = 409; return { error: "Already archived" }; }
-      await db.update(bookmarks).set({ archivedAt: sql`NOW()` }).where(eq(bookmarks.id, id));
+      await db.update(bookmarks).set({ archivedAt: sql`UTC_TIMESTAMP()` }).where(eq(bookmarks.id, id));
       return { ok: true };
     },
     {

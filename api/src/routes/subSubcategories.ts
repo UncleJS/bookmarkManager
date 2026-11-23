@@ -171,7 +171,7 @@ export const subSubcategoryRoutes = new Elysia()
         return { error: `Cannot archive: ${total} active bookmark${total === 1 ? "" : "s"} linked to this sub-sub-category` };
       }
 
-      await db.update(subSubcategories).set({ archivedAt: sql`NOW()` }).where(eq(subSubcategories.id, id));
+      await db.update(subSubcategories).set({ archivedAt: sql`UTC_TIMESTAMP()` }).where(eq(subSubcategories.id, id));
       return { ok: true };
     },
     {

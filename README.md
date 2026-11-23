@@ -420,7 +420,9 @@ Third-level taxonomy items nested inside a sub-category. Bookmarks can be linked
 
 ## Data Model
 
-All tables carry `archived_at DATETIME NULL`. `NULL` = active. "Deleting" sets `archived_at = NOW()`. Nothing is hard-deleted.
+All tables carry `archived_UTC DATETIME NULL`. `NULL` = active. "Deleting" sets `archived_UTC = UTC_TIMESTAMP()`. Nothing is hard-deleted.
+
+Every date/time column is stored in UTC and named with the `_UTC` suffix (`created_UTC`, `updated_UTC`, `archived_UTC`). The MariaDB server and every API connection use time zone `+00:00`. The API sends and receives these values as ISO 8601 UTC strings ending in `Z` (fields `createdAt`, `updatedAt`, `archivedAt`).
 
 | Table | Purpose |
 |---|---|

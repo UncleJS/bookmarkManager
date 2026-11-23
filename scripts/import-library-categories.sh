@@ -156,20 +156,20 @@ PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 
 SET @sql := CONCAT(
   'SELECT ''live_duplicate_categories'' AS issue, TRIM(name) AS ref, COUNT(*) AS qty ',
-  'FROM `', @target_db, '`.`categories` WHERE archived_at IS NULL GROUP BY TRIM(name) HAVING COUNT(*) > 1'
+  'FROM `', @target_db, '`.`categories` WHERE archived_UTC IS NULL GROUP BY TRIM(name) HAVING COUNT(*) > 1'
 );
 PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 
 SET @sql := CONCAT(
   'SELECT ''live_duplicate_subcategories'' AS issue, CONCAT(COALESCE(category_id, 0), '':'', TRIM(name)) AS ref, COUNT(*) AS qty ',
-  'FROM `', @target_db, '`.`subcategories` WHERE archived_at IS NULL GROUP BY category_id, TRIM(name) HAVING COUNT(*) > 1'
+  'FROM `', @target_db, '`.`subcategories` WHERE archived_UTC IS NULL GROUP BY category_id, TRIM(name) HAVING COUNT(*) > 1'
 );
 PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 
 SET @sql := CONCAT(
   'SELECT ''existing_level1_matches'' AS metric, COUNT(*) AS value ',
   'FROM `', @stage_db, '`.`level1_seed` s ',
-  'INNER JOIN `', @target_db, '`.`categories` c ON CONVERT(TRIM(c.name) USING utf8mb4) COLLATE utf8mb4_bin = CONVERT(s.seed_name USING utf8mb4) COLLATE utf8mb4_bin AND c.archived_at IS NULL'
+  'INNER JOIN `', @target_db, '`.`categories` c ON CONVERT(TRIM(c.name) USING utf8mb4) COLLATE utf8mb4_bin = CONVERT(s.seed_name USING utf8mb4) COLLATE utf8mb4_bin AND c.archived_UTC IS NULL'
 );
 PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 
@@ -177,8 +177,8 @@ SET @sql := CONCAT(
   'SELECT ''existing_level2_matches'' AS metric, COUNT(*) AS value ',
   'FROM `', @stage_db, '`.`level2_seed` s ',
   'INNER JOIN `', @stage_db, '`.`level1_seed` p ON p.seed_category_id = s.parent_seed_category_id ',
-  'INNER JOIN `', @target_db, '`.`categories` c ON CONVERT(TRIM(c.name) USING utf8mb4) COLLATE utf8mb4_bin = CONVERT(p.seed_name USING utf8mb4) COLLATE utf8mb4_bin AND c.archived_at IS NULL ',
-  'INNER JOIN `', @target_db, '`.`subcategories` sc ON sc.category_id = c.id AND CONVERT(TRIM(sc.name) USING utf8mb4) COLLATE utf8mb4_bin = CONVERT(s.seed_name USING utf8mb4) COLLATE utf8mb4_bin AND sc.archived_at IS NULL'
+  'INNER JOIN `', @target_db, '`.`categories` c ON CONVERT(TRIM(c.name) USING utf8mb4) COLLATE utf8mb4_bin = CONVERT(p.seed_name USING utf8mb4) COLLATE utf8mb4_bin AND c.archived_UTC IS NULL ',
+  'INNER JOIN `', @target_db, '`.`subcategories` sc ON sc.category_id = c.id AND CONVERT(TRIM(sc.name) USING utf8mb4) COLLATE utf8mb4_bin = CONVERT(s.seed_name USING utf8mb4) COLLATE utf8mb4_bin AND sc.archived_UTC IS NULL'
 );
 PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 
@@ -198,14 +198,14 @@ PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 
 SET @sql := CONCAT(
   'SELECT COUNT(*) INTO @live_dup_categories FROM (',
-  'SELECT TRIM(name) FROM `', @target_db, '`.`categories` WHERE archived_at IS NULL GROUP BY TRIM(name) HAVING COUNT(*) > 1',
+  'SELECT TRIM(name) FROM `', @target_db, '`.`categories` WHERE archived_UTC IS NULL GROUP BY TRIM(name) HAVING COUNT(*) > 1',
   ') d'
 );
 PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 
 SET @sql := CONCAT(
   'SELECT COUNT(*) INTO @live_dup_subcategories FROM (',
-  'SELECT category_id, TRIM(name) FROM `', @target_db, '`.`subcategories` WHERE archived_at IS NULL GROUP BY category_id, TRIM(name) HAVING COUNT(*) > 1',
+  'SELECT category_id, TRIM(name) FROM `', @target_db, '`.`subcategories` WHERE archived_UTC IS NULL GROUP BY category_id, TRIM(name) HAVING COUNT(*) > 1',
   ') d'
 );
 PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
@@ -267,7 +267,7 @@ UPDATE \
   __DB_NAME__.categories c
 INNER JOIN __STAGE_DB__.level1_seed s
   ON CONVERT(TRIM(c.name) USING utf8mb4) COLLATE utf8mb4_bin = CONVERT(s.seed_name USING utf8mb4) COLLATE utf8mb4_bin
- AND c.archived_at IS NULL
+ AND c.archived_UTC IS NULL
 SET c.description = s.description;
 SET @updated_categories := ROW_COUNT();
 
@@ -276,7 +276,7 @@ SELECT s.seed_name, s.description
 FROM __STAGE_DB__.level1_seed s
 LEFT JOIN __DB_NAME__.categories c
   ON CONVERT(TRIM(c.name) USING utf8mb4) COLLATE utf8mb4_bin = CONVERT(s.seed_name USING utf8mb4) COLLATE utf8mb4_bin
- AND c.archived_at IS NULL
+ AND c.archived_UTC IS NULL
 WHERE c.id IS NULL;
 SET @inserted_categories := ROW_COUNT();
 
@@ -285,12 +285,12 @@ SELECT s.seed_category_id, c.id AS live_category_id
 FROM __STAGE_DB__.level1_seed s
 INNER JOIN __DB_NAME__.categories c
   ON CONVERT(TRIM(c.name) USING utf8mb4) COLLATE utf8mb4_bin = CONVERT(s.seed_name USING utf8mb4) COLLATE utf8mb4_bin
- AND c.archived_at IS NULL;
+ AND c.archived_UTC IS NULL;
 
 UPDATE __DB_NAME__.subcategories sc
 INNER JOIN __STAGE_DB__.level2_seed s
   ON CONVERT(TRIM(sc.name) USING utf8mb4) COLLATE utf8mb4_bin = CONVERT(s.seed_name USING utf8mb4) COLLATE utf8mb4_bin
- AND sc.archived_at IS NULL
+ AND sc.archived_UTC IS NULL
 INNER JOIN __STAGE_DB__.category_map m
   ON m.seed_category_id = s.parent_seed_category_id
  AND sc.category_id = m.live_category_id
@@ -305,7 +305,7 @@ INNER JOIN __STAGE_DB__.category_map m
 LEFT JOIN __DB_NAME__.subcategories sc
   ON sc.category_id = m.live_category_id
  AND CONVERT(TRIM(sc.name) USING utf8mb4) COLLATE utf8mb4_bin = CONVERT(s.seed_name USING utf8mb4) COLLATE utf8mb4_bin
- AND sc.archived_at IS NULL
+ AND sc.archived_UTC IS NULL
 WHERE sc.id IS NULL;
 SET @inserted_subcategories := ROW_COUNT();
 
@@ -332,11 +332,11 @@ VERIFY_SQL_FILE="$(mktemp)"
 cat > "${VERIFY_SQL_FILE}" <<'SQL'
 SELECT 'active_categories_after_import' AS metric, COUNT(*) AS value
 FROM __DB_NAME__.categories
-WHERE archived_at IS NULL;
+WHERE archived_UTC IS NULL;
 
 SELECT 'active_subcategories_after_import' AS metric, COUNT(*) AS value
 FROM __DB_NAME__.subcategories
-WHERE archived_at IS NULL;
+WHERE archived_UTC IS NULL;
 
 SELECT c.name, sc.name, sc.description
 FROM __DB_NAME__.subcategories sc

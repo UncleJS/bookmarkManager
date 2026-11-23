@@ -364,7 +364,7 @@ export const categoryRoutes = new Elysia()
         return { error: `Cannot archive: ${total} active bookmark${total === 1 ? "" : "s"} linked to this category branch` };
       }
 
-      await db.update(categories).set({ archivedAt: sql`NOW()` }).where(eq(categories.id, id));
+      await db.update(categories).set({ archivedAt: sql`UTC_TIMESTAMP()` }).where(eq(categories.id, id));
       return { ok: true };
     },
     {

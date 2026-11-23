@@ -7,7 +7,6 @@ import {
   varchar,
   text,
   tinyint,
-  timestamp,
   datetime,
   index,
   uniqueIndex,
@@ -23,11 +22,11 @@ export const categories = mysqlTable(
     id: int("id").autoincrement().primaryKey(),
     name: varchar("name", { length: 255 }).notNull(),
     description: text("description"),
-    createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`),
-    archivedAt: datetime("archived_at"),
+    createdAt: datetime("created_UTC").default(sql`(UTC_TIMESTAMP())`),
+    archivedAt: datetime("archived_UTC"),
     // Generated column: non-null only when active — enables unique-among-active index
     nameActive: varchar("name_active", { length: 255 }).generatedAlwaysAs(
-      sql`CASE WHEN archived_at IS NULL THEN name ELSE NULL END`,
+      sql`CASE WHEN archived_UTC IS NULL THEN name ELSE NULL END`,
       { mode: "stored" }
     ),
   },
@@ -46,11 +45,11 @@ export const subcategories = mysqlTable(
     categoryId: int("category_id").references(() => categories.id),
     name: varchar("name", { length: 255 }).notNull(),
     description: text("description"),
-    createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`),
-    archivedAt: datetime("archived_at"),
+    createdAt: datetime("created_UTC").default(sql`(UTC_TIMESTAMP())`),
+    archivedAt: datetime("archived_UTC"),
     // Generated column: non-null only when active — enables unique-among-active index
     nameActive: text("name_active").generatedAlwaysAs(
-      sql`CASE WHEN archived_at IS NULL THEN name ELSE NULL END`,
+      sql`CASE WHEN archived_UTC IS NULL THEN name ELSE NULL END`,
       { mode: "stored" }
     ),
   },
@@ -70,10 +69,10 @@ export const subSubcategories = mysqlTable(
     subcategoryId: int("subcategory_id").notNull().references(() => subcategories.id),
     name: varchar("name", { length: 255 }).notNull(),
     description: text("description"),
-    createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`),
-    archivedAt: datetime("archived_at"),
+    createdAt: datetime("created_UTC").default(sql`(UTC_TIMESTAMP())`),
+    archivedAt: datetime("archived_UTC"),
     nameActive: text("name_active").generatedAlwaysAs(
-      sql`CASE WHEN archived_at IS NULL THEN name ELSE NULL END`,
+      sql`CASE WHEN archived_UTC IS NULL THEN name ELSE NULL END`,
       { mode: "stored" }
     ),
   },
@@ -91,11 +90,11 @@ export const tags = mysqlTable(
   {
     id: int("id").autoincrement().primaryKey(),
     name: varchar("name", { length: 255 }).notNull(),
-    createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`),
-    archivedAt: datetime("archived_at"),
+    createdAt: datetime("created_UTC").default(sql`(UTC_TIMESTAMP())`),
+    archivedAt: datetime("archived_UTC"),
     // Generated column: non-null only when active
     nameActive: varchar("name_active", { length: 255 }).generatedAlwaysAs(
-      sql`CASE WHEN archived_at IS NULL THEN name ELSE NULL END`,
+      sql`CASE WHEN archived_UTC IS NULL THEN name ELSE NULL END`,
       { mode: "stored" }
     ),
   },
@@ -120,13 +119,13 @@ export const bookmarks = mysqlTable(
     hotTopic: tinyint("hot_topic").default(0),
     cheatsheets: tinyint("cheatsheets").default(0),
     forReview: tinyint("for_review").notNull().default(0),
-    createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`),
-    updatedAt: timestamp("updated_at")
-      .default(sql`CURRENT_TIMESTAMP`)
-      .onUpdateNow(),
-    archivedAt: datetime("archived_at"),
+    createdAt: datetime("created_UTC").default(sql`(UTC_TIMESTAMP())`),
+    updatedAt: datetime("updated_UTC")
+      .default(sql`(UTC_TIMESTAMP())`)
+      .$onUpdate(() => sql`UTC_TIMESTAMP()`),
+    archivedAt: datetime("archived_UTC"),
     urlHashActive: varchar("url_hash_active", { length: 64 }).generatedAlwaysAs(
-      sql`CASE WHEN archived_at IS NULL THEN SHA2(url, 256) ELSE NULL END`,
+      sql`CASE WHEN archived_UTC IS NULL THEN SHA2(url, 256) ELSE NULL END`,
       { mode: "stored" }
     ),
   },
@@ -144,14 +143,14 @@ export const bookmarkTags = mysqlTable(
     id: int("id").autoincrement().primaryKey(),
     bookmarkId: int("bookmark_id").notNull().references(() => bookmarks.id),
     tagId: int("tag_id").notNull().references(() => tags.id),
-    createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`),
-    archivedAt: datetime("archived_at"),
+    createdAt: datetime("created_UTC").default(sql`(UTC_TIMESTAMP())`),
+    archivedAt: datetime("archived_UTC"),
     bookmarkIdActive: int("bookmark_id_active").generatedAlwaysAs(
-      sql`CASE WHEN archived_at IS NULL THEN bookmark_id ELSE NULL END`,
+      sql`CASE WHEN archived_UTC IS NULL THEN bookmark_id ELSE NULL END`,
       { mode: "stored" }
     ),
     tagIdActive: int("tag_id_active").generatedAlwaysAs(
-      sql`CASE WHEN archived_at IS NULL THEN tag_id ELSE NULL END`,
+      sql`CASE WHEN archived_UTC IS NULL THEN tag_id ELSE NULL END`,
       { mode: "stored" }
     ),
   },
@@ -171,14 +170,14 @@ export const bookmarkCategories = mysqlTable(
     id: int("id").autoincrement().primaryKey(),
     bookmarkId: int("bookmark_id").notNull().references(() => bookmarks.id),
     categoryId: int("category_id").notNull().references(() => categories.id),
-    createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`),
-    archivedAt: datetime("archived_at"),
+    createdAt: datetime("created_UTC").default(sql`(UTC_TIMESTAMP())`),
+    archivedAt: datetime("archived_UTC"),
     bookmarkIdActive: int("bookmark_id_active").generatedAlwaysAs(
-      sql`CASE WHEN archived_at IS NULL THEN bookmark_id ELSE NULL END`,
+      sql`CASE WHEN archived_UTC IS NULL THEN bookmark_id ELSE NULL END`,
       { mode: "stored" }
     ),
     categoryIdActive: int("category_id_active").generatedAlwaysAs(
-      sql`CASE WHEN archived_at IS NULL THEN category_id ELSE NULL END`,
+      sql`CASE WHEN archived_UTC IS NULL THEN category_id ELSE NULL END`,
       { mode: "stored" }
     ),
   },
@@ -198,14 +197,14 @@ export const bookmarkSubcategories = mysqlTable(
     id: int("id").autoincrement().primaryKey(),
     bookmarkId: int("bookmark_id").notNull().references(() => bookmarks.id),
     subcategoryId: int("subcategory_id").notNull().references(() => subcategories.id),
-    createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`),
-    archivedAt: datetime("archived_at"),
+    createdAt: datetime("created_UTC").default(sql`(UTC_TIMESTAMP())`),
+    archivedAt: datetime("archived_UTC"),
     bookmarkIdActive: int("bookmark_id_active").generatedAlwaysAs(
-      sql`CASE WHEN archived_at IS NULL THEN bookmark_id ELSE NULL END`,
+      sql`CASE WHEN archived_UTC IS NULL THEN bookmark_id ELSE NULL END`,
       { mode: "stored" }
     ),
     subcategoryIdActive: int("subcategory_id_active").generatedAlwaysAs(
-      sql`CASE WHEN archived_at IS NULL THEN subcategory_id ELSE NULL END`,
+      sql`CASE WHEN archived_UTC IS NULL THEN subcategory_id ELSE NULL END`,
       { mode: "stored" }
     ),
   },
@@ -225,14 +224,14 @@ export const bookmarkSubSubcategories = mysqlTable(
     id: int("id").autoincrement().primaryKey(),
     bookmarkId: int("bookmark_id").notNull().references(() => bookmarks.id),
     subSubcategoryId: int("sub_subcategory_id").notNull().references(() => subSubcategories.id),
-    createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`),
-    archivedAt: datetime("archived_at"),
+    createdAt: datetime("created_UTC").default(sql`(UTC_TIMESTAMP())`),
+    archivedAt: datetime("archived_UTC"),
     bookmarkIdActive: int("bookmark_id_active").generatedAlwaysAs(
-      sql`CASE WHEN archived_at IS NULL THEN bookmark_id ELSE NULL END`,
+      sql`CASE WHEN archived_UTC IS NULL THEN bookmark_id ELSE NULL END`,
       { mode: "stored" }
     ),
     subSubcategoryIdActive: int("sub_subcategory_id_active").generatedAlwaysAs(
-      sql`CASE WHEN archived_at IS NULL THEN sub_subcategory_id ELSE NULL END`,
+      sql`CASE WHEN archived_UTC IS NULL THEN sub_subcategory_id ELSE NULL END`,
       { mode: "stored" }
     ),
   },

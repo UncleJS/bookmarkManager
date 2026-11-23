@@ -81,8 +81,8 @@ SET @sql := CONCAT(
   'FROM `', @stage_db, '`.`level3_seed` l3 ',
   'INNER JOIN `', @stage_db, '`.`level2_seed` l2 ON l2.category_id = l3.parent_id ',
   'INNER JOIN `', @stage_db, '`.`level1_seed` l1 ON l1.category_id = l2.parent_id ',
-  'INNER JOIN `', @target_db, '`.`categories` c ON CONVERT(TRIM(c.name) USING utf8mb4) COLLATE utf8mb4_bin = CONVERT(l1.seed_name USING utf8mb4) COLLATE utf8mb4_bin AND c.archived_at IS NULL ',
-  'INNER JOIN `', @target_db, '`.`subcategories` s ON s.category_id = c.id AND CONVERT(TRIM(s.name) USING utf8mb4) COLLATE utf8mb4_bin = CONVERT(l2.seed_name USING utf8mb4) COLLATE utf8mb4_bin AND s.archived_at IS NULL'
+  'INNER JOIN `', @target_db, '`.`categories` c ON CONVERT(TRIM(c.name) USING utf8mb4) COLLATE utf8mb4_bin = CONVERT(l1.seed_name USING utf8mb4) COLLATE utf8mb4_bin AND c.archived_UTC IS NULL ',
+  'INNER JOIN `', @target_db, '`.`subcategories` s ON s.category_id = c.id AND CONVERT(TRIM(s.name) USING utf8mb4) COLLATE utf8mb4_bin = CONVERT(l2.seed_name USING utf8mb4) COLLATE utf8mb4_bin AND s.archived_UTC IS NULL'
 );
 PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 
@@ -108,7 +108,7 @@ UPDATE __DB_NAME__.sub_subcategories live
 INNER JOIN __STAGE_DB__.parent_map staged
   ON live.subcategory_id = staged.live_subcategory_id
  AND CONVERT(TRIM(live.name) USING utf8mb4) COLLATE utf8mb4_bin = CONVERT(staged.seed_name USING utf8mb4) COLLATE utf8mb4_bin
- AND live.archived_at IS NULL
+ AND live.archived_UTC IS NULL
 SET live.description = staged.description;
 SET @updated_rows := ROW_COUNT();
 
@@ -118,7 +118,7 @@ FROM __STAGE_DB__.parent_map staged
 LEFT JOIN __DB_NAME__.sub_subcategories live
   ON live.subcategory_id = staged.live_subcategory_id
  AND CONVERT(TRIM(live.name) USING utf8mb4) COLLATE utf8mb4_bin = CONVERT(staged.seed_name USING utf8mb4) COLLATE utf8mb4_bin
- AND live.archived_at IS NULL
+ AND live.archived_UTC IS NULL
 WHERE live.id IS NULL;
 SET @inserted_rows := ROW_COUNT();
 

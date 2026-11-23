@@ -23,7 +23,18 @@ const pool = mysql.createPool({
   connectionLimit: 10,
   queueLimit: 0,
   multipleStatements: false,
+  // How mysql2 converts DATETIME values to/from JS Dates: as UTC.
   timezone: "+00:00",
+});
+
+// Every *_UTC column holds UTC. Pin the session time zone on each new
+// connection so UTC_TIMESTAMP()/date functions never depend on the server or
+// container zone. The connection runs this before any query handed to it.
+export const SESSION_TIME_ZONE = "+00:00";
+pool.pool.on("connection", (connection) => {
+  connection.query(`SET time_zone = '${SESSION_TIME_ZONE}'`, (error) => {
+    if (error) console.error("Failed to set the DB session time zone:", error.message);
+  });
 });
 
 export const db = drizzle(pool, { schema, mode: "default" });

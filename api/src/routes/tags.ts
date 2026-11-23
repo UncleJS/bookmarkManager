@@ -63,7 +63,7 @@ export const tagRoutes = new Elysia()
             and(
               eq(bookmarkTags.tagId, tags.id),
               isNull(bookmarkTags.archivedAt),
-              sql`EXISTS (SELECT 1 FROM bookmarks b WHERE b.id = ${bookmarkTags.bookmarkId} AND b.archived_at IS NULL)`
+              sql`EXISTS (SELECT 1 FROM bookmarks b WHERE b.id = ${bookmarkTags.bookmarkId} AND b.archived_UTC IS NULL)`
             )
           )
           .where(where)
@@ -274,7 +274,7 @@ export const tagRoutes = new Elysia()
         return { error: `Cannot archive: ${total} active bookmark${total === 1 ? "" : "s"} linked to this tag` };
       }
 
-      await db.update(tags).set({ archivedAt: sql`NOW()` }).where(eq(tags.id, id));
+      await db.update(tags).set({ archivedAt: sql`UTC_TIMESTAMP()` }).where(eq(tags.id, id));
       return { ok: true };
     },
     {

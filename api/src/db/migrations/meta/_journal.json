@@ -92,6 +92,13 @@
       "when": 1790467200000,
       "tag": "0012_subcategory_category_fk",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "5",
+      "when": 1795392000000,
+      "tag": "0013_utc_timestamp_columns",
+      "breakpoints": true
     }
   ]
 }

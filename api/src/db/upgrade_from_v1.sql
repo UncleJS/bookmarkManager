@@ -13,6 +13,8 @@
 --      knows the 0000 baseline has already been applied (skips it).
 --
 -- After running this script, run: bun run db:migrate
+-- (Migration 0013 later renames created_at/updated_at/archived_at to
+-- created_UTC/updated_UTC/archived_UTC.)
 -- =============================================================================
 
 SET NAMES utf8mb4;

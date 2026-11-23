@@ -7,7 +7,7 @@
 [![Drizzle](https://img.shields.io/badge/ORM-Drizzle-c5f74f?logo=drizzle&logoColor=black)](https://orm.drizzle.team)
 [![OpenAPI](https://img.shields.io/badge/API-OpenAPI%203.0-85ea2d?logo=openapiinitiative&logoColor=black)](http://localhost:11650/docs)
 
-Bun + Elysia API for managing bookmarks, tags, and a 3-level category taxonomy. Backed by MariaDB with Drizzle ORM. Nothing is hard-deleted — all tables use archive/restore semantics via `archived_at`.
+Bun + Elysia API for managing bookmarks, tags, and a 3-level category taxonomy. Backed by MariaDB with Drizzle ORM. Nothing is hard-deleted — all tables use archive/restore semantics via `archived_UTC`.
 
 > **Full project documentation:** [`../README.md`](../README.md)
 
@@ -252,7 +252,9 @@ Returns `409` with a `duplicates` array if an active bookmark already has the sa
 
 ## Database Schema
 
-All tables carry `archived_at DATETIME NULL`. `NULL` = active. Setting `archived_at = NOW()` is the only form of deletion. Replaced bookmark associations (tags, sub-categories, sub-sub-categories) archive removed junction rows and reactivate them if the same link is added later.
+All tables carry `archived_UTC DATETIME NULL`. `NULL` = active. Setting `archived_UTC = UTC_TIMESTAMP()` is the only form of deletion. Replaced bookmark associations (tags, sub-categories, sub-sub-categories) archive removed junction rows and reactivate them if the same link is added later.
+
+Timestamps: every date/time column is UTC and ends in `_UTC` (`created_UTC`, `updated_UTC`, `archived_UTC`, all `DATETIME`, written with `UTC_TIMESTAMP()`). The pool sets `time_zone = '+00:00'` on every connection and the MariaDB server runs with `--default-time-zone=+00:00`. JSON fields keep their names (`createdAt`, `updatedAt`, `archivedAt`) and carry ISO 8601 UTC strings such as `2026-11-23T14:05:09.000Z`. Migration `0013_utc_timestamp_columns` renamed the old `*_at` columns in place.
 
 | Table | Purpose |
 |---|---|
