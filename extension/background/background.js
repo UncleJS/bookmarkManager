@@ -54,7 +54,7 @@ chrome.runtime.onInstalled.addListener(async () => {
  */
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   if (info.menuItemId === MENU_IDS.QUICK) {
-    await handleQuickSave(tab);
+    await handleQuickSave(tab, info);
   } else if (info.menuItemId === MENU_IDS.FULL) {
     await openFullSavePopup();
   }
@@ -67,15 +67,23 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
  * Used for rapid bookmark capture without user interaction.
  *
  * @param {chrome.tabs.Tab} tab - Current active tab information
+ * @param {chrome.contextMenus.OnClickData} [info] - Context menu click data
  */
-async function handleQuickSave(tab) {
+async function handleQuickSave(tab, info) {
   try {
     const t = tab || (await getActiveTab());
 
+    // Right-click on a link saves the link target, not the page it sits on.
+    const linkUrl = typeof info?.linkUrl === 'string' && /^https?:\/\//i.test(info.linkUrl) ? info.linkUrl : '';
+    const url = linkUrl || t.url;
+    const title = linkUrl
+      ? (info.selectionText?.trim() || linkUrl)
+      : (t.title || t.url);
+
     // Prepare bookmark payload with default values
     const payload = {
-      url: t.url,
-      title: t.title || t.url,
+      url,
+      title,
       description: '',
       subcategoryIds: [],
       tags: [],
@@ -86,7 +94,8 @@ async function handleQuickSave(tab) {
         cheatsheets: false,
         archived: false
       },
-      faviconUrl: t.favIconUrl || '',
+      // The tab's favicon belongs to the page, not to a linked site.
+      faviconUrl: linkUrl ? '' : (t.favIconUrl || ''),
     };
 
     // Send bookmark to API with timeout
@@ -238,6 +247,12 @@ function apiPost(path, body, opts) { return apiFetch(path, { method: 'POST', bod
  * Handles various requests like fetching initial data, creating tags/sub-categories, and creating bookmarks.
  */
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  // Only this extension's own pages may drive the API (C6). Content scripts
+  // of this extension run in web pages and are not trusted either.
+  if (sender?.id !== chrome.runtime.id || (sender.url && !sender.url.startsWith(chrome.runtime.getURL('')))) {
+    sendResponse({ ok: false, error: 'Unauthorized sender' });
+    return false;
+  }
   (async () => {
     try {
       switch (message?.type) {

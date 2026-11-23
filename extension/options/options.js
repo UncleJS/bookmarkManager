@@ -7,6 +7,7 @@
  * - Providing user feedback for configuration changes
  */
 import { getApiBaseUrl, setApiBaseUrl, getApiToken, setApiToken } from '../lib/storage.js';
+import { validateApiBaseUrl } from '../lib/validate.js';
 
 /**
  * Quick DOM element selector helper
@@ -70,11 +71,14 @@ function requestApiOrigin(baseUrl) {
 
 el('save').addEventListener('click', async () => {
   try {
-    await setApiBaseUrl(el('apiBaseUrl').value);
-    const savedBaseUrl = await getApiBaseUrl();
-    el('apiBaseUrl').value = savedBaseUrl;
-    await requestApiOrigin(savedBaseUrl);
+    // Validate and ask for the host permission first, while the click still
+    // counts as a user gesture. Nothing is saved unless the permission is granted.
+    const result = validateApiBaseUrl(el('apiBaseUrl').value);
+    if (!result.ok) throw new Error(result.error);
+    await requestApiOrigin(result.value);
 
+    await setApiBaseUrl(result.value);
+    el('apiBaseUrl').value = await getApiBaseUrl();
     await setApiToken(el('apiToken').value.trim());
 
     showStatus('Settings saved.');

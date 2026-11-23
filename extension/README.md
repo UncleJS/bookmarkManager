@@ -40,7 +40,7 @@ Chrome Manifest V3 extension for capturing bookmarks and sending them to the loc
 2. Open `chrome://extensions` → enable **Developer mode**
 3. Click **Load unpacked** → select the `extension/` directory
 4. Right-click the extension icon → **Options**
-5. Set **API Base URL** (default: `http://localhost:11650`) and **API Token** (value of `API_TOKEN` from `api/.env`)
+5. Set **API Base URL** (default: `http://localhost:11650`; a remote API must use `https://`) and **API Token** (value of `API_TOKEN` from `api/.env`)
 6. Click **Save**
 
 ---
@@ -149,7 +149,7 @@ extension/
 | `storage` | Save extension settings |
 | `notifications` | Fallback when toast injection is unavailable (e.g. `chrome://` pages) |
 | `scripting` | On-demand toast injection into the active page |
-| `host_permissions` | `http://localhost:11650/*` — configurable via Options |
+| `host_permissions` | `http://localhost:11650/*` — another API origin is requested via Options (`https://` only, or plain `http://` for `localhost` / `127.0.0.1` / `[::1]`) |
 
 ---
 

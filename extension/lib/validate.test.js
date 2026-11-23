@@ -3,7 +3,7 @@ import { describe, expect, test } from 'bun:test';
 import { normalizeStoredApiBaseUrl, validateApiBaseUrl } from './validate.js';
 
 describe('validateApiBaseUrl', () => {
-  test('accepts valid http urls', () => {
+  test('accepts http for localhost', () => {
     expect(validateApiBaseUrl('http://localhost:11650')).toEqual({
       ok: true,
       value: 'http://localhost:11650',
@@ -22,6 +22,24 @@ describe('validateApiBaseUrl', () => {
       ok: true,
       value: 'http://localhost:11650',
     });
+  });
+
+  test('accepts http for loopback addresses', () => {
+    expect(validateApiBaseUrl('http://127.0.0.1:14650').ok).toBe(true);
+    expect(validateApiBaseUrl('http://[::1]:11650').ok).toBe(true);
+  });
+
+  test('rejects plain http for remote hosts', () => {
+    expect(validateApiBaseUrl('http://bookmarks.example.com')).toEqual({
+      ok: false,
+      error: 'Use https:// for a remote API. Plain http:// is only allowed for localhost.',
+    });
+    expect(validateApiBaseUrl('http://192.168.1.10:11650').ok).toBe(false);
+    expect(validateApiBaseUrl('http://localhost.example.com').ok).toBe(false);
+  });
+
+  test('rejects credentials in the url', () => {
+    expect(validateApiBaseUrl('https://user:pw@api.example.com').ok).toBe(false);
   });
 
   test('rejects empty values', () => {
