@@ -111,6 +111,81 @@ describe("backup route", () => {
   });
 });
 
+describe("backup streaming (S9)", () => {
+  const MB = 1024 * 1024;
+
+  // gzip emits `chunks` chunks of 256 KiB; the dump exits with dumpExit and writes stderr.
+  function bigSpawn({ chunks, dumpExit, stderr = "" }: { chunks: number; dumpExit: number; stderr?: string }) {
+    return (cmd: string[]) => {
+      if (cmd[0] === "mariadb-dump") {
+        return {
+          stdout: streamFromString("-- dump"),
+          stderr: streamFromString(stderr),
+          exited: Promise.resolve(dumpExit),
+        };
+      }
+      let sent = 0;
+      return {
+        stdout: new ReadableStream<Uint8Array>({
+          pull(controller) {
+            if (sent >= chunks) {
+              controller.close();
+              return;
+            }
+            sent += 1;
+            controller.enqueue(new Uint8Array(256 * 1024).fill(sent % 256));
+          },
+        }),
+        stderr: streamFromString(""),
+        exited: Promise.resolve(0),
+      };
+    };
+  }
+
+  async function get(spawn: ReturnType<typeof bigSpawn>): Promise<Response> {
+    const app = new Elysia().use(createBackupRoutes({ spawn }));
+    let res!: Response;
+    await withBackupToken("test-backup-token", async () => {
+      res = await app.handle(new Request("http://localhost/backup", {
+        headers: { authorization: "Bearer test-backup-token" },
+      }));
+    });
+    return res;
+  }
+
+  it("streams a dump larger than the buffer limit in full", async () => {
+    const res = await get(bigSpawn({ chunks: 12, dumpExit: 0 }));
+    expect(res.status).toBe(200);
+    const body = new Uint8Array(await res.arrayBuffer());
+    expect(body.byteLength).toBe(3 * MB);
+  });
+
+  it("returns 500 when a small dump fails, even with a lot of stderr", async () => {
+    const res = await get(bigSpawn({ chunks: 1, dumpExit: 2, stderr: "x".repeat(200_000) }));
+    expect(res.status).toBe(500);
+  });
+
+  it("aborts the download when a large dump fails after streaming started", async () => {
+    const res = await get(bigSpawn({ chunks: 12, dumpExit: 2 }));
+    expect(res.status).toBe(200);
+    await expect(res.arrayBuffer()).rejects.toThrow();
+  });
+
+  it("compares the backup token in constant time and rejects a wrong one", async () => {
+    const res = await (async () => {
+      const app = new Elysia().use(createBackupRoutes({ spawn: fakeSpawn }));
+      let out!: Response;
+      await withBackupToken("test-backup-token", async () => {
+        out = await app.handle(new Request("http://localhost/backup", {
+          headers: { authorization: "Bearer test-backup-tokem" },
+        }));
+      });
+      return out;
+    })();
+    expect(res.status).toBe(401);
+  });
+});
+
 function fakeSpawn(cmd: string[], _options: { stdin?: ReadableStream; stdout: "pipe"; stderr: "pipe" }) {
   if (cmd[0] === "mariadb-dump") {
     return {

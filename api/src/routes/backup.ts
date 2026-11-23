@@ -3,13 +3,44 @@ import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 
+import { bearerToken, safeEqual } from "../auth.ts";
 import { ErrorResp } from "./shared.ts";
 
 type SpawnedProcess = {
   stdout: ReadableStream | null;
   stderr: ReadableStream | null;
   exited: Promise<number>;
+  kill?: () => void;
 };
+
+// Up to this many gzip bytes are buffered so a fast failure still returns 500.
+// Larger dumps are streamed; a failure after that point aborts the download.
+const BUFFER_LIMIT = 1024 * 1024;
+
+/** Reads a stream to the end so the child never blocks on a full pipe. Keeps the tail. */
+async function drain(stream: ReadableStream | null, keep = 4096): Promise<string> {
+  if (!stream) return "";
+  const decoder = new TextDecoder();
+  let text = "";
+  try {
+    for await (const chunk of stream as unknown as AsyncIterable<Uint8Array>) {
+      text = (text + decoder.decode(chunk, { stream: true })).slice(-keep);
+    }
+  } catch {
+    // ignore read errors; the exit code decides success
+  }
+  return text;
+}
+
+function concatBytes(chunks: Uint8Array[], total: number): Uint8Array {
+  const out = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    out.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return out;
+}
 
 type SpawnProcess = (cmd: string[], options: {
   stdin?: ReadableStream;
@@ -33,11 +64,9 @@ export function createBackupRoutes({ spawn = bunSpawn }: { spawn?: SpawnProcess 
         };
       }
 
-      const authHeader = headers["authorization"] ?? "";
-      const bearerMatch = authHeader.match(/^Bearer\s+(.+)$/i);
-      const providedToken = bearerMatch ? bearerMatch[1] : "";
+      const providedToken = bearerToken(headers["authorization"]);
 
-      if (!providedToken || providedToken !== configuredToken) {
+      if (!providedToken || !safeEqual(providedToken, configuredToken)) {
         set.status = 401;
         return { error: "Invalid or missing backup token. Send header: Authorization: Bearer <BACKUP_TOKEN>" };
       }
@@ -68,54 +97,119 @@ export function createBackupRoutes({ spawn = bunSpawn }: { spawn?: SpawnProcess 
       );
       chmodSync(defaultsFile, 0o600);
 
+      let cleanedUp = false;
+      const cleanup = () => {
+        if (cleanedUp) return;
+        cleanedUp = true;
+        rmSync(defaultsDir, { recursive: true, force: true });
+      };
+      let streaming = false;
+
       try {
-      const dump = spawn(
-        [
-          "mariadb-dump",
-          `--defaults-extra-file=${defaultsFile}`,
-          "--single-transaction",
-          "--routines",
-          "--triggers",
-          dbName,
-        ],
-        { stdout: "pipe", stderr: "pipe" }
-      );
+        const dump = spawn(
+          [
+            "mariadb-dump",
+            `--defaults-extra-file=${defaultsFile}`,
+            "--single-transaction",
+            "--routines",
+            "--triggers",
+            dbName,
+          ],
+          { stdout: "pipe", stderr: "pipe" }
+        );
 
-      if (!dump.stdout) {
-        set.status = 500;
-        return { error: "Backup failed" };
-      }
+        if (!dump.stdout) {
+          set.status = 500;
+          return { error: "Backup failed" };
+        }
 
-      const gz = spawn(["gzip", "-9"], {
-        stdin: dump.stdout,
-        stdout: "pipe",
-        stderr: "pipe",
-      });
+        const gz = spawn(["gzip", "-9"], {
+          stdin: dump.stdout,
+          stdout: "pipe",
+          stderr: "pipe",
+        });
 
-      if (!gz.stdout) {
-        set.status = 500;
-        return { error: "Backup failed" };
-      }
+        if (!gz.stdout) {
+          set.status = 500;
+          return { error: "Backup failed" };
+        }
 
-      const gzBody = new Response(gz.stdout).arrayBuffer();
-      const dumpExit = await dump.exited;
-      const gzExit = await gz.exited;
-      const gzBuffer = await gzBody;
+        // Drain both stderr pipes concurrently so neither process can block on them.
+        const dumpErr = drain(dump.stderr);
+        const gzErr = drain(gz.stderr);
+        const succeeded = async () => {
+          const [dumpExit, gzExit, dumpStderr, gzStderr] = await Promise.all([
+            dump.exited, gz.exited, dumpErr, gzErr,
+          ]);
+          if (dumpExit === 0 && gzExit === 0) return true;
+          console.error(
+            `backup failed: mariadb-dump exit ${dumpExit}, gzip exit ${gzExit}` +
+              (dumpStderr ? `\nmariadb-dump: ${dumpStderr.trim()}` : "") +
+              (gzStderr ? `\ngzip: ${gzStderr.trim()}` : ""),
+          );
+          return false;
+        };
 
-      if (dumpExit !== 0 || gzExit !== 0) {
-        set.status = 500;
-        return { error: "Backup failed" };
-      }
+        const reader = (gz.stdout as ReadableStream<Uint8Array>).getReader();
+        const head: Uint8Array[] = [];
+        let headBytes = 0;
+        let ended = false;
+        while (headBytes < BUFFER_LIMIT) {
+          const { done, value } = await reader.read();
+          if (done) {
+            ended = true;
+            break;
+          }
+          head.push(value);
+          headBytes += value.byteLength;
+        }
 
-      return new Response(gzBuffer, {
-        headers: {
+        const responseHeaders = {
           "Content-Type": "application/gzip",
           "Content-Disposition": `attachment; filename="${filename}"`,
           "Cache-Control": "no-store",
-        },
-      });
+        };
+
+        if (ended) {
+          if (!(await succeeded())) {
+            set.status = 500;
+            return { error: "Backup failed" };
+          }
+          return new Response(concatBytes(head, headBytes), { headers: responseHeaders });
+        }
+
+        // Large dump: stream the rest. The defaults file is removed once both
+        // processes are done (or the client goes away).
+        streaming = true;
+        const body = new ReadableStream<Uint8Array>({
+          start(controller) {
+            for (const chunk of head) controller.enqueue(chunk);
+          },
+          async pull(controller) {
+            try {
+              const { done, value } = await reader.read();
+              if (!done) {
+                controller.enqueue(value);
+                return;
+              }
+              const ok = await succeeded();
+              cleanup();
+              if (ok) controller.close();
+              else controller.error(new Error("Backup failed"));
+            } catch (err) {
+              cleanup();
+              controller.error(err);
+            }
+          },
+          cancel() {
+            dump.kill?.();
+            gz.kill?.();
+            cleanup();
+          },
+        });
+        return new Response(body, { headers: responseHeaders });
       } finally {
-        rmSync(defaultsDir, { recursive: true, force: true });
+        if (!streaming) cleanup();
       }
     },
     {
