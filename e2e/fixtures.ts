@@ -48,6 +48,9 @@ export const test = base.extend<ExtensionFixtures>({
 
     const context = await chromium.launchPersistentContext(userDataDir, {
       headless: false,
+      // Non-UTC zone and en-US locale, so locale-formatted dates would show.
+      timezoneId: "America/New_York",
+      locale: "en-US",
       args: [
         `--disable-extensions-except=${extensionPath}`,
         `--load-extension=${extensionPath}`,

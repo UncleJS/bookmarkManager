@@ -1,6 +1,6 @@
 # E2E Tests — Playwright
 
-[![License: CC BY-SA 4.0](https://img.shields.io/badge/License-CC%20BY--SA%204.0-lightgrey.svg)](https://creativecommons.org/licenses/by-sa/4.0/)
+[![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](../LICENSE)
 [![Playwright](https://img.shields.io/badge/Tests-Playwright%201.63-2EAD33?logo=playwright)](https://playwright.dev)
 [![Podman](https://img.shields.io/badge/Container-Podman-892ca0?logo=podman)](https://podman.io)
 [![tests](https://github.com/UncleJS/bookmarkManager/actions/workflows/tests.yml/badge.svg?branch=development)](https://github.com/UncleJS/bookmarkManager/actions/workflows/tests.yml)
@@ -134,6 +134,7 @@ e2e/
 └── tests/
     ├── api.spec.ts         # API smoke tests (no browser)
     ├── webapp.spec.ts      # Web UI tests (/app, /manage-categories, /docs)
+    ├── ui-theme-date.spec.ts # Theme toggle and yyyy-MM-dd HH:mm:ss dates (America/New_York, en-US)
     ├── options.spec.ts     # Extension options page tests
     └── popup.spec.ts       # Extension popup tests
 ```
@@ -158,4 +159,4 @@ e2e/
 
 ---
 
-© 2026 Jaco Steyn — Licensed under CC BY-SA 4.0
+© 2026 UncleJS — Licensed under [AGPL-3.0-or-later](https://www.gnu.org/licenses/agpl-3.0.txt)

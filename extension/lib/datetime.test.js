@@ -50,3 +50,24 @@ describe('formatDateTime', () => {
     expect(formatDate('2026-11-08T12:00:00Z')).toMatch(/^2026-11-0[78]$/);
   });
 });
+
+// The web UI keeps a classic-script copy of this helper. Load it and check
+// that both give the same output.
+describe('web UI copy (api/src/ui/datetime.js)', () => {
+  const path = new URL('../../api/src/ui/datetime.js', import.meta.url);
+  const file = Bun.file(path);
+
+  test('formats exactly like the extension helper', async () => {
+    if (!(await file.exists())) return; // extension-only checkout
+    const src = await file.text();
+    const BMDate = new Function(`${src}\nreturn BMDate;`)();
+    const samples = [
+      '2026-11-08T14:05:09Z', '2026-07-01T23:30:00Z', '2026-11-08 14:05:09',
+      '2026-11-08T16:05:09+02:00', '2026-03-08T07:00:00.000Z', '', 'bad', null, undefined,
+    ];
+    for (const s of samples) {
+      expect(BMDate.formatDateTime(s)).toBe(formatDateTime(s));
+      expect(BMDate.formatDate(s)).toBe(formatDate(s));
+    }
+  });
+});

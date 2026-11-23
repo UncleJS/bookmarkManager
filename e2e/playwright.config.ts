@@ -38,7 +38,7 @@ export default defineConfig({
     // ── Web UI tests: plain Chromium, no extension needed ───────────────────
     {
       name: "webapp",
-      testMatch: ["**/webapp.spec.ts"],
+      testMatch: ["**/webapp.spec.ts", "**/ui-theme-date.spec.ts"],
       use: {
         browserName: "chromium",
       },

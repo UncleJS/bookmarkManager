@@ -147,6 +147,11 @@ test.describe("Popup — bookmark creation", () => {
     const dupList = popupPage.locator("#duplicate-list li");
     await expect(dupList.first()).toBeVisible();
 
+    // The saved date is shown as yyyy-MM-dd HH:mm:ss, never in a locale format.
+    const dupText = (await dupList.first().innerText()).trim();
+    expect(dupText).toMatch(/Saved \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/);
+    expect(dupText).not.toMatch(/\b(AM|PM)\b|\d{1,2}\/\d{1,2}\/\d{2,4}/);
+
     // Dismiss via Close button
     await popupPage.locator("#duplicate-confirm").click();
     await expect(dupWarning).toHaveClass(/hidden/, { timeout: 3_000 });
