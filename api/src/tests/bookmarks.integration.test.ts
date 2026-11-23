@@ -1406,21 +1406,29 @@ describe("faviconUrl validation (S6)", () => {
     for (const faviconUrl of [
       "https://example.com/favicon.ico",
       "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNgYGD4DwABBAEAwS2OUAAAAABJRU5ErkJggg==",
+      "data:image/png;charset=utf-8;base64,iVBORw0KGgo=",
+      "data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22>🔖</text></svg>",
     ]) {
-      const res = await app.handle(jsonRequest("/bookmarks", "POST", { url: uniqueUrl("favicon-ok"), title: "Favicon", faviconUrl }));
+      const url = uniqueUrl("favicon-ok");
+      const res = await app.handle(jsonRequest("/bookmarks", "POST", { url, title: "Favicon", faviconUrl }));
       expect(res.status).toBe(201);
+      const [stored] = await db.select({ faviconUrl: schema.bookmarks.faviconUrl }).from(schema.bookmarks).where(eq(schema.bookmarks.url, url));
+      expect(stored?.faviconUrl).toBe(faviconUrl);
     }
   });
 
-  it("rejects javascript:, data:text and over-long favicons", async () => {
+  it("saves the bookmark but drops javascript:, data:text and over-long favicons", async () => {
     for (const faviconUrl of [
       "javascript:alert(1)",
       "data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==",
       "ftp://example.com/icon.png",
       `https://example.com/${"a".repeat(2100)}`,
     ]) {
-      const res = await app.handle(jsonRequest("/bookmarks", "POST", { url: uniqueUrl("favicon-bad"), title: "Favicon", faviconUrl }));
-      expect(res.status).toBe(400);
+      const url = uniqueUrl("favicon-bad");
+      const res = await app.handle(jsonRequest("/bookmarks", "POST", { url, title: "Favicon", faviconUrl }));
+      expect(res.status).toBe(201);
+      const [stored] = await db.select({ faviconUrl: schema.bookmarks.faviconUrl }).from(schema.bookmarks).where(eq(schema.bookmarks.url, url));
+      expect(stored?.faviconUrl).toBeNull();
     }
   });
 

@@ -273,7 +273,7 @@ export const categoryRoutes = new Elysia()
       params: PositiveIdParam,
       body: t.Object({
         name: t.String({ maxLength: 255, description: "New category name. Must be non-empty after trimming." }),
-        description: t.Optional(t.Union([t.String(), t.Null()], { description: "Optional description. Pass null or empty string to clear." })),
+        description: t.Optional(t.Union([t.String({ maxLength: 10000 }), t.Null()], { description: "Optional description. Pass null or empty string to clear." })),
       }),
       detail: {
         tags: ["categories"],

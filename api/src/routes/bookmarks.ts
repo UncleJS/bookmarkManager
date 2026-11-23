@@ -51,7 +51,12 @@ export const LIMITS = {
   ids: 200,
 } as const;
 
-const DATA_IMAGE_RE = /^data:image\/(png|gif|jpeg|jpg|webp|x-icon|vnd\.microsoft\.icon|svg\+xml|avif|bmp);base64,[A-Za-z0-9+/=\s]+$/i;
+const DATA_IMAGE_TYPES = "png|gif|jpeg|jpg|webp|x-icon|vnd\\.microsoft\\.icon|svg\\+xml|avif|bmp";
+// data:image/<type>[;param=value]...;base64,<base64>
+const DATA_IMAGE_BASE64_RE = new RegExp(`^data:image\\/(${DATA_IMAGE_TYPES})(;[a-z0-9.+-]+=[a-z0-9.+-]+)*;base64,[A-Za-z0-9+/=\\s]+$`, "i");
+// Inline SVG favicons (e.g. emoji icons) as Chrome reports them: data:image/svg+xml[;params],<svg ...>
+// Only rendered through <img>, where SVG scripts never run. No control characters.
+const DATA_SVG_TEXT_RE = /^data:image\/svg\+xml(;[a-z0-9.+-]+=[a-z0-9.+-]+)*,[^\x00-\x1f\x7f]+$/i;
 
 type FaviconResult = { ok: true; value: string | null } | { ok: false; error: string };
 
@@ -64,8 +69,10 @@ function normalizeOptionalFaviconUrl(faviconUrl?: string | null): FaviconResult 
   const trimmed = faviconUrl.trim();
   if (trimmed.length === 0) return { ok: true, value: null };
   if (trimmed.toLowerCase().startsWith("data:")) {
-    if (trimmed.length <= LIMITS.faviconUrl && DATA_IMAGE_RE.test(trimmed)) return { ok: true, value: trimmed };
-    return { ok: false, error: "faviconUrl data URL must be a base64 data:image of at most 32768 characters" };
+    if (trimmed.length <= LIMITS.faviconUrl && (DATA_IMAGE_BASE64_RE.test(trimmed) || DATA_SVG_TEXT_RE.test(trimmed))) {
+      return { ok: true, value: trimmed };
+    }
+    return { ok: false, error: "faviconUrl data URL must be a data:image (base64, or inline SVG) of at most 32768 characters" };
   }
   if (trimmed.length <= LIMITS.httpFaviconUrl && isHttpUrl(trimmed)) return { ok: true, value: trimmed };
   return { ok: false, error: "faviconUrl must be an http(s) URL of at most 2048 characters, or a data:image URL" };
@@ -238,11 +245,10 @@ export const bookmarkRoutes = new Elysia()
       const subcategoryIds = uniqueIds(body.subcategoryIds);
       const subSubcategoryIds = uniqueIds(body.subSubcategoryIds);
 
+      // An unusable favicon must not lose the bookmark: it is dropped (stored as null).
+      // PATCH, where the favicon is the thing being edited, rejects it with 400 instead.
       const favicon = normalizeOptionalFaviconUrl(body.faviconUrl);
-      if (!favicon.ok) {
-        set.status = 400;
-        return { error: favicon.error };
-      }
+      const faviconValue = favicon.ok ? favicon.value : null;
 
       const referenceError = await findInvalidReferenceError({ tagIds, categoryIds, subcategoryIds, subSubcategoryIds });
       if (referenceError) {
@@ -267,7 +273,7 @@ export const bookmarkRoutes = new Elysia()
               url,
               title,
               description: body.description ?? null,
-              faviconUrl: favicon.value,
+              faviconUrl: faviconValue,
               readLater: flags.readLater ? 1 : 0,
               hotTopic: flags.hotTopic ? 1 : 0,
               cheatsheets: flags.cheatsheets ? 1 : 0,
@@ -350,7 +356,7 @@ export const bookmarkRoutes = new Elysia()
             archived: t.Optional(t.Boolean({ description: "If true, the bookmark is created already archived (archivedAt set to NOW())." })),
           })
         ),
-        faviconUrl: t.Optional(t.Nullable(t.String({ maxLength: LIMITS.faviconUrl, description: "URL of the page favicon (http/https up to 2048 characters, or a base64 data:image URL up to 32768), typically captured by the extension at save time. Pass null or empty string to clear." }))),
+        faviconUrl: t.Optional(t.Nullable(t.String({ maxLength: LIMITS.faviconUrl, description: "URL of the page favicon (http/https up to 2048 characters, or a data:image URL up to 32768, base64 or inline SVG), typically captured by the extension at save time. Pass null or empty string to clear. Any other value is dropped and the bookmark is saved without a favicon." }))),
         allowDuplicate: t.Optional(t.Boolean({ description: "Set to true to skip the pre-insert duplicate lookup and rely on the database constraint. Active duplicate URLs still return 409." })),
       }),
       detail: {
@@ -382,7 +388,7 @@ export const bookmarkRoutes = new Elysia()
               },
             },
           },
-          400: { ...ErrorResp, description: "Validation error - url or title is blank after trimming, an invalid faviconUrl, or an unknown or archived tag/category id" },
+          400: { ...ErrorResp, description: "Validation error - url or title is blank after trimming, or an unknown or archived tag/category id" },
           409: {
             description: "Duplicate URL detected, or the request linked conflicting taxonomy levels in the same branch.",
             content: {
