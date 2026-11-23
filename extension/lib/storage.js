@@ -32,6 +32,16 @@ async function persistLocalValue(value) {
   await removeSyncValue();
 }
 
+/** Thrown by getApiBaseUrl when the stored URL fails validation. */
+export class InvalidApiBaseUrlError extends Error {
+  constructor(storedValue, reason) {
+    super(`API Base URL "${storedValue}" is not allowed: ${reason} Update it in the extension Options.`);
+    this.name = 'InvalidApiBaseUrlError';
+    this.storedValue = storedValue;
+    this.reason = reason;
+  }
+}
+
 /**
  * Get API Base URL from Storage
  *
@@ -41,9 +51,18 @@ async function persistLocalValue(value) {
  * @returns {Promise<string>} Promise resolving to the API base URL
  */
 export async function getApiBaseUrl() {
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     chrome.storage.local.get([KEY], async (localItems) => {
       const localUrl = normalizeStoredApiBaseUrl(localItems[KEY]);
+
+      // A stored URL that is no longer allowed (e.g. plain http to a remote
+      // host) is kept as it is, so the user can see and fix it in Options;
+      // it is never replaced with the default or used for a request.
+      if (!localUrl && typeof localItems[KEY] === 'string' && localItems[KEY].trim()) {
+        const result = validateApiBaseUrl(localItems[KEY]);
+        reject(new InvalidApiBaseUrlError(localItems[KEY], result.ok ? 'Invalid API Base URL.' : result.error));
+        return;
+      }
 
       if (localUrl) {
         if (localItems[KEY] !== localUrl) {

@@ -6,7 +6,7 @@
  * - Saving updated settings to Chrome storage
  * - Providing user feedback for configuration changes
  */
-import { getApiBaseUrl, setApiBaseUrl, getApiToken, setApiToken } from '../lib/storage.js';
+import { getApiBaseUrl, setApiBaseUrl, getApiToken, setApiToken, InvalidApiBaseUrlError } from '../lib/storage.js';
 import { validateApiBaseUrl } from '../lib/validate.js';
 
 /**
@@ -39,7 +39,13 @@ function showStatus(message, { success = true, timeoutMs = 1500 } = {}) {
  * Populates the API URL and API token input fields with stored values.
  */
 window.addEventListener('DOMContentLoaded', async () => {
-  el('apiBaseUrl').value = await getApiBaseUrl();
+  try {
+    el('apiBaseUrl').value = await getApiBaseUrl();
+  } catch (error) {
+    if (!(error instanceof InvalidApiBaseUrlError)) throw error;
+    el('apiBaseUrl').value = error.storedValue;
+    showStatus(error.reason, { success: false, timeoutMs: 15000 });
+  }
   el('apiToken').value = await getApiToken();
 });
 

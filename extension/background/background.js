@@ -76,9 +76,10 @@ async function handleQuickSave(tab, info) {
     // Right-click on a link saves the link target, not the page it sits on.
     const linkUrl = typeof info?.linkUrl === 'string' && /^https?:\/\//i.test(info.linkUrl) ? info.linkUrl : '';
     const url = linkUrl || t.url;
-    const title = linkUrl
+    // The API caps titles at 1024 characters; long links or selections are cut.
+    const title = (linkUrl
       ? (info.selectionText?.trim() || linkUrl)
-      : (t.title || t.url);
+      : (t.title || t.url)).slice(0, 1024);
 
     // Prepare bookmark payload with default values
     const payload = {
