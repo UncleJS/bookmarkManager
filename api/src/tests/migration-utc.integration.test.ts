@@ -1,7 +1,8 @@
 // Migration 0013 renames the *_at columns to *_UTC (TIMESTAMP -> DATETIME).
 // This applies 0000-0012 to a throwaway database, seeds every table, runs
-// 0013 from a session in a non-UTC zone and checks that no data was lost or
-// shifted and that the generated *_active columns still work.
+// 0013 from a session in a non-UTC zone (and re-runs it, as after a failure)
+// and checks that no data was lost or shifted and that the generated
+// *_active columns still work.
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { readFile } from "fs/promises";
 import mysql from "mysql2/promise";
@@ -83,8 +84,16 @@ beforeAll(async () => {
   `);
 
   // Run 0013 from a non-UTC session: the migration must pin UTC itself.
+  // Then run it again: each ALTER commits on its own, so a half-finished
+  // migration has to be safe to re-run without touching the data.
+  const utcStatements = await migrationStatements(UTC_MIGRATION);
   await conn.query("SET time_zone = '+05:00'");
-  for (const statement of await migrationStatements(UTC_MIGRATION)) await conn.query(statement);
+  for (const statement of utcStatements) await conn.query(statement);
+  await conn.query("SET time_zone = '+05:00'");
+  for (const statement of utcStatements) await conn.query(statement);
+  // A run that stopped half-way through a table: column renamed, *_active gone.
+  await conn.query("ALTER TABLE `tags` DROP INDEX `uniq_active_tag_name`, DROP COLUMN `name_active`");
+  for (const statement of utcStatements) await conn.query(statement);
   await conn.query("SET time_zone = '+00:00'");
 });
 

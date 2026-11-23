@@ -23,8 +23,10 @@ let schema: SchemaModule;
 let previousGlobalTimeZone: string | undefined;
 
 // The app must write UTC whatever the server zone is. The suite runs against a
-// server whose global zone is +05:00, so any NOW()/local-zone write shows up as
-// a 5-hour skew. The API pool pins its sessions to +00:00 (db/client.ts).
+// server whose global zone is +05:00, so if the pool's session pin in
+// db/client.ts is lost, stored and returned times show a 5-hour skew. A stray
+// NOW() would still look right while the pin holds, so the "UTC timestamps"
+// block also scans the source for it.
 const SKEWED_SERVER_TIME_ZONE = "+05:00";
 
 beforeAll(async () => {
@@ -1513,6 +1515,7 @@ describe("search escapes LIKE wildcards (C4)", () => {
 describe("UTC timestamps", () => {
   const ISO_UTC = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{3})?Z$/;
   const MAX_SKEW_MS = 60_000;
+  const SRC_DIR = new URL("..", import.meta.url).pathname.replace(/\/$/, "");
 
   function expectNearNowUtc(value: unknown): void {
     expect(typeof value).toBe("string");
@@ -1530,6 +1533,25 @@ describe("UTC timestamps", () => {
     expect(diff).not.toBeNull();
     return Number(diff);
   }
+
+  it("uses UTC_TIMESTAMP() rather than NOW()/CURRENT_TIMESTAMP in app code", async () => {
+    const files = [
+      ...Array.from(new Bun.Glob("routes/**/*.ts").scanSync({ cwd: SRC_DIR })),
+      "db/schema.ts",
+      "db/client.ts",
+      "server.ts",
+    ];
+    const offenders: string[] = [];
+    for (const file of files) {
+      const text = await readFile(`${SRC_DIR}/${file}`, "utf-8");
+      text.split("\n").forEach((line, i) => {
+        if (/\bNOW\s*\(|CURRENT_TIMESTAMP|LOCALTIME|SYSDATE\s*\(|CURDATE\s*\(|CURTIME\s*\(/i.test(line)) {
+          offenders.push(`${file}:${i + 1}: ${line.trim()}`);
+        }
+      });
+    }
+    expect(offenders).toEqual([]);
+  });
 
   it("pins the API pool's session time zone to UTC", async () => {
     const [rows] = await pool.query("SELECT @@session.time_zone AS session, @@global.time_zone AS global");
