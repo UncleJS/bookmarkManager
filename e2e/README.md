@@ -36,78 +36,33 @@ Tests cover four areas:
 
 ## Prerequisites
 
-1. **API pod running** — `./scripts/start.sh` from the repo root
-2. **API_TOKEN** — the token you set in `api/.env`
-
-```bash
-# Verify the API is reachable
-curl http://localhost:11650/ready
-```
-
-3. **Playwright Chromium** — already installed via `bun install` inside `e2e/`.
-   If you need to re-install:
-   ```bash
-   cd e2e && bunx playwright install chromium
-   ```
+Only rootless Podman. Playwright, Chromium and Bun run in the test image built from [`Containerfile`](Containerfile) (the official `mcr.microsoft.com/playwright:v1.63.0-noble` image plus Bun and the extension). Nothing is installed on the host. The image tag must match `@playwright/test` in `bun.lock`.
 
 ---
 
 ## Running tests
 
-### Recommended: shell script (from repo root)
+Always run the suite through the script, from anywhere in the repo:
 
 ```bash
-# Full suite
-API_TOKEN=<your-token> ./scripts/test-e2e.sh
+# Full suite against a throwaway pod (fresh DB, API and random API_TOKEN)
+./scripts/test-e2e.sh
 
-# API smoke only (no extension, fastest)
-API_TOKEN=<your-token> ./scripts/test-e2e.sh --project=api-smoke
+# API smoke only (fastest)
+./scripts/test-e2e.sh -- --project=api-smoke
 
-# Headed mode (watch the browser)
-API_TOKEN=<your-token> ./scripts/test-e2e.sh --headed
+# One spec file
+./scripts/test-e2e.sh -- tests/webapp.spec.ts
+
+# Against an installed job instance (uses the API_TOKEN from its env file)
+JOB=feature-x ./scripts/test-e2e.sh --installed
 ```
 
-The script checks API readiness, warns on missing token, and forwards any extra arguments directly to Playwright.
+The script builds the API and Playwright images, starts the throwaway pod `bookmark-e2e<suffix>`, runs `playwright test` in a container joined to that pod, copies the HTML report to `e2e/playwright-report/` and removes the pod. Arguments after `--` go to `playwright test`. The suite writes data, so `--installed` refuses the main (production) instance unless you pass `--allow-main`.
 
-### From `api/` via Bun scripts
+Inside the pod the API is at `http://localhost:11650`, the origin the extension's `host_permissions` allow. That is why the runner joins the pod instead of using an offset host port. Headed Chromium (needed for the extension) runs under `xvfb-run`.
 
-```bash
-# Full suite
-API_TOKEN=<your-token> bun run e2e
-
-# API smoke only
-API_TOKEN=<your-token> bun run e2e:api
-
-# Headed mode
-API_TOKEN=<your-token> bun run e2e:headed
-
-# Open the last HTML report
-bun run e2e:report
-```
-
-### Directly from `e2e/`
-
-```bash
-cd e2e
-
-# Full suite
-API_TOKEN=<your-token> bun run test
-
-# Per-suite
-bun run test:api
-bun run test:webapp
-bun run test:options
-bun run test:popup
-
-# Interactive UI mode
-bun run test:ui
-
-# Debug mode (step through)
-bun run test:debug
-
-# Open the last HTML report
-bun run report
-```
+Open the report in a browser from `e2e/playwright-report/index.html`.
 
 ### Environment variables
 
@@ -155,6 +110,7 @@ Each extension test suite then gets its own persistent context via the shared `f
 
 ```
 e2e/
+├── Containerfile           # Playwright test image (built by scripts/build.sh --e2e)
 ├── package.json            # Dependencies (@playwright/test)
 ├── bun.lock                # Bun lockfile
 ├── playwright.config.ts    # Playwright project config (3 projects: api-smoke, webapp, extension)
@@ -175,8 +131,9 @@ e2e/
 
 - Tests that require a token are decorated with `test.skip(!TOKEN, ...)` and will be
   reported as skipped (not failed) in environments where `API_TOKEN` is not set.
-- On RHEL/Fedora-family systems, install Chromium deps manually or use the bundled binary
-  at `~/.cache/ms-playwright/chromium-*/chrome-linux64/chrome`.
+- GitHub Actions runs `scripts/test-e2e.sh` with `JOB=ci` (`.github/workflows/tests.yml`) and uploads
+  `e2e/playwright-report/` as an artifact.
+- Chromium and its system libraries come from the Playwright image, so no host packages are needed.
 - The `--no-sandbox` flag is automatically applied via the fixtures for environments
   where the sandbox is not available (e.g., containers without user namespaces).
 - Temp Chrome profiles (`e2e/.tmp-chrome-*/`) and test artifacts (`e2e/playwright-report/`,

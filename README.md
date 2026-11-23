@@ -3,7 +3,8 @@
 [![License: CC BY-SA 4.0](https://img.shields.io/badge/License-CC%20BY--SA%204.0-lightgrey.svg)](https://creativecommons.org/licenses/by-sa/4.0/)
 [![Bun](https://img.shields.io/badge/Runtime-Bun-black?logo=bun)](https://bun.sh)
 [![Elysia](https://img.shields.io/badge/Framework-Elysia-5f67ff)](https://elysiajs.com)
-[![MariaDB](https://img.shields.io/badge/Database-MariaDB%2011-003545?logo=mariadb)](https://mariadb.org)
+[![MariaDB](https://img.shields.io/badge/Database-MariaDB%2011.8%20LTS-003545?logo=mariadb)](https://mariadb.org)
+[![tests](https://github.com/UncleJS/bookmarkManager/actions/workflows/tests.yml/badge.svg?branch=development)](https://github.com/UncleJS/bookmarkManager/actions/workflows/tests.yml)
 [![Drizzle](https://img.shields.io/badge/ORM-Drizzle-c5f74f?logo=drizzle&logoColor=black)](https://orm.drizzle.team)
 [![Podman](https://img.shields.io/badge/Container-Podman-892ca0?logo=podman)](https://podman.io)
 [![Chrome Extension](https://img.shields.io/badge/Extension-Manifest%20V3-4285F4?logo=googlechrome&logoColor=white)](https://developer.chrome.com/docs/extensions/mv3/)
@@ -149,13 +150,13 @@ nano api/.env
 ```
 
 `install.sh` will:
-1. Copy `api/.env.example → api/.env` if missing (then exit so you can set passwords)
-2. Generate `api/.env.api`, `api/.env.db`, `api/.env.pma` from `api/.env` and copy them to `~/.config/bookmark-manager/`
-3. Pull `mariadb:11` and `phpmyadmin:5`
-4. Build `localhost/bookmark-api:latest`
-5. Create the DB data volume at `~/.local/share/bookmark-manager/prod-db`
-6. Copy `quadlet/` unit files to `~/.config/containers/systemd/`
-7. Run `systemctl --user daemon-reload` and restart `bookmark-pod.service`
+1. Check that podman runs rootless and a systemd user session exists
+2. Copy `api/.env.example → api/.env` if missing (then exit so you can set passwords)
+3. Generate `api/.env.api`, `api/.env.db`, `api/.env.pma` from `api/.env` and copy them to `~/.config/bookmark-manager/`
+4. Pull `docker.io/library/mariadb:11.8` and `docker.io/library/phpmyadmin:5.2`
+5. Build `localhost/bookmark-api:latest` from `api/Containerfile` (`scripts/build.sh`)
+6. Copy the `quadlet/` units (pod, DB volume, three containers) to `~/.config/containers/systemd/`
+7. Run `systemctl --user daemon-reload`, then start (or restart) `bookmark-pod.service`
 8. Poll `GET /ready` and report success when the API is up
 
 Re-running `install.sh` is safe — it is idempotent.
@@ -405,25 +406,38 @@ All tables carry `archived_at DATETIME NULL`. `NULL` = active. "Deleting" sets `
 
 ## Scripts
 
-All scripts live in `scripts/` and are run from the **repo root**. Every script uses `set -euo pipefail` with colour-coded output (cyan = info, green = success, yellow = warning, red = error).
+All scripts live in `scripts/`, work from any directory (they `cd` to the repo root), use `set -euo pipefail` and support `-h`/`--help`. Shared names, ports and labels live in `scripts/common.sh`. Everything the repo creates is labelled `app=bookmark-manager` and `bookmark-manager.instance=<instance>`.
 
 | Script | Args | Description |
 |---|---|---|
-| `install.sh` | — | Full first-time install: build image, deploy Quadlet, start pod, wait for readiness |
-| `uninstall.sh` | — | Stop services, remove Quadlet files, interactively confirm before removing image or data |
+| `install.sh` | `[--no-start]` | Check prerequisites, build the image, install the Quadlet units, start the pod, wait for readiness |
+| `build.sh` | `[--api] [--test] [--e2e] [--all]` | Build the API runtime, API test and Playwright images |
+| `uninstall.sh` | `[--purge] [--remove-quadlets]` | Remove containers, pods, images, build cache and env copies; keeps volumes and units unless flagged; ends with a leftover check |
 | `rebuild.sh` | — | Rebuild API image and restart `bookmark-api.service`; polls `/ready` until ready |
-| `start.sh` | — | Start the pod (all three containers) |
+| `start.sh` | — | Start the pod (all three containers) and print the URLs |
 | `stop.sh` | — | Stop the pod gracefully |
-| `restart.sh` | `[api\|db\|pma]` | Restart one service or the whole pod |
+| `restart.sh` | `[api\|db\|pma]` | `stop.sh` + `start.sh`, or restart one service |
 | `logs.sh` | `[api\|db\|pma\|all]` | Tail journalctl logs; defaults to `api` |
 | `status.sh` | — | Show `systemctl --user status` for all services |
-| `dev.sh` | — | Run API locally via `bun run dev` (watch mode, no container) |
+| `dev.sh` | `[--down]` | Install a separate dev instance in containers (`JOB=dev`, port 11660) |
 | `backup.sh` | — | Dump MariaDB to `backups/bookmark_YYYY-MM-DD_HHMMSS.sql.gz` |
 | `verify-backup.sh` | `--source script\|api` / `--file <path>` | Validate and test-restore a backup dump |
-| `test-integration.sh` | — | Run the Bun integration suite against the running pod DB |
-| `test-e2e.sh` | `[playwright args]` | Run the Playwright E2E suite (API + Web UI + extension) |
+| `test-integration.sh` | `[--no-build] [--keep]` | Bun integration suite + backup/restore check in a throwaway pod |
+| `test-e2e.sh` | `[--installed] [-- playwright args]` | Playwright E2E suite in a container, against a throwaway pod |
 | `import-library-categories.sh` | `[--dry-run\|--apply] [--keep-stage-db]` | Bulk-import library categories/sub-categories from a seed SQL file |
 | `import-library-sub-subcategories.sh` | `[--dry-run\|--apply]` | Bulk-import level-3 sub-sub-categories from the same seed SQL file |
+
+### Job instances (`JOB` / `PORT_OFFSET`)
+
+Every script takes `JOB=<slug>` and `PORT_OFFSET=<n>` from the environment. With `JOB` set, every name gets the suffix `-<slug>` (pod `systemd-bookmark-<slug>`, units, containers, images, volume, env dir) and the published ports move by `PORT_OFFSET`. A job instance runs next to the real one and never touches its data:
+
+```bash
+JOB=feature-x PORT_OFFSET=2000 ./scripts/install.sh      # API on 13650, phpMyAdmin on 13651
+JOB=feature-x PORT_OFFSET=2000 ./scripts/test-e2e.sh --installed
+JOB=feature-x PORT_OFFSET=2000 ./scripts/uninstall.sh --purge --remove-quadlets
+```
+
+A job instance gets its own `api/.env.job-<slug>` with random secrets, and its pod does not start at boot.
 
 See [`scripts/README.md`](scripts/README.md) for full per-script documentation.
 
@@ -433,7 +447,11 @@ See [`scripts/README.md`](scripts/README.md) for full per-script documentation.
 
 ## Bun Scripts (in `api/`)
 
-Run these from the `api/` directory.
+These are the `package.json` scripts. Run them inside the API test image, not on the host (`./scripts/build.sh --test` builds it):
+
+```bash
+podman run --rm localhost/bookmark-api-test:latest bun run <script>
+```
 
 | Command | Description |
 |---|---|
@@ -452,11 +470,15 @@ Run these from the `api/` directory.
 **Schema changes workflow:**
 
 ```bash
-# 1. Edit api/src/db/schema.ts
-# 2. Generate the migration
-cd api && bun run db:generate
+# 1. Edit api/src/db/schema.ts, then rebuild the test image
+./scripts/build.sh --test
+# 2. Generate the migration in a container and copy it out
+podman create --name bm-gen localhost/bookmark-api-test:latest bun run db:generate
+podman start -a bm-gen
+podman cp bm-gen:/app/src/db/migrations/. api/src/db/migrations/
+podman rm bm-gen
 # 3. Rebuild and restart (migrations run automatically on container start)
-cd .. && ./scripts/rebuild.sh
+./scripts/rebuild.sh
 ```
 
 ---
@@ -467,28 +489,31 @@ cd .. && ./scripts/rebuild.sh
 
 ### Integration tests (Bun)
 
-Fast tests that run inside a temporary container joined to the running pod, exercising MariaDB directly:
+The source is copied into a test image (`api/Containerfile`, target `test`). The tests run in a throwaway pod `bookmark-it<suffix>` with its own MariaDB and volume. The real pod is never used. After `bun test`, the script migrates a fresh database, dumps it with `mariadb-dump`, restores it into a temporary database and checks the core tables.
 
 ```bash
 ./scripts/test-integration.sh
+./scripts/test-integration.sh -- src/tests/health.integration.test.ts   # one file
 ```
 
 ### E2E tests (Playwright)
 
-Full end-to-end suite covering the REST API, Web UI, Chrome extension options page, and popup. Requires the pod to be running.
+Full end-to-end suite covering the REST API, Web UI, Chrome extension options page, and popup. Playwright runs in its own image (`e2e/Containerfile`, based on the official Playwright image, with `xvfb` for the extension tests). By default it runs against a throwaway pod `bookmark-e2e<suffix>` with a fresh DB, API and random token.
 
 ```bash
 # Full suite
-API_TOKEN=<your-token> ./scripts/test-e2e.sh
+./scripts/test-e2e.sh
 
-# API smoke only (fastest — no extension required)
-API_TOKEN=<your-token> ./scripts/test-e2e.sh --project=api-smoke
+# API smoke only (fastest)
+./scripts/test-e2e.sh -- --project=api-smoke
 
-# Headed mode (watch the browser)
-API_TOKEN=<your-token> ./scripts/test-e2e.sh --headed
+# Against an installed job instance instead of a throwaway pod
+JOB=feature-x ./scripts/test-e2e.sh --installed
 ```
 
-If `API_TOKEN` is not set, all token-gated tests are automatically **skipped** (not failed). The health and auth-guard tests always run.
+The suite writes data, so `--installed` refuses the main instance unless you pass `--allow-main`. The HTML report is copied to `e2e/playwright-report/`.
+
+The same two scripts run in GitHub Actions (`.github/workflows/tests.yml`) on every push and pull request.
 
 See [`e2e/README.md`](e2e/README.md) for full E2E documentation.
 
@@ -597,22 +622,18 @@ Reads level-3 entries from the same seed file and maps them to live sub-categori
 |---|---|---|---|
 | `bookmark.pod` | — | — | Pod definition |
 | `bookmark-api.container` | `localhost/bookmark-api:latest` | `127.0.0.1:11650` | Localhost only |
-| `bookmark-db.container` | `docker.io/mariadb:11` | *(pod-internal)* | Not exposed to host |
-| `bookmark-pma.container` | `docker.io/phpmyadmin:5` | `127.0.0.1:11651` | Localhost only |
+| `bookmark-db.container` | `docker.io/library/mariadb:11.8` (LTS) | *(pod-internal)* | Not exposed to host |
+| `bookmark-pma.container` | `docker.io/library/phpmyadmin:5.2` | `127.0.0.1:11651` | Localhost only |
 
 All containers share the pod network. MariaDB is reachable within the pod at `127.0.0.1:3306`.
 
 ### Quadlet unit files
 
-Canonical copies live in `quadlet/` (version-controlled). `scripts/install.sh` copies them to `~/.config/containers/systemd/`.
+Canonical copies live in `quadlet/` (version-controlled). `scripts/install.sh` renders them into `~/.config/containers/systemd/` (with suffixed names and offset ports for a job instance).
 
 ### DB data volume
 
-```
-~/.local/share/bookmark-manager/prod-db
-```
-
-Created by `install.sh`. Never removed automatically — `uninstall.sh` asks for explicit confirmation before deleting it.
+The named Podman volume `bookmark-db-data`, defined by `quadlet/bookmark-db.volume`. `uninstall.sh` keeps it unless you pass `--purge`.
 
 ### Boot persistence
 
@@ -621,6 +642,8 @@ loginctl enable-linger $USER
 ```
 
 Run once per user to enable auto-start without an interactive session.
+
+The pod allows up to 10 restart attempts in 5 minutes, so a boot where the rootless network (pasta) starts before the host network is up recovers on its own. If it still fails on your machine, you can make the user manager wait for the network yourself. This is an optional manual step outside this repo and needs root, so the scripts don't do it: add a drop-in for `user@<uid>.service` with `After=network-online.target` and `Wants=network-online.target`.
 
 ### Environment files
 
@@ -688,7 +711,8 @@ bookmarkManager/
 │   │   │   ├── categories.html   # Category manager (served at /manage-categories)
 │   │   │   └── tags.html         # Tag manager (served at /manage-tags)
 │   │   └── smoke/                # No-DB health smoke test
-│   ├── Dockerfile
+│   ├── Containerfile             # runtime + test targets
+│   ├── entrypoint.sh             # migrate, then exec the server
 │   ├── healthcheck.mjs           # Container healthcheck (reads $API_PORT)
 │   ├── drizzle.config.ts
 │   ├── package.json
@@ -703,6 +727,7 @@ bookmarkManager/
 │   ├── lib/                      # storage.js, validate.js
 │   └── assets/icons/
 ├── e2e/                          # Playwright E2E test suite
+│   ├── Containerfile             # Playwright test image
 │   ├── playwright.config.ts
 │   ├── global-setup.ts
 │   ├── fixtures.ts
@@ -713,11 +738,15 @@ bookmarkManager/
 │       └── popup.spec.ts         # Extension popup tests
 ├── quadlet/                      # Quadlet unit files (version-controlled)
 │   ├── bookmark.pod
+│   ├── bookmark-db.volume
 │   ├── bookmark-api.container
 │   ├── bookmark-db.container
 │   └── bookmark-pma.container
+├── .github/workflows/tests.yml   # CI: containerised integration + E2E tests
 ├── scripts/                      # Lifecycle and utility scripts
-│   ├── install.sh
+│   ├── common.sh                 # shared names, ports, labels, JOB/PORT_OFFSET
+│   ├── lib/test-pod.sh           # throwaway test-pod helpers
+│   ├── install.sh / build.sh
 │   ├── uninstall.sh
 │   ├── rebuild.sh
 │   ├── start.sh / stop.sh / restart.sh
@@ -742,15 +771,15 @@ bookmarkManager/
 
 | Symptom | Fix |
 |---|---|
-| Port `11650` or `11651` busy | Edit `quadlet/bookmark.pod`, change `PublishPort`, re-run `./scripts/install.sh` |
+| Port `11650` or `11651` busy | Edit `quadlet/bookmark.pod`, change `PublishPort`, re-run `./scripts/install.sh` (for a second instance, use `JOB`/`PORT_OFFSET` instead) |
 | API can't reach DB | Check `api/.env` — `DB_PASSWORD` must match `MARIADB_PASSWORD`; `DB_HOST` must be `127.0.0.1`; re-run `./scripts/install.sh` to regenerate split env files |
 | Extension gets `401` errors | Open Options → paste the value of `API_TOKEN` from `api/.env` into the **API Token** field |
 | API returns `503` on all requests | `API_TOKEN` is unset or still `change_me_please` — set a strong random value in `api/.env` and re-run `./scripts/install.sh` |
 | `/backup` returns `503` | `BACKUP_TOKEN` is unset or still `change_me_please` — same fix as above |
 | Extension can't reach API | Verify base URL in Options; check `host_permissions` in `extension/manifest.json` |
-| Services not starting at boot | Run `loginctl enable-linger $USER`. If pasta fails before the network is up, run `sudo ./scripts/install-after-network.sh` |
+| Services not starting at boot | Run `loginctl enable-linger $USER`. See [Boot persistence](#boot-persistence) if pasta fails before the network is up |
 | Import script aborts on preflight | Fix the reported duplicate or missing-parent condition in the seed file or live DB before re-running |
-| `bun run db:generate` produces no output | Schema in `api/src/db/schema.ts` matches the last migration — no change needed |
+| `db:generate` produces no output | Schema in `api/src/db/schema.ts` matches the last migration — no change needed |
 
 ---
 

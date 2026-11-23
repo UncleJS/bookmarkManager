@@ -64,7 +64,13 @@ loginctl enable-linger $USER
 
 ## Bun Scripts
 
-Run from the `api/` directory.
+These are the `package.json` scripts. Don't run them on the host: run them in the API test image (`./scripts/build.sh --test`), for example:
+
+```bash
+podman run --rm localhost/bookmark-api-test:latest bun run smoke
+```
+
+Tests run through `./scripts/test-integration.sh` and `./scripts/test-e2e.sh` (throwaway pods).
 
 | Command | Description |
 |---|---|
@@ -83,9 +89,14 @@ Run from the `api/` directory.
 **Schema changes workflow:**
 
 ```bash
-# 1. Edit api/src/db/schema.ts
-cd api && bun run db:generate
-cd .. && ./scripts/rebuild.sh   # migrations run automatically on container start
+# 1. Edit api/src/db/schema.ts, then generate the migration in a container
+./scripts/build.sh --test
+podman create --name bm-gen localhost/bookmark-api-test:latest bun run db:generate
+podman start -a bm-gen
+podman cp bm-gen:/app/src/db/migrations/. api/src/db/migrations/
+podman rm bm-gen
+# 2. Rebuild and restart (migrations run automatically on container start)
+./scripts/rebuild.sh
 ```
 
 ---
@@ -117,7 +128,8 @@ api/
 │   │   └── tags.html           # Tag manager (served at /manage-tags)
 │   └── smoke/
 │       └── health.ts           # No-DB smoke test
-├── Dockerfile
+├── Containerfile               # runtime + test targets
+├── entrypoint.sh               # migrate, then exec the server
 ├── healthcheck.mjs             # Container healthcheck (reads $API_PORT)
 ├── drizzle.config.ts
 ├── package.json
