@@ -1,41 +1,27 @@
 #!/usr/bin/env bash
 # =============================================================================
-# scripts/logs.sh — Tail journalctl logs for Bookmark Manager services.
-#
-# Usage:
-#   ./scripts/logs.sh              # tail API logs (default)
-#   ./scripts/logs.sh api          # tail bookmark-api logs
-#   ./scripts/logs.sh db           # tail bookmark-db logs
-#   ./scripts/logs.sh pma          # tail bookmark-pma logs
-#   ./scripts/logs.sh all          # tail all three services together
+# scripts/logs.sh — Follow the journal of Bookmark Manager services.
 # =============================================================================
 set -euo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
 
-TARGET="${1:-api}"
+usage() {
+  cat <<EOF2
+Usage: [JOB=<slug>] scripts/logs.sh [api|db|pma|all]
 
-RED='\033[0;31m'; CYAN='\033[0;36m'; NC='\033[0m'
-info()  { echo -e "${CYAN}[logs]${NC} $*"; }
-error() { echo -e "${RED}[logs]${NC} $*" >&2; }
+Follow journalctl --user for one service (default: api) or all of them.
 
-case "${TARGET}" in
-  api)
-    info "Tailing bookmark-api logs (Ctrl+C to exit)..."
-    exec journalctl --user -u bookmark-api -f
-    ;;
-  db)
-    info "Tailing bookmark-db logs (Ctrl+C to exit)..."
-    exec journalctl --user -u bookmark-db -f
-    ;;
-  pma)
-    info "Tailing bookmark-pma logs (Ctrl+C to exit)..."
-    exec journalctl --user -u bookmark-pma -f
-    ;;
-  all)
-    info "Tailing all bookmark service logs (Ctrl+C to exit)..."
-    exec journalctl --user -u bookmark-api -u bookmark-db -u bookmark-pma -f
-    ;;
-  *)
-    error "Unknown target '${TARGET}'. Valid options: api (default) | db | pma | all"
-    exit 1
-    ;;
+  -h, --help   show this help
+EOF2
+}
+
+case "${1:-api}" in
+  -h|--help) usage; exit 0 ;;
+  api) units=(-u "${API_SERVICE}") ;;
+  db)  units=(-u "${DB_SERVICE}") ;;
+  pma) units=(-u "${PMA_SERVICE}") ;;
+  all) units=(-u "${POD_SERVICE}" -u "${API_SERVICE}" -u "${DB_SERVICE}" -u "${PMA_SERVICE}") ;;
+  *) error "Unknown target '$1'."; usage >&2; exit 2 ;;
 esac
+info "Following ${units[*]} (Ctrl+C to exit) ..."
+exec journalctl --user "${units[@]}" -f

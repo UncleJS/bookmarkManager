@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-ENV_FILE="${REPO_ROOT}/api/.env.api"
-FALLBACK_ENV_FILE="${REPO_ROOT}/api/.env"
+source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
+FALLBACK_ENV_FILE="${ENV_FILE}"
+ENV_FILE="${API_ENV_FILE}"
 SEED_FILE="${REPO_ROOT}/backups/library_categories_schema_seed.sql"
 MODE="dry-run"
 
@@ -20,6 +20,13 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --dry-run) MODE="dry-run"; shift ;;
     --apply) MODE="apply"; shift ;;
+    -h|--help)
+      echo "Usage: [JOB=<slug>] scripts/import-library-sub-subcategories.sh [--dry-run|--apply]"
+      echo ""
+      echo "Stage backups/library_categories_schema_seed.sql and import level-3 sub-subcategories."
+      echo "  --dry-run  stage and report only (default)"
+      echo "  --apply    write the sub-subcategories"
+      exit 0 ;;
     *) error "Unknown argument: $1"; exit 1 ;;
   esac
 done
@@ -31,17 +38,17 @@ fi
 DB_USER="$(load_env_value "${ENV_FILE}" DB_USER)"
 DB_PASSWORD="$(load_env_value "${ENV_FILE}" DB_PASSWORD)"
 DB_NAME="$(load_env_value "${ENV_FILE}" DB_NAME)"
-DB_ROOT_PASSWORD="$(load_env_value "${REPO_ROOT}/api/.env" MARIADB_ROOT_PASSWORD)"
+DB_ROOT_PASSWORD="$(load_env_value "${FALLBACK_ENV_FILE}" MARIADB_ROOT_PASSWORD)"
 STAGE_DB="library_subsub_import_$(date +%Y%m%d_%H%M%S)_$RANDOM"
 
 cleanup() {
-  podman exec bookmark-db mariadb --user=root --password="${DB_ROOT_PASSWORD}" --execute="DROP DATABASE IF EXISTS \`${STAGE_DB}\`" >/dev/null 2>&1 || true
+  podman exec "${DB_CONTAINER}" mariadb --user=root --password="${DB_ROOT_PASSWORD}" --execute="DROP DATABASE IF EXISTS \`${STAGE_DB}\`" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
 
 info "Creating staging database ${STAGE_DB}"
-podman exec bookmark-db mariadb --user=root --password="${DB_ROOT_PASSWORD}" --execute="CREATE DATABASE \`${STAGE_DB}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"
-podman exec -i bookmark-db mariadb --user=root --password="${DB_ROOT_PASSWORD}" "${STAGE_DB}" < "${SEED_FILE}"
+podman exec "${DB_CONTAINER}" mariadb --user=root --password="${DB_ROOT_PASSWORD}" --execute="CREATE DATABASE \`${STAGE_DB}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"
+podman exec -i "${DB_CONTAINER}" mariadb --user=root --password="${DB_ROOT_PASSWORD}" "${STAGE_DB}" < "${SEED_FILE}"
 
 SQL_FILE="$(mktemp)"
 cat > "${SQL_FILE}" <<'SQL'
@@ -85,7 +92,7 @@ SET @sql := CONCAT(
 PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 SQL
 sed -i "s/__DB_NAME__/${DB_NAME}/g; s/__STAGE_DB__/${STAGE_DB}/g" "${SQL_FILE}"
-podman exec -i bookmark-db mariadb --user=root --password="${DB_ROOT_PASSWORD}" --table "${DB_NAME}" < "${SQL_FILE}"
+podman exec -i "${DB_CONTAINER}" mariadb --user=root --password="${DB_ROOT_PASSWORD}" --table "${DB_NAME}" < "${SQL_FILE}"
 rm -f "${SQL_FILE}"
 
 if [[ "${MODE}" == "dry-run" ]]; then
@@ -117,7 +124,7 @@ SELECT 'updated_sub_subcategories' AS metric, @updated_rows AS value
 UNION ALL SELECT 'inserted_sub_subcategories', @inserted_rows;
 SQL
 sed -i "s/__DB_NAME__/${DB_NAME}/g; s/__STAGE_DB__/${STAGE_DB}/g" "${APPLY_SQL}"
-podman exec -i bookmark-db mariadb --user=root --password="${DB_ROOT_PASSWORD}" --table "${DB_NAME}" < "${APPLY_SQL}"
+podman exec -i "${DB_CONTAINER}" mariadb --user=root --password="${DB_ROOT_PASSWORD}" --table "${DB_NAME}" < "${APPLY_SQL}"
 rm -f "${APPLY_SQL}"
 
 info "Import complete"

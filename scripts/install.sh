@@ -1,53 +1,57 @@
 #!/usr/bin/env bash
 # =============================================================================
-# scripts/install.sh — Full install for Bookmark Manager
+# scripts/install.sh — Install Bookmark Manager as rootless Podman Quadlet units.
 #
 # Steps:
-#   1. Verify we're at repo root
-#   2. Check / bootstrap api/.env
-#   3. Generate split env files per service
-#   4. Verify podman is available
-#   5. Pull base images
-#   6. Build localhost/bookmark-api:latest
-#   7. Create DB data volume directory
-#   8. Copy Quadlet unit files into ~/.config/containers/systemd/
-#   9. systemctl --user daemon-reload
-#  10. Start bookmark-pod.service (Quadlet WantedBy handles boot start)
-#  11. Wait for API readiness
-#  12. Print service URLs
+#   1. Check prerequisites (rootless podman, systemd user session)
+#   2. Check api/.env (job instances get a generated env file)
+#   3. Split it into per-service env files, install them (mode 600) under
+#      ~/.config/bookmark-manager<suffix>/
+#   4. Pull the pinned base images, build the API image (scripts/build.sh)
+#   5. Render quadlet/* into ~/.config/containers/systemd/ (names suffixed
+#      and ports offset when JOB / PORT_OFFSET are set), daemon-reload
+#   6. Start (or restart) the pod and wait for the API (unless --no-start)
 # =============================================================================
 set -euo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
 
-REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-QUADLET_SRC="${REPO_ROOT}/quadlet"
-QUADLET_DEST="${HOME}/.config/containers/systemd"
-ENV_INSTALL_DIR="${HOME}/.config/bookmark-manager"
-ENV_FILE="${REPO_ROOT}/api/.env"
-ENV_EXAMPLE="${REPO_ROOT}/api/.env.example"
-API_ENV_FILE="${REPO_ROOT}/api/.env.api"
-DB_ENV_FILE="${REPO_ROOT}/api/.env.db"
-PMA_ENV_FILE="${REPO_ROOT}/api/.env.pma"
-DB_VOLUME_NAME="bookmark-db-data"
+usage() {
+  cat <<EOF
+Usage: [JOB=<slug>] [PORT_OFFSET=<n>] scripts/install.sh [--no-start]
+
+Build the images, install the Quadlet units for this instance and start it.
+
+  --no-start   install only; don't start the pod
+  -h, --help   show this help
+
+Main instance:  reads api/.env (copied from api/.env.example on first run;
+                edit it, then run install again).
+Job instance:   JOB=<slug> reads api/.env.job-<slug>, generated with random
+                secrets if missing. Names get the suffix -<slug>, published
+                ports get +PORT_OFFSET, and the pod does not start at boot.
+EOF
+}
+
+START=1
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --no-start) START=0 ;;
+    -h|--help) usage; exit 0 ;;
+    *) error "Unknown argument: $1"; usage >&2; exit 2 ;;
+  esac
+  shift
+done
+
 OLD_DB_VOLUME_DIR="${HOME}/.local/share/bookmark-manager/prod-db"
-READY_URL="http://localhost:11650/ready"
-MAX_WAIT=30
-
-# ---- colours -----------------------------------------------------------------
-RED='\033[0;31m'; YELLOW='\033[1;33m'; GREEN='\033[0;32m'; CYAN='\033[0;36m'; NC='\033[0m'
-info()    { echo -e "${CYAN}[install]${NC} $*"; }
-success() { echo -e "${GREEN}[install]${NC} $*"; }
-warn()    { echo -e "${YELLOW}[install]${NC} $*"; }
-error()   { echo -e "${RED}[install]${NC} $*" >&2; }
 
 write_env_file() {
-  local source_file="$1"
-  local target_file="$2"
+  local source_file="$1" target_file="$2"
   shift 2
   : > "${target_file}"
-
+  chmod 600 "${target_file}"
+  local key line
   for key in "$@"; do
-    local line
-    line="$(grep -E "^${key}=" "${source_file}" || true)"
+    line="$(grep -E "^${key}=" "${source_file}" | tail -n1 || true)"
     if [[ -z "${line}" ]]; then
       error "Required key '${key}' missing from ${source_file}."
       exit 1
@@ -56,145 +60,131 @@ write_env_file() {
   done
 }
 
-# ---- 1. repo root check ------------------------------------------------------
-if [[ ! -d "${REPO_ROOT}/api" || ! -d "${REPO_ROOT}/quadlet" ]]; then
-  error "Must be run from the bookmarkManager repo root."
-  error "Expected: api/ and quadlet/ directories to exist."
+# Generate a job env file from the example with fresh random secrets.
+generate_job_env() {
+  local db_pw root_pw
+  db_pw="$(random_secret 24)"; root_pw="$(random_secret 24)"
+  (umask 077; sed \
+    -e "s|^DB_PASSWORD=.*|DB_PASSWORD=${db_pw}|" \
+    -e "s|^MARIADB_PASSWORD=.*|MARIADB_PASSWORD=${db_pw}|" \
+    -e "s|^MARIADB_ROOT_PASSWORD=.*|MARIADB_ROOT_PASSWORD=${root_pw}|" \
+    -e "s|^API_TOKEN=.*|API_TOKEN=$(random_secret 32)|" \
+    -e "s|^BACKUP_TOKEN=.*|BACKUP_TOKEN=$(random_secret 32)|" \
+    -e "s|^PMA_ABSOLUTE_URI=.*|PMA_ABSOLUTE_URI=${PMA_URL}/|" \
+    "${ENV_EXAMPLE}" > "${ENV_FILE}")
+}
+
+# Render one repo unit into the installed unit for this instance.
+render_unit() {
+  local src="$1" dest="$2"
+  local -a expr=(
+    -e "s|bookmark-pod\.service|${POD_SERVICE}|g"
+    -e "s|bookmark-db-volume\.service|${VOLUME_SERVICE}|g"
+    -e "s|bookmark-db\.service|${DB_SERVICE}|g"
+    -e "s|bookmark-api\.service|${API_SERVICE}|g"
+    -e "s|bookmark-pma\.service|${PMA_SERVICE}|g"
+    -e "s|^Pod=bookmark\.pod$|Pod=bookmark${SUFFIX}.pod|"
+    -e "s|^Volume=bookmark-db\.volume:|Volume=bookmark-db${SUFFIX}.volume:|"
+    -e "s|^VolumeName=bookmark-db-data$|VolumeName=${DB_VOLUME}|"
+    -e "s|^ContainerName=bookmark-api$|ContainerName=${API_CONTAINER}|"
+    -e "s|^ContainerName=bookmark-db$|ContainerName=${DB_CONTAINER}|"
+    -e "s|^ContainerName=bookmark-pma$|ContainerName=${PMA_CONTAINER}|"
+    -e "s|^Image=localhost/bookmark-api:latest$|Image=${API_IMAGE}|"
+    -e "s|%h/\.config/bookmark-manager/|%h/.config/bookmark-manager${SUFFIX}/|"
+    -e "s|^Label=bookmark-manager\.instance=bookmark$|Label=${INSTANCE_LABEL}|"
+    -e "s|^PublishPort=127\.0\.0\.1:11650:${API_CONTAINER_PORT}$|PublishPort=127.0.0.1:${API_HOST_PORT}:${API_CONTAINER_PORT}|"
+    -e "s|^PublishPort=127\.0\.0\.1:11651:${PMA_CONTAINER_PORT}$|PublishPort=127.0.0.1:${PMA_HOST_PORT}:${PMA_CONTAINER_PORT}|"
+  )
+  if [[ -n "${JOB}" ]]; then
+    expr+=(
+      -e "s|^\(Description=.*\)$|\1 (job ${JOB})|"
+      # job pods are started by hand, never at boot
+      -e "/^WantedBy=default\.target$/d"
+    )
+  fi
+  sed "${expr[@]}" "${src}" > "${dest}"
+}
+
+describe_instance
+
+# ---- 1. prerequisites --------------------------------------------------------
+command -v podman >/dev/null || { error "podman not found on PATH."; exit 1; }
+if [[ "$(podman info --format '{{.Host.Security.Rootless}}')" != "true" ]]; then
+  error "podman is not running rootless. Run this script as your normal user."
   exit 1
 fi
+if ! systemctl --user show-environment >/dev/null 2>&1; then
+  error "No systemd user session (systemctl --user). Log in normally or run: loginctl enable-linger \$USER"
+  exit 1
+fi
+info "podman: $(podman --version)"
 
-info "Repo root: ${REPO_ROOT}"
-
-# ---- 2. .env check -----------------------------------------------------------
+# ---- 2. env file -------------------------------------------------------------
 if [[ ! -f "${ENV_FILE}" ]]; then
-  if [[ ! -f "${ENV_EXAMPLE}" ]]; then
-    error "Neither api/.env nor api/.env.example found. Cannot continue."
+  [[ -f "${ENV_EXAMPLE}" ]] || { error "api/.env.example not found."; exit 1; }
+  if [[ -n "${JOB}" ]]; then
+    generate_job_env
+    success "Generated ${ENV_FILE#"${REPO_ROOT}"/} with random secrets."
+  else
+    (umask 077; cp "${ENV_EXAMPLE}" "${ENV_FILE}")
+    warn "api/.env was missing and has been copied from api/.env.example."
+    warn "ACTION REQUIRED: set real passwords and tokens in ${ENV_FILE}, then run install again."
     exit 1
   fi
-  warn "api/.env not found — copying from api/.env.example"
-  cp "${ENV_EXAMPLE}" "${ENV_FILE}"
-  echo ""
-  warn "================================================================"
-  warn "  ACTION REQUIRED: edit api/.env and set real passwords before"
-  warn "  running install again."
-  warn ""
-  warn "  nano ${ENV_FILE}"
-  warn "================================================================"
-  echo ""
-  exit 1
 fi
+info "Env file: ${ENV_FILE#"${REPO_ROOT}"/}"
 
-info "api/.env found."
-
-# ---- 3. split env generation -------------------------------------------------
-info "Generating per-service env files..."
+# ---- 3. split env files ------------------------------------------------------
 write_env_file "${ENV_FILE}" "${API_ENV_FILE}" \
   API_PORT LOG_LEVEL DB_HOST DB_PORT DB_USER DB_PASSWORD DB_NAME API_TOKEN BACKUP_TOKEN
 write_env_file "${ENV_FILE}" "${DB_ENV_FILE}" \
   MARIADB_DATABASE MARIADB_USER MARIADB_PASSWORD MARIADB_ROOT_PASSWORD
 write_env_file "${ENV_FILE}" "${PMA_ENV_FILE}" \
   PMA_HOST PMA_PORT PMA_ABSOLUTE_URI
-success "Generated api/.env.api, api/.env.db, and api/.env.pma"
-
-info "Copying split env files to ${ENV_INSTALL_DIR}/"
 mkdir -p "${ENV_INSTALL_DIR}"
+chmod 700 "${ENV_INSTALL_DIR}"
 install -m 600 "${API_ENV_FILE}" "${ENV_INSTALL_DIR}/env.api"
-install -m 600 "${DB_ENV_FILE}" "${ENV_INSTALL_DIR}/env.db"
+install -m 600 "${DB_ENV_FILE}"  "${ENV_INSTALL_DIR}/env.db"
 install -m 600 "${PMA_ENV_FILE}" "${ENV_INSTALL_DIR}/env.pma"
-success "Installed env.api, env.db, and env.pma"
+success "Installed env.api, env.db, env.pma into ${ENV_INSTALL_DIR}/"
 
-# ---- 4. podman check ---------------------------------------------------------
-if ! command -v podman &>/dev/null; then
-  error "podman not found on PATH. Install Podman before continuing."
-  exit 1
-fi
-info "podman: $(podman --version)"
+# ---- 4. images ---------------------------------------------------------------
+info "Pulling ${MARIADB_IMAGE} and ${PMA_IMAGE} ..."
+podman pull -q "${MARIADB_IMAGE}" >/dev/null
+podman pull -q "${PMA_IMAGE}" >/dev/null
+"${REPO_ROOT}/scripts/build.sh" --api
 
-# ---- 5. pull base images -----------------------------------------------------
-info "Pulling base images..."
-podman pull docker.io/mariadb:11
-podman pull docker.io/phpmyadmin:5
-
-# ---- 6. build API image ------------------------------------------------------
-info "Building localhost/bookmark-api:latest ..."
-podman build -t localhost/bookmark-api:latest "${REPO_ROOT}/api"
-success "API image built."
-
-# ---- 7. DB named volume + optional data migration ----------------------------
-if ! podman volume exists "${DB_VOLUME_NAME}" 2>/dev/null; then
-  info "Creating Podman volume: ${DB_VOLUME_NAME}"
-  podman volume create "${DB_VOLUME_NAME}"
-  success "Volume created: ${DB_VOLUME_NAME}"
-else
-  info "Podman volume already exists: ${DB_VOLUME_NAME}"
-fi
-
-# Migrate data from old bind-mount path if it has content
-if [[ -d "${OLD_DB_VOLUME_DIR}" ]] && [[ -n "$(ls -A "${OLD_DB_VOLUME_DIR}" 2>/dev/null)" ]]; then
-  VOLUME_MOUNTPOINT="$(podman volume inspect "${DB_VOLUME_NAME}" --format '{{.Mountpoint}}')"
-  if [[ -z "$(ls -A "${VOLUME_MOUNTPOINT}" 2>/dev/null)" ]]; then
-    warn "Old bind-mount data found at: ${OLD_DB_VOLUME_DIR}"
-    info "Migrating data into Podman volume ${DB_VOLUME_NAME} ..."
+# Legacy: move data from the old bind-mount directory into the named volume
+# (main instance only; runs once, while the volume is still empty).
+if [[ -z "${JOB}" && -d "${OLD_DB_VOLUME_DIR}" && -n "$(ls -A "${OLD_DB_VOLUME_DIR}" 2>/dev/null)" ]]; then
+  podman volume exists "${DB_VOLUME}" || \
+    podman volume create --label "${APP_LABEL}" --label "${INSTANCE_LABEL}" "${DB_VOLUME}" >/dev/null
+  VOLUME_MOUNTPOINT="$(podman volume inspect "${DB_VOLUME}" --format '{{.Mountpoint}}')"
+  if [[ -z "$(podman unshare ls -A "${VOLUME_MOUNTPOINT}" 2>/dev/null)" ]]; then
+    warn "Migrating old data from ${OLD_DB_VOLUME_DIR} into volume ${DB_VOLUME} ..."
     podman unshare cp -a "${OLD_DB_VOLUME_DIR}/." "${VOLUME_MOUNTPOINT}/"
-    success "Data migrated to Podman volume."
-    # Rename old directory as a backup
     mv "${OLD_DB_VOLUME_DIR}" "${OLD_DB_VOLUME_DIR}.bak"
-    info "Old directory renamed to: ${OLD_DB_VOLUME_DIR}.bak"
-    info "You may delete it once you have verified the service is healthy."
-  else
-    info "Podman volume already has data — skipping migration."
+    success "Migrated. Old directory kept as ${OLD_DB_VOLUME_DIR}.bak"
   fi
 fi
 
-# ---- 8. copy Quadlet files ---------------------------------------------------
-info "Copying Quadlet unit files to ${QUADLET_DEST}/"
+# ---- 5. Quadlet units --------------------------------------------------------
 mkdir -p "${QUADLET_DEST}"
-cp "${QUADLET_SRC}/bookmark.pod"            "${QUADLET_DEST}/bookmark.pod"
-cp "${QUADLET_SRC}/bookmark-db.volume"      "${QUADLET_DEST}/bookmark-db.volume"
-cp "${QUADLET_SRC}/bookmark-api.container"  "${QUADLET_DEST}/bookmark-api.container"
-cp "${QUADLET_SRC}/bookmark-db.container"   "${QUADLET_DEST}/bookmark-db.container"
-cp "${QUADLET_SRC}/bookmark-pma.container"  "${QUADLET_DEST}/bookmark-pma.container"
-success "Quadlet files copied."
-
-# ---- 9. daemon-reload --------------------------------------------------------
-info "Reloading systemd user daemon..."
-systemctl --user daemon-reload
-success "Daemon reloaded."
-
-# ---- 10. enable + start ------------------------------------------------------
-info "Starting bookmark-pod.service..."
-systemctl --user reset-failed bookmark-pod.service bookmark-api.service bookmark-db.service bookmark-pma.service 2>/dev/null || true
-# restart applies a re-install; it also starts units that are not running
-systemctl --user restart bookmark-pod.service bookmark-db.service bookmark-api.service bookmark-pma.service
-success "bookmark-pod.service started."
-
-# ---- 11. readiness check -----------------------------------------------------
-info "Waiting for API to become ready (up to ${MAX_WAIT}s)..."
-ELAPSED=0
-until curl -sf "${READY_URL}" &>/dev/null; do
-  if [[ ${ELAPSED} -ge ${MAX_WAIT} ]]; then
-    error "API did not become ready within ${MAX_WAIT}s."
-    error "Check logs: ./scripts/logs.sh api"
-    exit 1
-  fi
-  sleep 2
-  ELAPSED=$((ELAPSED + 2))
-  echo -n "."
+for f in "${QUADLET_FILES[@]}"; do
+  render_unit "${QUADLET_SRC}/${f}" "${QUADLET_DEST}/$(installed_unit_name "${f}")"
+  info "  ${QUADLET_DEST}/$(installed_unit_name "${f}")"
 done
-echo ""
-success "API is ready at ${READY_URL} (after ${ELAPSED}s)."
+systemctl --user daemon-reload
+success "Quadlet units installed and systemd reloaded."
 
-# ---- 12. URLs ----------------------------------------------------------------
-echo ""
-success "================================================================"
-success "  Bookmark Manager is running!"
-success ""
-success "  API         http://localhost:11650"
-success "  Swagger UI  http://localhost:11650/docs"
-success "  phpMyAdmin  http://localhost:11651  (login required)"
-success "================================================================"
-echo ""
-info "Useful commands:"
-echo "  ./scripts/status.sh        — service status"
-echo "  ./scripts/logs.sh          — tail API logs"
-echo "  ./scripts/stop.sh          — stop all services"
+# ---- 6. start ----------------------------------------------------------------
+if (( START )); then
+  systemctl --user reset-failed "${ALL_SERVICES[@]}" 2>/dev/null || true
+  if systemctl --user is-active --quiet "${POD_SERVICE}"; then
+    "${REPO_ROOT}/scripts/restart.sh"
+  else
+    "${REPO_ROOT}/scripts/start.sh"
+  fi
+else
+  info "Not started (--no-start). Start with: ${JOB:+JOB=${JOB} PORT_OFFSET=${PORT_OFFSET} }scripts/start.sh"
+fi

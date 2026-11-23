@@ -1,47 +1,32 @@
 #!/usr/bin/env bash
 # =============================================================================
-# scripts/rebuild.sh — Rebuild the API container image and restart the service.
-#
-# Steps:
-#   1. Build localhost/bookmark-api:latest from api/Dockerfile
-#   2. systemctl --user restart bookmark-api.service
-#   3. Wait for readiness check to pass
+# scripts/rebuild.sh — Rebuild the API image and restart only the API.
 # =============================================================================
 set -euo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
 
-REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-HEALTH_URL="http://localhost:11650/ready"
-MAX_WAIT=30   # seconds
+usage() {
+  cat <<EOF2
+Usage: [JOB=<slug>] [PORT_OFFSET=<n>] scripts/rebuild.sh
 
-# ---- colours -----------------------------------------------------------------
-RED='\033[0;31m'; YELLOW='\033[1;33m'; GREEN='\033[0;32m'; CYAN='\033[0;36m'; NC='\033[0m'
-info()    { echo -e "${CYAN}[rebuild]${NC} $*"; }
-success() { echo -e "${GREEN}[rebuild]${NC} $*"; }
-warn()    { echo -e "${YELLOW}[rebuild]${NC} $*"; }
-error()   { echo -e "${RED}[rebuild]${NC} $*" >&2; }
+scripts/build.sh --api, then restart ${API_SERVICE} and wait for
+${API_URL}/ready.
 
-# ---- 1. build ----------------------------------------------------------------
-info "Building localhost/bookmark-api:latest ..."
-podman build -t localhost/bookmark-api:latest "${REPO_ROOT}/api"
-success "Image built."
+  -h, --help   show this help
+EOF2
+}
+case "${1:-}" in
+  -h|--help) usage; exit 0 ;;
+  "") ;;
+  *) error "Unknown argument: $1"; usage >&2; exit 2 ;;
+esac
 
-# ---- 2. restart --------------------------------------------------------------
-info "Restarting bookmark-api.service..."
-systemctl --user restart bookmark-api.service
-success "Service restarted."
-
-# ---- 3. health check ---------------------------------------------------------
-info "Waiting for API to become ready (up to ${MAX_WAIT}s)..."
-ELAPSED=0
-until curl -sf "${HEALTH_URL}" &>/dev/null; do
-  if [[ ${ELAPSED} -ge ${MAX_WAIT} ]]; then
-    error "API did not become ready within ${MAX_WAIT}s."
-    error "Check logs: ./scripts/logs.sh api"
-    exit 1
-  fi
-  sleep 2
-  ELAPSED=$((ELAPSED + 2))
-  echo -n "."
-done
-echo ""
-success "API is ready at ${HEALTH_URL} (after ${ELAPSED}s)."
+"${REPO_ROOT}/scripts/build.sh" --api
+info "Restarting ${API_SERVICE} ..."
+systemctl --user restart "${API_SERVICE}"
+info "Waiting for ${API_URL}/ready (up to 60s) ..."
+if ! wait_for_url "${API_URL}/ready" 60; then
+  error "API did not become ready. Check: ${JOB:+JOB=${JOB} }scripts/logs.sh api"
+  exit 1
+fi
+success "API is ready at ${API_URL}"

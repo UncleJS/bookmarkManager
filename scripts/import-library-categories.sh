@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-ENV_FILE="${REPO_ROOT}/api/.env.api"
-FALLBACK_ENV_FILE="${REPO_ROOT}/api/.env"
+source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
+FALLBACK_ENV_FILE="${ENV_FILE}"
+ENV_FILE="${API_ENV_FILE}"
 SEED_FILE="${REPO_ROOT}/backups/library_categories_schema_seed.sql"
 MODE="dry-run"
 KEEP_STAGE_DB=0
@@ -35,7 +35,7 @@ load_env_value() {
 
 cleanup() {
   if [[ ${KEEP_STAGE_DB} -eq 0 && -n "${STAGE_DB:-}" && -n "${DB_ROOT_PASSWORD:-}" ]]; then
-    podman exec bookmark-db mariadb \
+    podman exec "${DB_CONTAINER}" mariadb \
       --user=root \
       --password="${DB_ROOT_PASSWORD}" \
       --execute="DROP DATABASE IF EXISTS \`${STAGE_DB}\`" >/dev/null 2>&1 || true
@@ -88,26 +88,26 @@ fi
 DB_USER="$(load_env_value "${ENV_FILE}" DB_USER)"
 DB_PASSWORD="$(load_env_value "${ENV_FILE}" DB_PASSWORD)"
 DB_NAME="$(load_env_value "${ENV_FILE}" DB_NAME)"
-DB_ROOT_PASSWORD="$(load_env_value "${REPO_ROOT}/api/.env" MARIADB_ROOT_PASSWORD)"
+DB_ROOT_PASSWORD="$(load_env_value "${FALLBACK_ENV_FILE}" MARIADB_ROOT_PASSWORD)"
 
 if [[ -z "${DB_USER}" || -z "${DB_PASSWORD}" || -z "${DB_NAME}" || -z "${DB_ROOT_PASSWORD}" ]]; then
   error "Missing DB_USER, DB_PASSWORD, DB_NAME, or MARIADB_ROOT_PASSWORD in env files."
   exit 1
 fi
 
-if ! podman ps --format '{{.Names}}' 2>/dev/null | grep -q '^bookmark-db$'; then
-  error "Container 'bookmark-db' is not running. Start it with: ./scripts/start.sh"
+if ! podman ps --format '{{.Names}}' 2>/dev/null | grep -qx "${DB_CONTAINER}"; then
+  error "Container '${DB_CONTAINER}' is not running. Start it with: ./scripts/start.sh"
   exit 1
 fi
 
 info "Creating staging database ${STAGE_DB}"
-podman exec bookmark-db mariadb \
+podman exec "${DB_CONTAINER}" mariadb \
   --user=root \
   --password="${DB_ROOT_PASSWORD}" \
   --execute="CREATE DATABASE \`${STAGE_DB}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"
 
 info "Loading seed into staging database"
-podman exec -i bookmark-db mariadb \
+podman exec -i "${DB_CONTAINER}" mariadb \
   --user=root \
   --password="${DB_ROOT_PASSWORD}" \
   "${STAGE_DB}" < "${SEED_FILE}"
@@ -234,7 +234,7 @@ SQL
 sed -i "s/__DB_NAME__/${DB_NAME}/g; s/__STAGE_DB__/${STAGE_DB}/g" "${SQL_FILE}"
 
 info "Running import preflight"
-PRECHECK_OUTPUT="$(podman exec -i bookmark-db mariadb \
+PRECHECK_OUTPUT="$(podman exec -i "${DB_CONTAINER}" mariadb \
   --user=root \
   --password="${DB_ROOT_PASSWORD}" \
   --table \
@@ -317,7 +317,7 @@ SQL
 sed -i "s/__DB_NAME__/${DB_NAME}/g; s/__STAGE_DB__/${STAGE_DB}/g" "${APPLY_SQL_FILE}"
 
 info "Applying import"
-APPLY_OUTPUT="$(podman exec -i bookmark-db mariadb \
+APPLY_OUTPUT="$(podman exec -i "${DB_CONTAINER}" mariadb \
   --user=root \
   --password="${DB_ROOT_PASSWORD}" \
   --table \
@@ -346,7 +346,7 @@ SQL
 sed -i "s/__DB_NAME__/${DB_NAME}/g" "${VERIFY_SQL_FILE}"
 
 info "Verifying import results"
-podman exec -i bookmark-db mariadb \
+podman exec -i "${DB_CONTAINER}" mariadb \
   --user=root \
   --password="${DB_ROOT_PASSWORD}" \
   --table \

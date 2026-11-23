@@ -11,9 +11,9 @@
 # =============================================================================
 set -euo pipefail
 
-REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-ENV_FILE="${REPO_ROOT}/api/.env.api"
-FALLBACK_ENV_FILE="${REPO_ROOT}/api/.env"
+source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
+FALLBACK_ENV_FILE="${ENV_FILE}"
+ENV_FILE="${API_ENV_FILE}"
 BACKUP_DIR="${REPO_ROOT}/backups"
 
 # ── colours ──────────────────────────────────────────────────────────────────
@@ -22,6 +22,16 @@ info()    { echo -e "${CYAN}[backup]${NC} $*"; }
 success() { echo -e "${GREEN}[backup]${NC} $*"; }
 warn()    { echo -e "${YELLOW}[backup]${NC} $*"; }
 error()   { echo -e "${RED}[backup]${NC} $*" >&2; }
+
+case "${1:-}" in
+  -h|--help)
+    echo "Usage: [JOB=<slug>] scripts/backup.sh"
+    echo ""
+    echo "Dump the instance's database from ${DB_CONTAINER} to backups/bookmark_<date>_<time>.sql.gz."
+    exit 0 ;;
+  "") ;;
+  *) echo "Unknown argument: $1 (see --help)" >&2; exit 2 ;;
+esac
 
 # ── 1. env file ───────────────────────────────────────────────────────────────
 if [[ ! -f "${ENV_FILE}" ]]; then
@@ -46,8 +56,8 @@ if [[ -z "${DB_USER}" || -z "${DB_PASSWORD}" || -z "${DB_NAME}" ]]; then
 fi
 
 # ── 3. container check ────────────────────────────────────────────────────────
-if ! podman ps --format '{{.Names}}' 2>/dev/null | grep -q '^bookmark-db$'; then
-  error "Container 'bookmark-db' is not running."
+if ! podman ps --format '{{.Names}}' 2>/dev/null | grep -qx "${DB_CONTAINER}"; then
+  error "Container '${DB_CONTAINER}' is not running."
   error "Start it with: ./scripts/start.sh"
   exit 1
 fi
@@ -57,9 +67,9 @@ mkdir -p "${BACKUP_DIR}"
 TIMESTAMP="$(date +%Y-%m-%d_%H%M%S)"
 OUT_FILE="${BACKUP_DIR}/bookmark_${TIMESTAMP}.sql.gz"
 
-info "Dumping database '${DB_NAME}' from bookmark-db container..."
+info "Dumping database '${DB_NAME}' from ${DB_CONTAINER} container..."
 
-podman exec bookmark-db \
+podman exec "${DB_CONTAINER}" \
   mariadb-dump \
     --user="${DB_USER}" \
     --password="${DB_PASSWORD}" \

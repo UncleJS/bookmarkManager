@@ -1,105 +1,183 @@
 #!/usr/bin/env bash
 # =============================================================================
-# scripts/uninstall.sh — Remove Bookmark Manager services and optionally
-#                        clean up the image and DB data volume.
+# scripts/uninstall.sh — Remove what Bookmark Manager created to build and run.
 #
-# Steps:
-#   1. Stop bookmark-pod.service
-#   2. Disable bookmark-pod.service
-#   3. Remove Quadlet unit files and ~/.config/bookmark-manager env copies
-#   4. systemctl --user daemon-reload
-#   5. (Interactive) Remove localhost/bookmark-api image?
-#   6. (Interactive) Remove DB data volume?
+# Default: stop the services, reset-failed, remove containers (incl. the
+# throwaway test pods), pods, built images and their build cache, pulled base
+# images no other container uses, networks/secrets, and the installed env
+# copies under ~/.config. Volumes and Quadlet units are KEPT unless:
+#   --purge            also remove the volumes (ALL DATA of this instance)
+#   --remove-quadlets  also remove the installed units, then daemon-reload
+#
+# Ends with a leftover check and exits 1 if anything of this instance remains.
 # =============================================================================
 set -euo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
 
-QUADLET_DEST="${HOME}/.config/containers/systemd"
-ENV_INSTALL_DIR="${HOME}/.config/bookmark-manager"
-DB_VOLUME_NAME="bookmark-db-data"
+usage() {
+  cat <<EOF
+Usage: [JOB=<slug>] scripts/uninstall.sh [--purge] [--remove-quadlets]
 
-# ---- colours -----------------------------------------------------------------
-RED='\033[0;31m'; YELLOW='\033[1;33m'; GREEN='\033[0;32m'; CYAN='\033[0;36m'; NC='\033[0m'
-info()    { echo -e "${CYAN}[uninstall]${NC} $*"; }
-success() { echo -e "${GREEN}[uninstall]${NC} $*"; }
-warn()    { echo -e "${YELLOW}[uninstall]${NC} $*"; }
+Remove instance '${INSTANCE}' without prompting.
 
-# ---- 1. stop -----------------------------------------------------------------
-info "Stopping bookmark-pod.service (if running)..."
-systemctl --user stop bookmark-pod.service 2>/dev/null || true
-success "Stopped."
+  --purge            also delete the volumes (${DB_VOLUME} and test volumes):
+                     ALL bookmark data of this instance is lost. With JOB set,
+                     also deletes the generated api/.env.job-<slug>* files.
+  --remove-quadlets  also delete the installed units from ${QUADLET_DEST}/
+  -h, --help         show this help
 
-# ---- 2. disable --------------------------------------------------------------
-info "Disabling bookmark-pod.service (if enabled)..."
-systemctl --user disable bookmark-pod.service 2>/dev/null || true
-success "Disabled."
+'--purge --remove-quadlets' leaves no trace of the instance on the host.
+EOF
+}
 
-# ---- 3. remove Quadlet files and installed env copies -----------------------
-info "Removing Quadlet unit files..."
-REMOVED=0
-for f in bookmark.pod bookmark-db.volume bookmark-api.container bookmark-db.container bookmark-pma.container; do
-  TARGET="${QUADLET_DEST}/${f}"
-  if [[ -f "${TARGET}" ]]; then
-    rm -f "${TARGET}"
-    info "  Removed: ${TARGET}"
-    REMOVED=$((REMOVED + 1))
-  else
-    warn "  Not found (skipping): ${TARGET}"
-  fi
+PURGE=0; REMOVE_QUADLETS=0
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --purge) PURGE=1 ;;
+    --remove-quadlets) REMOVE_QUADLETS=1 ;;
+    -h|--help) usage; exit 0 ;;
+    *) error "Unknown argument: $1"; usage >&2; exit 2 ;;
+  esac
+  shift
 done
-[[ ${REMOVED} -gt 0 ]] && success "Quadlet files removed." || warn "No Quadlet files found to remove."
 
-info "Removing installed env copies..."
-for f in env.api env.db env.pma; do
-  TARGET="${ENV_INSTALL_DIR}/${f}"
-  if [[ -f "${TARGET}" ]]; then
-    rm -f "${TARGET}"
-    info "  Removed: ${TARGET}"
-  fi
-done
-success "Installed env copies removed (repo api/.env files were kept)."
+# No Podman secrets or networks are created today (env files are used and the
+# pod uses the default network); listed so the leftover check covers them.
+SECRETS=()
+INSTALLED_UNITS=()
+for f in "${QUADLET_FILES[@]}"; do INSTALLED_UNITS+=("${QUADLET_DEST}/$(installed_unit_name "${f}")"); done
+PODS=("${POD_NAME}" "${IT_POD}" "${E2E_POD}")
+CONTAINERS=("${API_CONTAINER}" "${DB_CONTAINER}" "${PMA_CONTAINER}")
 
-# ---- 4. daemon-reload --------------------------------------------------------
-info "Reloading systemd user daemon..."
-systemctl --user daemon-reload
-success "Daemon reloaded."
+describe_instance
+(( PURGE )) && warn "--purge: the volumes of ${INSTANCE} will be deleted."
 
-# ---- 5. remove API image? ----------------------------------------------------
-echo ""
-warn "Remove the API container image 'localhost/bookmark-api:latest'?"
-warn "  (This will require a full rebuild on next install.)"
-read -r -p "  Remove image? [y/N] " REMOVE_IMAGE
-REMOVE_IMAGE="${REMOVE_IMAGE:-N}"
-if [[ "${REMOVE_IMAGE,,}" == "y" ]]; then
-  if podman image exists localhost/bookmark-api:latest 2>/dev/null; then
-    podman rmi localhost/bookmark-api:latest
-    success "Image removed."
-  else
-    warn "Image not found — nothing to remove."
-  fi
-else
-  info "Keeping image (skipped)."
+# ---- 1. stop services, clear failed state ------------------------------------
+info "Stopping services ..."
+systemctl --user stop "${ALL_SERVICES[@]}" 2>/dev/null || true
+systemctl --user reset-failed "${ALL_SERVICES[@]}" 2>/dev/null || true
+
+# ---- 2. containers and pods --------------------------------------------------
+label_containers() { podman ps -a --external --filter "label=${INSTANCE_LABEL}" --format '{{.ID}}'; }
+mapfile -t ids < <(label_containers)
+for c in "${CONTAINERS[@]}"; do podman container exists "${c}" && ids+=("${c}"); done
+if (( ${#ids[@]} )); then
+  info "Removing containers ..."
+  podman rm -f -t 10 "${ids[@]}" >/dev/null 2>&1 || true
+fi
+mapfile -t pods < <(podman pod ps --filter "label=${INSTANCE_LABEL}" --format '{{.ID}}')
+for p in "${PODS[@]}"; do podman pod exists "${p}" && pods+=("${p}"); done
+if (( ${#pods[@]} )); then
+  info "Removing pods (incl. infra containers) ..."
+  podman pod rm -f -t 10 "${pods[@]}" >/dev/null 2>&1 || true
 fi
 
-# ---- 6. remove DB data volume? -----------------------------------------------
-echo ""
-warn "================================================================"
-warn "  WARNING: Removing the DB data volume will PERMANENTLY DELETE"
-warn "  all bookmark data stored in MariaDB."
-warn ""
-warn "  Podman volume: ${DB_VOLUME_NAME}"
-warn "================================================================"
-read -r -p "  Delete DB data volume? [y/N] " REMOVE_DATA
-REMOVE_DATA="${REMOVE_DATA:-N}"
-if [[ "${REMOVE_DATA,,}" == "y" ]]; then
-  if podman volume exists "${DB_VOLUME_NAME}" 2>/dev/null; then
-    podman volume rm "${DB_VOLUME_NAME}"
-    success "DB data volume removed."
+# ---- 3. built images, intermediate layers, build cache -----------------------
+for img in "${BUILT_IMAGES[@]}"; do
+  if podman image exists "${img}"; then
+    podman rmi -f "${img}" >/dev/null && info "Removed image ${img}"
+  fi
+done
+# Intermediate/dangling layers carry the instance label (see the Containerfiles).
+podman image prune -f --filter "label=${INSTANCE_LABEL}" >/dev/null || true
+mapfile -t layers < <(podman images -a --filter "label=${INSTANCE_LABEL}" --format '{{.ID}}' | sort -u)
+(( ${#layers[@]} )) && podman rmi -f "${layers[@]}" >/dev/null 2>&1 || true
+
+# ---- 4. pulled base images, unless another container still uses them ---------
+SKIPPED_IMAGES=()
+for img in "${BASE_IMAGES[@]}"; do
+  podman image exists "${img}" || continue
+  users="$(podman ps -a --external --filter "ancestor=${img}" --format '{{.Names}}' | paste -sd, -)"
+  if [[ -n "${users}" ]]; then
+    SKIPPED_IMAGES+=("${img}")
+    warn "Kept base image ${img}: still used by ${users}"
+  elif podman rmi "${img}" >/dev/null 2>&1; then
+    info "Removed base image ${img}"
   else
-    warn "Volume not found — nothing to remove."
+    SKIPPED_IMAGES+=("${img}")
+    warn "Kept base image ${img}: other images are built on it"
+  fi
+done
+
+# ---- 5. networks and secrets -------------------------------------------------
+mapfile -t nets < <(podman network ls --filter "label=${INSTANCE_LABEL}" --format '{{.Name}}')
+(( ${#nets[@]} )) && podman network rm -f "${nets[@]}" >/dev/null
+for s in "${SECRETS[@]}"; do podman secret exists "${s}" && podman secret rm "${s}" >/dev/null; done
+
+# ---- 6. files under $HOME ----------------------------------------------------
+if [[ -d "${ENV_INSTALL_DIR}" ]]; then
+  rm -rf "${ENV_INSTALL_DIR}"
+  info "Removed ${ENV_INSTALL_DIR}/"
+fi
+
+# ---- 7. volumes (--purge) ----------------------------------------------------
+label_volumes() { podman volume ls --filter "label=${INSTANCE_LABEL}" --format '{{.Name}}'; }
+if (( PURGE )); then
+  mapfile -t vols < <(label_volumes)
+  podman volume exists "${DB_VOLUME}" && vols+=("${DB_VOLUME}")
+  if (( ${#vols[@]} )); then
+    podman volume rm -f "${vols[@]}" >/dev/null
+    info "Removed volumes: $(printf '%s ' "${vols[@]}" | xargs -n1 | sort -u | paste -sd' ' -)"
+  fi
+  if [[ -n "${JOB}" ]]; then
+    rm -f "${ENV_FILE}" "${API_ENV_FILE}" "${DB_ENV_FILE}" "${PMA_ENV_FILE}"
+    info "Removed generated ${ENV_FILE#"${REPO_ROOT}"/}*"
   fi
 else
-  info "Keeping DB data (skipped). Data remains in Podman volume: ${DB_VOLUME_NAME}"
+  podman volume exists "${DB_VOLUME}" && info "Kept volume ${DB_VOLUME} (use --purge to delete it)."
+fi
+
+# ---- 8. Quadlet units (--remove-quadlets) -------------------------------------
+if (( REMOVE_QUADLETS )); then
+  rm -f "${INSTALLED_UNITS[@]}"
+  systemctl --user daemon-reload
+  systemctl --user reset-failed "${ALL_SERVICES[@]}" 2>/dev/null || true
+  info "Removed Quadlet units and reloaded systemd."
+else
+  info "Kept Quadlet units in ${QUADLET_DEST}/ (use --remove-quadlets to delete them)."
+fi
+
+# ---- 9. leftover check -------------------------------------------------------
+LEFT=()
+add_left() { [[ -n "$2" ]] && LEFT+=("$1: $2"); return 0; }
+join() { paste -sd' ' -; }
+
+found="$( { label_containers; for c in "${CONTAINERS[@]}"; do podman container exists "${c}" && echo "${c}"; done; } | join)"
+add_left containers "${found}"
+found="$( { podman pod ps --filter "label=${INSTANCE_LABEL}" --format '{{.Name}}'; for p in "${PODS[@]}"; do podman pod exists "${p}" && echo "${p}"; done; } | sort -u | join)"
+add_left pods "${found}"
+found="$( { podman images -a --filter "label=${INSTANCE_LABEL}" --format '{{.ID}}'; for i in "${BUILT_IMAGES[@]}"; do podman image exists "${i}" && echo "${i}"; done; } | sort -u | join)"
+add_left images "${found}"
+found="$(for i in "${BASE_IMAGES[@]}"; do podman image exists "${i}" && ! printf '%s\n' "${SKIPPED_IMAGES[@]}" | grep -qxF "${i}" && echo "${i}"; done | join)"
+add_left "base images" "${found}"
+found="$(podman network ls --filter "label=${INSTANCE_LABEL}" --format '{{.Name}}' | join)"
+add_left networks "${found}"
+found="$(for s in "${SECRETS[@]}"; do podman secret exists "${s}" && echo "${s}"; done | join)"
+add_left secrets "${found}"
+[[ -e "${ENV_INSTALL_DIR}" ]] && add_left files "${ENV_INSTALL_DIR}"
+if (( PURGE )); then
+  found="$( { label_volumes; podman volume exists "${DB_VOLUME}" && echo "${DB_VOLUME}"; } | sort -u | join)"
+  add_left volumes "${found}"
+  if [[ -n "${JOB}" ]]; then
+    found="$(for f in "${ENV_FILE}" "${API_ENV_FILE}" "${DB_ENV_FILE}" "${PMA_ENV_FILE}"; do [[ -e "${f}" ]] && echo "${f}"; done | join)"
+    add_left files "${found}"
+  fi
+fi
+if (( REMOVE_QUADLETS )); then
+  found="$(for u in "${INSTALLED_UNITS[@]}"; do [[ -e "${u}" ]] && echo "${u}"; done | join)"
+  add_left units "${found}"
+  found="$(for s in "${ALL_SERVICES[@]}"; do
+    state="$(systemctl --user show -p LoadState --value "${s}" 2>/dev/null || true)"
+    [[ -n "${state}" && "${state}" != "not-found" ]] && echo "${s}(${state})"
+  done | join)"
+  add_left "systemd units" "${found}"
 fi
 
 echo ""
-success "Uninstall complete."
+if (( ${#LEFT[@]} )); then
+  error "Leftovers of ${INSTANCE} remain:"
+  for l in "${LEFT[@]}"; do error "  ${l}"; done
+  exit 1
+fi
+(( ${#SKIPPED_IMAGES[@]} )) && warn "Shared base images kept (in use): ${SKIPPED_IMAGES[*]}"
+success "Uninstall of ${INSTANCE} complete; leftover check clean."

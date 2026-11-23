@@ -14,9 +14,7 @@
 # =============================================================================
 set -euo pipefail
 
-REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-ENV_FILE="${REPO_ROOT}/api/.env"
-API_ENV_FILE="${REPO_ROOT}/api/.env.api"
+source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
 BACKUP_DIR="${REPO_ROOT}/backups"
 SOURCE=""
 BACKUP_FILE=""
@@ -73,7 +71,7 @@ require_file() {
 
 cleanup() {
   if [[ -n "${TEMP_DB}" && -n "${DB_ROOT_PASSWORD:-}" ]]; then
-    podman exec bookmark-db mariadb \
+    podman exec "${DB_CONTAINER}" mariadb \
       --user=root \
       --password="${DB_ROOT_PASSWORD}" \
       --execute="DROP DATABASE IF EXISTS \`${TEMP_DB}\`" >/dev/null 2>&1 || true
@@ -140,8 +138,8 @@ if [[ -z "${DB_NAME}" || -z "${API_PORT}" || -z "${DB_ROOT_PASSWORD}" ]]; then
   exit 1
 fi
 
-if ! podman ps --format '{{.Names}}' 2>/dev/null | grep -q '^bookmark-db$'; then
-  error "Container 'bookmark-db' is not running. Start it with: ./scripts/start.sh"
+if ! podman ps --format '{{.Names}}' 2>/dev/null | grep -qx "${DB_CONTAINER}"; then
+  error "Container '${DB_CONTAINER}' is not running. Start it with: ./scripts/start.sh"
   exit 1
 fi
 
@@ -172,7 +170,7 @@ if [[ -n "${SOURCE}" ]]; then
       info "Downloading backup via GET /backup ..."
       curl -fsS \
         -H "Authorization: Bearer ${BACKUP_TOKEN}" \
-        "http://localhost:${API_PORT}/backup" \
+        "${API_URL}/backup" \
         --output "${BACKUP_FILE}"
       GENERATED_FILE=1
       ;;
@@ -194,18 +192,18 @@ success "gzip integrity check passed."
 
 TEMP_DB="backup_verify_$(date +%s)_$RANDOM"
 info "Restoring dump into temporary database '${TEMP_DB}' ..."
-podman exec bookmark-db mariadb \
+podman exec "${DB_CONTAINER}" mariadb \
   --user=root \
   --password="${DB_ROOT_PASSWORD}" \
   --execute="CREATE DATABASE \`${TEMP_DB}\`"
 
-gunzip -c "${BACKUP_FILE}" | podman exec -i bookmark-db mariadb \
+gunzip -c "${BACKUP_FILE}" | podman exec -i "${DB_CONTAINER}" mariadb \
   --user=root \
   --password="${DB_ROOT_PASSWORD}" \
   "${TEMP_DB}"
 
 for table_name in "${EXPECTED_TABLES[@]}"; do
-  table_count="$(podman exec bookmark-db mariadb \
+  table_count="$(podman exec "${DB_CONTAINER}" mariadb \
     --user=root \
     --password="${DB_ROOT_PASSWORD}" \
     --batch \

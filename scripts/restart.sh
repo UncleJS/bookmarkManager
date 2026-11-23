@@ -1,45 +1,36 @@
 #!/usr/bin/env bash
 # =============================================================================
-# scripts/restart.sh — Restart Bookmark Manager services.
-#
-# Usage:
-#   ./scripts/restart.sh           # restart the whole pod
-#   ./scripts/restart.sh api       # restart only bookmark-api.service
-#   ./scripts/restart.sh db        # restart only bookmark-db.service
-#   ./scripts/restart.sh pma       # restart only bookmark-pma.service
+# scripts/restart.sh — Restart the Bookmark Manager pod or one service.
 # =============================================================================
 set -euo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
 
-TARGET="${1:-pod}"
+usage() {
+  cat <<EOF2
+Usage: [JOB=<slug>] [PORT_OFFSET=<n>] scripts/restart.sh [api|db|pma]
 
-RED='\033[0;31m'; CYAN='\033[0;36m'; GREEN='\033[0;32m'; NC='\033[0m'
-info()    { echo -e "${CYAN}[restart]${NC} $*"; }
-success() { echo -e "${GREEN}[restart]${NC} $*"; }
-error()   { echo -e "${RED}[restart]${NC} $*" >&2; }
+  (no argument)  whole pod: scripts/stop.sh, then scripts/start.sh
+  api|db|pma     restart only that container's service
+  -h, --help     show this help
+EOF2
+}
 
-case "${TARGET}" in
-  api)
-    info "Restarting bookmark-api.service..."
-    systemctl --user restart bookmark-api.service
-    success "bookmark-api.service restarted."
+case "${1:-}" in
+  -h|--help) usage; exit 0 ;;
+  "")
+    "${REPO_ROOT}/scripts/stop.sh"
+    "${REPO_ROOT}/scripts/start.sh"
     ;;
-  db)
-    info "Restarting bookmark-db.service..."
-    systemctl --user restart bookmark-db.service
-    success "bookmark-db.service restarted."
+  api|db|pma)
+    case "$1" in
+      api) svc="${API_SERVICE}" ;;
+      db)  svc="${DB_SERVICE}" ;;
+      pma) svc="${PMA_SERVICE}" ;;
+    esac
+    describe_instance
+    info "Restarting ${svc} ..."
+    systemctl --user restart "${svc}"
+    success "${svc} restarted."
     ;;
-  pma)
-    info "Restarting bookmark-pma.service..."
-    systemctl --user restart bookmark-pma.service
-    success "bookmark-pma.service restarted."
-    ;;
-  pod)
-    info "Restarting bookmark-pod.service (all containers)..."
-    systemctl --user restart bookmark-pod.service
-    success "bookmark-pod.service restarted."
-    ;;
-  *)
-    error "Unknown target '${TARGET}'. Valid options: api | db | pma | (none = pod)"
-    exit 1
-    ;;
+  *) error "Unknown target '$1'."; usage >&2; exit 2 ;;
 esac
