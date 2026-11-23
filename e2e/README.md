@@ -1,5 +1,10 @@
 # E2E Tests — Playwright
 
+[![License: CC BY-SA 4.0](https://img.shields.io/badge/License-CC%20BY--SA%204.0-lightgrey.svg)](https://creativecommons.org/licenses/by-sa/4.0/)
+[![Playwright](https://img.shields.io/badge/Tests-Playwright%201.63-2EAD33?logo=playwright)](https://playwright.dev)
+[![Podman](https://img.shields.io/badge/Container-Podman-892ca0?logo=podman)](https://podman.io)
+[![tests](https://github.com/UncleJS/bookmarkManager/actions/workflows/tests.yml/badge.svg?branch=development)](https://github.com/UncleJS/bookmarkManager/actions/workflows/tests.yml)
+
 Automated end-to-end tests for the Bookmark Manager using Playwright + Chromium.
 
 Tests cover four areas:
@@ -32,11 +37,15 @@ Tests cover four areas:
 - [Scripts README](../scripts/README.md)
 - [E2E README](./README.md)
 
+[↑ Back to TOC](#table-of-contents)
+
 ---
 
 ## Prerequisites
 
 Only rootless Podman. Playwright, Chromium and Bun run in the test image built from [`Containerfile`](Containerfile) (the official `mcr.microsoft.com/playwright:v1.63.0-noble` image plus Bun and the extension). Nothing is installed on the host. The image tag must match `@playwright/test` in `bun.lock`.
+
+[↑ Back to TOC](#table-of-contents)
 
 ---
 
@@ -74,6 +83,8 @@ Open the report in a browser from `e2e/playwright-report/index.html`.
 
 If `API_TOKEN` is not set, all tests that require authentication are automatically **skipped** (not failed). The health-check and auth-guard tests always run regardless of whether a token is set.
 
+[↑ Back to TOC](#table-of-contents)
+
 ---
 
 ## How extension tests work
@@ -104,6 +115,8 @@ Each extension test suite then gets its own persistent context via the shared `f
 > This is required because MV3 service workers and persistent contexts do not tolerate
 > concurrent writes to the same Chrome profile.
 
+[↑ Back to TOC](#table-of-contents)
+
 ---
 
 ## Project structure
@@ -125,6 +138,8 @@ e2e/
     └── popup.spec.ts       # Extension popup tests
 ```
 
+[↑ Back to TOC](#table-of-contents)
+
 ---
 
 ## CI notes
@@ -138,3 +153,9 @@ e2e/
   where the sandbox is not available (e.g., containers without user namespaces).
 - Temp Chrome profiles (`e2e/.tmp-chrome-*/`) and test artifacts (`e2e/playwright-report/`,
   `e2e/test-results/`) are gitignored.
+
+[↑ Back to TOC](#table-of-contents)
+
+---
+
+© 2026 Jaco Steyn — Licensed under CC BY-SA 4.0

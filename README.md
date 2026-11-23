@@ -97,25 +97,15 @@ A self-hosted bookmark manager: a Chrome MV3 extension captures bookmarks and se
 
 ## Architecture
 
-```
-[Chrome Extension MV3]
-  popup/          ← full-capture form (sub-categories, sub-sub-categories, tags, flags)
-  background.js   ← service worker: context menus, API calls, messaging, toast injection
-  options/        ← API base URL + API token configuration
-        │  Authorization: Bearer <API_TOKEN>
-        ▼
-[Bun/Elysia API  :11650]  ←── 127.0.0.1 only (pod network binding)
-  /bookmarks, /tags, /subcategories, /subSubcategories, /categories
-  /app            ← bookmark viewer UI
-  /manage-categories ← category + sub-sub-category management UI
-  /manage-tags    ← tag management UI
-  /docs           ← Swagger UI
-  /backup         ← authenticated DB dump download
-        │
-        ▼
-[MariaDB 11]  (pod-internal only, never exposed to host)
-        │
-[phpMyAdmin :11651]  ←── 127.0.0.1 only
+```mermaid
+flowchart TD
+    ext["Chrome Extension MV3<br/>popup/: full-capture form<br/>background.js: service worker, context menus, API calls, toasts<br/>options/: API base URL + API token"]
+    api["Bun/Elysia API :11650 (127.0.0.1 only)<br/>/bookmarks, /tags, /subcategories, /subSubcategories, /categories<br/>/app, /manage-categories, /manage-tags: web UIs<br/>/docs: Swagger UI · /backup: authenticated DB dump"]
+    db[("MariaDB 11.8 LTS<br/>pod-internal only, never exposed")]
+    pma["phpMyAdmin :11651 (127.0.0.1 only)"]
+    ext -- "Authorization: Bearer API_TOKEN" --> api
+    api -- "127.0.0.1:3306" --> db
+    pma -- "127.0.0.1:3306" --> db
 ```
 
 **Data flow — Full Save:**

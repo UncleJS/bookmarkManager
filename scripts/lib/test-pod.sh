@@ -1,4 +1,5 @@
 # shellcheck shell=bash
+# Sourced library (not executable): inherits set -euo pipefail from the caller.
 # =============================================================================
 # scripts/lib/test-pod.sh — Throwaway test pods. Sourced after common.sh.
 #
