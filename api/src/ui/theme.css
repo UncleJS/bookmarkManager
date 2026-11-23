@@ -1,0 +1,117 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later
+   Copyright (C) 2026 UncleJS */
+
+/* Shared colour tokens for every UI page. Dark is the default; the light
+   theme applies when <html data-theme="light"> (set by /ui/theme-init.js).
+   Page stylesheets use only these variables for colours. */
+
+:root,
+[data-theme="dark"] {
+  color-scheme: dark;
+  --bg:          #0a0a0a;
+  --surface:     #111111;
+  --surface2:    #1a1a1a;
+  --surface3:    #222222;
+  --border:      #2a2a2a;
+  --border2:     #333333;
+  --text:        #f0f0f0;
+  --text-muted:  #c8c8c8;
+  --text-faint:  #8a8a8a;
+  --accent:      #4f9cf9;
+  --accent-dim:  #1d3d6b;
+  --on-accent:   #0a0a0a;
+  --primary-hover-bg:   #2a5a9e;
+  --primary-hover-text: #ffffff;
+  --tag-bg:      #1e2a3a;
+  --tag-text:    #7fb8f8;
+  --flag-read:   #4ade80;
+  --flag-hot:    #f97316;
+  --flag-cs:     #a78bfa;
+  --flag-rev:    #facc15;
+  --flag-read-bg: #0d2b19;
+  --flag-hot-bg:  #2b1400;
+  --flag-cs-bg:   #1e1330;
+  --flag-rev-bg:  #2b2200;
+  --archived-bg:  #2a1a1a;
+  --danger:      #ef4444;
+  --danger-dim:  #3b1010;
+  --success:     #4ade80;
+  --success-dim: #0d2b19;
+  --warn:        #facc15;
+  --nav-active-bg:    #1a2e1a;
+  --nav-active-text:  #6ee76e;
+  --nav-active-count: #1f3d1f;
+  --sub-badge-bg:     #1a2a1a;
+  --sub-badge-text:   #6ee06e;
+  --overlay:      rgba(0, 0, 0, 0.7);
+  --overlay-soft: rgba(0, 0, 0, 0.5);
+  --row-tint:     rgba(255, 255, 255, 0.02);
+  --scroll-thumb-hover: #555555;
+}
+
+[data-theme="light"] {
+  color-scheme: light;
+  --bg:          #f4f5f7;
+  --surface:     #ffffff;
+  --surface2:    #eceef2;
+  --surface3:    #e2e5ea;
+  --border:      #d3d7de;
+  --border2:     #bfc5ce;
+  --text:        #1a1d21;
+  --text-muted:  #434b57;
+  --text-faint:  #6b7280;
+  --accent:      #1a5bb8;
+  --accent-dim:  #dbe8fb;
+  --on-accent:   #ffffff;
+  --primary-hover-bg:   #1a5bb8;
+  --primary-hover-text: #ffffff;
+  --tag-bg:      #e1ecf9;
+  --tag-text:    #1c4c8f;
+  --flag-read:   #15803d;
+  --flag-hot:    #c2410c;
+  --flag-cs:     #6d28d9;
+  --flag-rev:    #926000;
+  --flag-read-bg: #dcf5e5;
+  --flag-hot-bg:  #ffe7d5;
+  --flag-cs-bg:   #ece3fb;
+  --flag-rev-bg:  #fbf0c4;
+  --archived-bg:  #fde3e3;
+  --danger:      #c62828;
+  --danger-dim:  #fde3e3;
+  --success:     #15803d;
+  --success-dim: #dcf5e5;
+  --warn:        #926000;
+  --nav-active-bg:    #dcf5e5;
+  --nav-active-text:  #14632f;
+  --nav-active-count: #bfe8cd;
+  --sub-badge-bg:     #e0f2e0;
+  --sub-badge-text:   #2b6e2f;
+  --overlay:      rgba(15, 23, 42, 0.45);
+  --overlay-soft: rgba(15, 23, 42, 0.3);
+  --row-tint:     rgba(0, 0, 0, 0.025);
+  --scroll-thumb-hover: #9aa1ab;
+}
+
+/* Theme toggle button, shown in every page header. */
+button.theme-toggle {
+  background: none;
+  border: 1px solid var(--border2);
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+button.theme-toggle:hover,
+button.theme-toggle:focus-visible {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.license-footer a,
+footer a {
+  color: inherit;
+  text-decoration: underline;
+}

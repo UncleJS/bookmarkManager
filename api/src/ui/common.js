@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 UncleJS
+
 // Shared helpers for the browser UI pages (app, categories, tags).
 //
 // Auth: the pages are only served after login (POST /session). The browser

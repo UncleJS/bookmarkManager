@@ -1,13 +1,18 @@
 <!DOCTYPE html>
-<html lang="en">
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later
+     Copyright (C) 2026 UncleJS -->
+<html lang="en" data-theme="dark">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="referrer" content="no-referrer" />
   <title>Bookmark Manager · Sign in</title>
+  <script src="/ui/theme-init.js"></script>
+  <link rel="stylesheet" href="/ui/theme.css" />
   <link rel="stylesheet" href="/ui/login.css" />
 </head>
 <body>
+  <div id="login-theme"><button type="button" class="theme-toggle" data-theme-toggle>☀ Light</button></div>
   <main id="login">
     <h1>🔖 Bookmark Manager</h1>
     <p class="hint">Paste the API token (<code>API_TOKEN</code> from the server's env file) to open this browser session. The token is checked once and not stored in the browser.</p>
@@ -19,7 +24,7 @@
     </form>
   </main>
   <footer class="license-footer">
-    © 2026 Jaco Steyn — Licensed under CC BY-SA 4.0
+    © 2026 UncleJS — Licensed under <a href="https://www.gnu.org/licenses/agpl-3.0.txt" target="_blank" rel="noopener noreferrer">AGPL-3.0-or-later</a>
   </footer>
 <script src="/ui/login.js"></script>
 </body>

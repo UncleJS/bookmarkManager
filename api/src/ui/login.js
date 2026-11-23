@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 UncleJS
+
 // Login form: exchange the API token for a session cookie, then reload the
 // page the user asked for. The token is sent once and never stored here.
 (function () {

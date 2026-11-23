@@ -1,23 +1,11 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later
+   Copyright (C) 2026 UncleJS */
+
 /* ── Reset & base ────────────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
-  --bg:        #0a0a0a;
-  --surface:   #111111;
-  --surface2:  #1a1a1a;
-  --border:    #2a2a2a;
-  --border2:   #333333;
-  --text:      #f0f0f0;
-  --text-muted:#ffffff;
-  --accent:    #4f9cf9;
-  --accent-dim:#1d3d6b;
-  --tag-bg:    #1e2a3a;
-  --tag-text:  #7fb8f8;
-  --flag-read: #4ade80;
-  --flag-hot:  #f97316;
-  --flag-cs:   #a78bfa;
-  --flag-rev:  #facc15;
-  --danger:    #ef4444;
+  /* Colours come from theme.css. */
   --sidebar-w: 260px;
   --license-footer-h: 28px;
 }
@@ -265,13 +253,13 @@ a:hover { text-decoration: underline; }
 }
 
 .nav-item.active {
-  background: #1a2e1a;
-  color: #6ee76e;
+  background: var(--nav-active-bg);
+  color: var(--nav-active-text);
   font-weight: 600;
 }
 
 .nav-item.active .nav-item-count {
-  background: #1f3d1f;
+  background: var(--nav-active-count);
   color: var(--text);
 }
 
@@ -325,10 +313,10 @@ a:hover { text-decoration: underline; }
 }
 
 /* flag filter items */
-.nav-item.flag-read.active  { background:#0d2b19; color:var(--flag-read); }
-.nav-item.flag-hot.active   { background:#2b1400; color:var(--flag-hot);  }
-.nav-item.flag-cs.active    { background:#1e1330; color:var(--flag-cs);   }
-.nav-item.flag-rev.active   { background:#2b2200; color:var(--flag-rev);  }
+.nav-item.flag-read.active  { background:var(--flag-read-bg); color:var(--flag-read); }
+.nav-item.flag-hot.active   { background:var(--flag-hot-bg); color:var(--flag-hot);  }
+.nav-item.flag-cs.active    { background:var(--flag-cs-bg); color:var(--flag-cs);   }
+.nav-item.flag-rev.active   { background:var(--flag-rev-bg); color:var(--flag-rev);  }
 .nav-item.flag-dot::before {
   content: '●';
   font-size: 8px;
@@ -401,7 +389,7 @@ a:hover { text-decoration: underline; }
 }
 
 #search-q::placeholder {
-  color: #555;
+  color: var(--text-faint);
 }
 
 #search-clear {
@@ -528,7 +516,7 @@ a:hover { text-decoration: underline; }
 
 .card-description {
   font-size: 13px;
-  color: #ffffff;
+  color: var(--text);
   margin-bottom: 8px;
   line-height: 1.5;
 }
@@ -574,8 +562,8 @@ a:hover { text-decoration: underline; }
 
 .subcategory-badge {
   font-size: 11px;
-  background: #1a2a1a;
-  color: #6ee06e;
+  background: var(--sub-badge-bg);
+  color: var(--sub-badge-text);
   border-radius: 3px;
   padding: 2px 7px;
 }
@@ -609,7 +597,7 @@ a:hover { text-decoration: underline; }
   display: none;
   position: fixed;
   inset: 0;
-  background: rgba(0,0,0,0.7);
+  background: var(--overlay);
   z-index: 100;
   align-items: center;
   justify-content: center;
@@ -817,7 +805,7 @@ a:hover { text-decoration: underline; }
   border-radius: 4px;
   cursor: pointer;
 }
-.btn-primary:hover { background: #254d8a; }
+button.btn-primary:hover:not(:disabled) { background: var(--primary-hover-bg); border-color: var(--primary-hover-bg); color: var(--primary-hover-text); }
 .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .btn-cancel {
@@ -837,7 +825,7 @@ a:hover { text-decoration: underline; }
   display: none;
   position: fixed;
   inset: 0;
-  background: rgba(0,0,0,0.5);
+  background: var(--overlay-soft);
   z-index: 200;
   align-items: center;
   justify-content: center;
@@ -927,10 +915,10 @@ a:hover { text-decoration: underline; }
   letter-spacing: 0.04em;
 }
 
-.flag-read   { background: #0d2b19; color: var(--flag-read); }
-.flag-hot    { background: #2b1400; color: var(--flag-hot);  }
-.flag-cs     { background: #1e1330; color: var(--flag-cs);   }
-.flag-rev    { background: #2b2200; color: var(--flag-rev);  }
+.flag-read   { background: var(--flag-read-bg); color: var(--flag-read); }
+.flag-hot    { background: var(--flag-hot-bg); color: var(--flag-hot);  }
+.flag-cs     { background: var(--flag-cs-bg); color: var(--flag-cs);   }
+.flag-rev    { background: var(--flag-rev-bg); color: var(--flag-rev);  }
 
 /* ── Archive toggle ───────────────────────────────────────────────────── */
 #archive-toggle {
@@ -992,7 +980,7 @@ a:hover { text-decoration: underline; }
   color: var(--flag-read);
 }
 
-.flag-archived { background: #2a1a1a; color: var(--danger); }
+.flag-archived { background: var(--archived-bg); color: var(--danger); }
 
 /* ── Empty / loading / error states ──────────────────────────────────── */
 .state-box {
@@ -1029,7 +1017,7 @@ a:hover { text-decoration: underline; }
   align-items: center;
   justify-content: center;
   text-align: center;
-  color: #ffffff;
+  color: var(--text);
   font-size: 0.68rem;
   background: var(--bg);
   border-top: 1px solid var(--border);
@@ -1068,7 +1056,7 @@ a:hover { text-decoration: underline; }
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: #555; }
+::-webkit-scrollbar-thumb:hover { background: var(--scroll-thumb-hover); }
 
 [hidden] { display: none !important; }
 

@@ -1,22 +1,9 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later
+   Copyright (C) 2026 UncleJS */
+
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-:root {
-  --bg:         #0a0a0a;
-  --surface:    #111111;
-  --surface2:   #1a1a1a;
-  --surface3:   #222222;
-  --border:     #2a2a2a;
-  --border2:    #333333;
-  --text:       #f0f0f0;
-  --text-muted: #ffffff;
-  --accent:     #4f9cf9;
-  --accent-dim: #1d3d6b;
-  --danger:     #ef4444;
-  --danger-dim: #3b1010;
-  --success:    #4ade80;
-  --success-dim:#0d2b19;
-  --warn:       #facc15;
-}
+/* Colours come from theme.css. */
 
 html, body {
   min-height: 100%;
@@ -270,7 +257,7 @@ a:hover { text-decoration: underline; }
 
 .count-badge {
   font-size: 11px;
-  color: #ffffff;
+  color: var(--text);
   background: var(--surface3);
   border: 1px solid var(--border2);
   border-radius: 10px;
@@ -335,7 +322,7 @@ a:hover { text-decoration: underline; }
   white-space: nowrap;
   transition: background 0.1s;
 }
-.btn-add:hover { background: #254f8a; }
+button.btn-add:hover:not(:disabled) { background: var(--primary-hover-bg); border-color: var(--primary-hover-bg); color: var(--primary-hover-text); }
 .btn-add:disabled { opacity: 0.45; cursor: not-allowed; }
 
 /* ── Add category footer ────────────────────────────────────────────────── */
@@ -372,7 +359,7 @@ a:hover { text-decoration: underline; }
   white-space: nowrap;
   transition: background 0.1s;
 }
-#btn-add-category:hover { background: #254f8a; }
+button#btn-add-category:hover:not(:disabled) { background: var(--primary-hover-bg); border-color: var(--primary-hover-bg); color: var(--primary-hover-text); }
 #btn-add-category:disabled { opacity: 0.45; cursor: not-allowed; }
 
 /* ── Toast ───────────────────────────────────────────────────────────── */
@@ -406,7 +393,7 @@ a:hover { text-decoration: underline; }
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: #555; }
+::-webkit-scrollbar-thumb:hover { background: var(--scroll-thumb-hover); }
 
 [hidden] { display: none !important; }
 
@@ -426,7 +413,7 @@ a:hover { text-decoration: underline; }
 
 .empty-note { color: var(--text-muted); font-size: 12px; padding: 4px 0; }
 .add-sub-subcategory-row { margin-left: 28px; margin-top: 8px; }
-.subcategory-row[data-sub-sub-id] { background: rgba(255, 255, 255, 0.02); margin-top: 6px; }
+.subcategory-row[data-sub-sub-id] { background: var(--row-tint); margin-top: 6px; }
 .row-indent { width: 24px; flex-shrink: 0; }
 
 .license-footer {
@@ -436,7 +423,7 @@ a:hover { text-decoration: underline; }
   right: 0;
   text-align: center;
   padding: 0.3rem 0;
-  color: #ffffff;
+  color: var(--text);
   font-size: 0.68rem;
   background: var(--bg);
   border-top: 1px solid var(--border);

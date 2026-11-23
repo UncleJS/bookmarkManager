@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 UncleJS
+
 // apiFetch, registerActions: see common.js
 
 // ── Backup ─────────────────────────────────────────────────────────────────
@@ -627,7 +630,7 @@ function renderCard(b) {
     b.archivedAt ? `<span class="flag flag-archived">ARCHIVED</span>` : '',
   ].filter(Boolean).join('');
 
-  const dateStr = b.createdAt ? formatDate(b.createdAt) : '';
+  const dateStr = BMDate.formatDateTime(b.createdAt);
 
   const flagsRow = flagsHtml
     ? `<div class="card-meta-row"><span class="card-meta-label">Flags</span>${flagsHtml}</div>` : '';
@@ -1333,17 +1336,6 @@ function esc(str) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
-}
-
-// Display local time as YYYY-MM-DD HH:mm:ss
-function formatDate(raw) {
-  try {
-    const d = new Date(raw);
-    if (isNaN(d)) return raw;
-    const pad = n => String(n).padStart(2, '0');
-    return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ` +
-           `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
-  } catch { return raw; }
 }
 
 // ── Event wiring (no inline handlers, see common.js) ──────────────────────────
