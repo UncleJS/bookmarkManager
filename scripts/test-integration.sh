@@ -72,6 +72,13 @@ echo "CREATE DATABASE IF NOT EXISTS bookmarks_test" | testpod_sql "${IT_POD}" my
 run_in_pod -e DB_NAME=bookmarks_test "${API_TEST_IMAGE}" bun test "${TEST_ARGS[@]}"
 success "bun test passed."
 
+info "Running extension and date-helper unit tests (TZ=America/New_York, en-US) ..."
+podman image exists "${BUN_IMAGE}" || podman pull -q "${BUN_IMAGE}" >/dev/null
+( cd "${REPO_ROOT}" && tar -c extension/lib api/src/ui/datetime.js ) \
+  | podman run -i --rm "${TEST_LABEL_ARGS[@]}" -e TZ=America/New_York -e LANG=en_US.UTF-8 \
+      "${BUN_IMAGE}" sh -c 'mkdir -p /w && cd /w && tar -x && bun test extension/lib'
+success "Unit tests passed."
+
 info "Backup/restore check ..."
 run_in_pod -e DB_NAME=bookmarks "${API_TEST_IMAGE}" bun run src/db/migrate.ts
 podman exec "${IT_POD}-db" sh -c \

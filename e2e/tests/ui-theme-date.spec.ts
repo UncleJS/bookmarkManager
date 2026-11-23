@@ -52,12 +52,6 @@ test.describe("Theme", () => {
     // On the next page, the theme must already be set when <body> is parsed
     // (theme-init.js runs blocking in <head>), so there is no dark flash.
     await page.addInitScript(() => {
-      document.addEventListener("readystatechange", () => {
-        if (document.readyState === "interactive") {
-          (window as unknown as { __themeAtParse: string | null }).__themeAtParse =
-            document.documentElement.getAttribute("data-theme");
-        }
-      });
       new MutationObserver((_, obs) => {
         if (document.body) {
           (window as unknown as { __themeAtBody: string | null }).__themeAtBody =
@@ -115,27 +109,34 @@ test.describe("Dates", () => {
     const body = await created.json();
     const createdAt: string = body.createdAt ?? body.bookmark?.createdAt ?? body.data?.createdAt;
     expect(createdAt).toBeTruthy();
+    try {
+      await signIn(page);
+      await page.goto(`${BASE}/app`, { waitUntil: "domcontentloaded" });
+      const date = page.locator(".card-meta-date").first();
+      await expect(date).toBeVisible({ timeout: 10_000 });
+      const text = (await date.textContent())?.trim() ?? "";
+      expect(text).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/);
 
-    await signIn(page);
-    await page.goto(`${BASE}/app`, { waitUntil: "domcontentloaded" });
-    const date = page.locator(".card-meta-date").first();
-    await expect(date).toBeVisible({ timeout: 10_000 });
-    const text = (await date.textContent())?.trim() ?? "";
-    expect(text).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/);
+      // The newest card is the one just created; it must show New York time.
+      const expected = await page.evaluate((raw) => {
+        const d = new Date(/[zZ]|[+-]\d{2}:\d{2}$/.test(raw) ? raw : raw.replace(" ", "T") + "Z");
+        const p = (n: number) => String(n).padStart(2, "0");
+        return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ` +
+          `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+      }, createdAt);
+      expect(await page.evaluate(() => Intl.DateTimeFormat().resolvedOptions().timeZone)).toBe(ZONE);
+      expect(text).toBe(expected);
 
-    // The newest card is the one just created; it must show New York time.
-    const expected = await page.evaluate((raw) => {
-      const d = new Date(/[zZ]|[+-]\d{2}:\d{2}$/.test(raw) ? raw : raw.replace(" ", "T") + "Z");
-      const p = (n: number) => String(n).padStart(2, "0");
-      return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ` +
-        `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
-    }, createdAt);
-    expect(await page.evaluate(() => Intl.DateTimeFormat().resolvedOptions().timeZone)).toBe(ZONE);
-    expect(text).toBe(expected);
-
-    const pageText = await page.locator("body").innerText();
-    expect(pageText).not.toMatch(LOCALE_DATE);
-    expect(pageText).not.toMatch(AM_PM);
+      // Only date-bearing UI, not bookmark titles or URLs from the database.
+      const pageText = (await page.locator(".card-meta-date, #topbar, .license-footer").allInnerTexts()).join("\n");
+      expect(pageText).not.toMatch(LOCALE_DATE);
+      expect(pageText).not.toMatch(AM_PM);
+    } finally {
+      // The API has no hard delete; archive the check bookmark so it leaves the active list.
+      await page.request.patch(`${BASE}/bookmarks/${body.id}/archive`, {
+        headers: { Authorization: `Bearer ${TOKEN}` },
+      });
+    }
   });
 
   test("no page uses a native date/time input", async ({ page }) => {

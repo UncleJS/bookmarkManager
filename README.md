@@ -254,7 +254,7 @@ Set `API_TOKEN` in `api/.env` to a strong random value (`openssl rand -hex 32`).
 
 The browser UIs show a login form until you paste the API token. After that they use an HttpOnly `bm_session` cookie that holds a random session id, not the token.
 
-The UIs are dark by default. The **☀ Light / ☾ Dark** button in each page header switches the theme; the choice is saved in the browser (`localStorage`, key `bm-theme`) and applied by `/ui/theme-init.js` before the first paint. Colours live in one place, `api/src/ui/theme.css`.
+The UIs are dark by default. The **☀ / ☾** button in each page header switches the theme; the choice is saved in the browser (`localStorage`, key `bm-theme`) and applied by `/ui/theme-init.js` before the first paint. Colours live in one place, `api/src/ui/theme.css`.
 
 Dates and times are stored and sent by the API in UTC and shown in your local time as `yyyy-MM-dd HH:mm:ss` (24-hour). The web UI formats them with `api/src/ui/datetime.js` and the extension with `extension/lib/datetime.js`; a unit test keeps the two in sync.
 

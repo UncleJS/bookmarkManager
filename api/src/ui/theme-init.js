@@ -24,10 +24,9 @@
     for (var i = 0; i < buttons.length; i++) {
       var b = buttons[i];
       var next = theme === 'dark' ? 'light' : 'dark';
-      b.textContent = theme === 'dark' ? '☀ Light' : '☾ Dark';
+      b.textContent = theme === 'dark' ? '☀' : '☾';
       b.setAttribute('title', 'Switch to the ' + next + ' theme');
       b.setAttribute('aria-label', 'Switch to the ' + next + ' theme');
-      b.setAttribute('aria-pressed', theme === 'light' ? 'true' : 'false');
     }
   }
 

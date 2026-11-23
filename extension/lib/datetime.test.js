@@ -20,8 +20,7 @@ describe('formatDateTime', () => {
     expect(formatDateTime(iso)).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/);
   });
 
-  test('converts to the local zone (America/New_York when run as documented)', () => {
-    if (ZONE !== 'America/New_York') return;
+  test.skipIf(ZONE !== 'America/New_York')('converts to the local zone (run with TZ=America/New_York)', () => {
     expect(formatDateTime('2026-11-08T14:05:09Z')).toBe('2026-11-08 09:05:09');
     expect(formatDateTime('2026-07-01T23:30:00Z')).toBe('2026-07-01 19:30:00');
     expect(formatDateTime('2026-11-08T02:00:00Z')).toBe('2026-11-07 21:00:00');
@@ -58,7 +57,7 @@ describe('web UI copy (api/src/ui/datetime.js)', () => {
   const file = Bun.file(path);
 
   test('formats exactly like the extension helper', async () => {
-    if (!(await file.exists())) return; // extension-only checkout
+    expect(await file.exists()).toBe(true);
     const src = await file.text();
     const BMDate = new Function(`${src}\nreturn BMDate;`)();
     const samples = [

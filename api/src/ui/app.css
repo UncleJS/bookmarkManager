@@ -706,7 +706,7 @@ a:hover { text-decoration: underline; }
 
 .taxonomy-empty {
   font-size: 12px;
-  color: var(--text-dim);
+  color: var(--text-faint);
 }
 
 .taxonomy-selection-grid {
@@ -768,7 +768,7 @@ a:hover { text-decoration: underline; }
 .taxonomy-helper {
   margin-top: 6px;
   font-size: 11px;
-  color: var(--text-dim);
+  color: var(--text-faint);
 }
 
 .picker-chip {
