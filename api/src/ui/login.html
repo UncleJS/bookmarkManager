@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="referrer" content="no-referrer" />
+  <title>Bookmark Manager · Sign in</title>
+  <link rel="stylesheet" href="/ui/login.css" />
+</head>
+<body>
+  <main id="login">
+    <h1>🔖 Bookmark Manager</h1>
+    <p class="hint">Paste the API token (<code>API_TOKEN</code> from the server's env file) to open this browser session. The token is checked once and not stored in the browser.</p>
+    <form id="login-form" autocomplete="off">
+      <label for="login-token">API token</label>
+      <input id="login-token" name="token" type="password" required autofocus spellcheck="false" />
+      <button type="submit" id="login-submit">Sign in</button>
+      <p id="login-error" role="alert"></p>
+    </form>
+  </main>
+  <footer class="license-footer">
+    © 2026 Jaco Steyn — Licensed under CC BY-SA 4.0
+  </footer>
+<script src="/ui/login.js"></script>
+</body>
+</html>

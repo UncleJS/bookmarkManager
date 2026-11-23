@@ -1,0 +1,79 @@
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #0a0a0a;
+  --surface: #111111;
+  --surface2: #1a1a1a;
+  --border: #2a2a2a;
+  --border2: #333333;
+  --text: #f0f0f0;
+  --text-muted: #b0b0b0;
+  --accent: #4f9cf9;
+  --accent-dim: #1d3d6b;
+  --danger: #ef4444;
+}
+
+html, body {
+  min-height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: ui-monospace, 'Cascadia Code', 'Fira Code', monospace;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+#login {
+  max-width: 420px;
+  margin: 12vh auto 0;
+  padding: 28px 24px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+#login h1 { font-size: 18px; margin-bottom: 10px; }
+#login .hint { color: var(--text-muted); font-size: 12px; margin-bottom: 18px; }
+#login code { color: var(--accent); }
+
+#login-form { display: flex; flex-direction: column; gap: 10px; }
+#login-form label { font-size: 12px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
+
+#login-token {
+  background: var(--surface2);
+  border: 1px solid var(--border2);
+  border-radius: 4px;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 13px;
+  padding: 8px 10px;
+  outline: none;
+}
+#login-token:focus { border-color: var(--accent); }
+
+#login-submit {
+  background: var(--accent-dim);
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  font-family: inherit;
+  font-size: 13px;
+  padding: 8px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+#login-submit:hover:not(:disabled) { background: var(--accent); color: #0a0a0a; }
+#login-submit:disabled { opacity: 0.6; cursor: wait; }
+
+#login-error { color: var(--danger); font-size: 12px; min-height: 1.5em; }
+
+.license-footer {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  text-align: center;
+  padding: 0.3rem 0;
+  font-size: 0.68rem;
+  color: var(--text-muted);
+  border-top: 1px solid var(--border);
+  background: var(--bg);
+}

@@ -1,6 +1,15 @@
 import { Elysia } from "elysia";
 import { swagger } from "@elysiajs/swagger";
 
+import {
+  bearerToken,
+  configuredApiToken,
+  isSafeMethod,
+  isSameOriginRequest,
+  isValidSession,
+  safeEqual,
+  sessionFromCookieHeader,
+} from "./auth.ts";
 import { pool } from "./db/client.ts";
 import { backupRoutes } from "./routes/backup.ts";
 import { bookmarkRoutes } from "./routes/bookmarks.ts";
@@ -10,6 +19,7 @@ import { getValidationErrorMessage } from "./routes/shared.ts";
 import { subSubcategoryRoutes } from "./routes/subSubcategories.ts";
 import { subcategoryRoutes } from "./routes/subcategories.ts";
 import { tagRoutes } from "./routes/tags.ts";
+import { createUiRoutes } from "./routes/ui.ts";
 
 const PORT = Number(process.env.API_PORT ?? 11650);
 const LOG_LEVELS = ["error", "warn", "info", "debug"] as const;
@@ -29,9 +39,10 @@ function logAt(level: LogLevel, message: string) {
   if (logRank[logLevel] >= logRank[level]) console.log(message);
 }
 
-// Returns true for paths that do not require API_TOKEN authentication:
-// infrastructure probes, static HTML pages, the API docs, and the backup
-// endpoint (which uses its own independent BACKUP_TOKEN guard).
+// Returns true for paths that do not require API authentication:
+// infrastructure probes, the UI pages (they serve the login form when there is
+// no session), static UI assets, the session routes, the API docs, and the
+// backup endpoint (which uses its own independent BACKUP_TOKEN guard).
 function isAuthExempt(path: string): boolean {
   return (
     path === "/" ||
@@ -40,26 +51,12 @@ function isAuthExempt(path: string): boolean {
     path === "/app" ||
     path === "/manage-categories" ||
     path === "/manage-tags" ||
+    path === "/session" ||
     path === "/openapi.json" ||
     path === "/backup" ||
+    path.startsWith("/ui/") ||
     path.startsWith("/docs")
   );
-}
-
-function readCookie(header: string | undefined, name: string): string {
-  if (!header) return "";
-  for (const part of header.split(";")) {
-    const trimmed = part.trim();
-    const eq = trimmed.indexOf("=");
-    if (eq === -1) continue;
-    if (trimmed.slice(0, eq) !== name) continue;
-    try {
-      return decodeURIComponent(trimmed.slice(eq + 1));
-    } catch {
-      return "";
-    }
-  }
-  return "";
 }
 
 type BuildAppOptions = {
@@ -93,15 +90,17 @@ export function buildApp({ checkReadiness }: BuildAppOptions = {}) {
     })
     // ---------------------------------------------------------------------------
     // Global authentication guard
-    // All routes except the exempt paths above require a valid API_TOKEN.
-    // Set API_TOKEN in api/.env to a strong random value (e.g. openssl rand -hex 32).
-    // The extension sends it as:  Authorization: Bearer <API_TOKEN>
+    // All routes except the exempt paths above need one of:
+    //   - Authorization: Bearer <API_TOKEN>   (extension, scripts)
+    //   - the bm_session cookie from POST /session (browser UI). Cookie-authenticated
+    //     writes must also come from this app's own origin (CSRF guard).
+    // Set API_TOKEN to a strong random value (e.g. openssl rand -hex 32).
     // ---------------------------------------------------------------------------
-    .onBeforeHandle(({ path, headers, set }) => {
+    .onBeforeHandle(({ path, request, set }) => {
       if (isAuthExempt(path)) return;
 
-      const configuredToken = process.env.API_TOKEN ?? "";
-      if (!configuredToken || configuredToken === "change_me_please") {
+      const configuredToken = configuredApiToken();
+      if (!configuredToken) {
         set.status = 503;
         return {
           error:
@@ -109,14 +108,23 @@ export function buildApp({ checkReadiness }: BuildAppOptions = {}) {
         };
       }
 
-      const authHeader = headers["authorization"] ?? "";
-      const bearerMatch = authHeader.match(/^Bearer\s+(.+)$/i);
-      const providedToken = bearerMatch?.[1] || readCookie(headers["cookie"], "bm_session");
-
-      if (!providedToken || providedToken !== configuredToken) {
+      const bearer = bearerToken(request.headers.get("authorization") ?? undefined);
+      if (bearer !== null) {
+        if (safeEqual(bearer, configuredToken)) return;
         set.status = 401;
         return { error: "Invalid or missing API token. Send header: Authorization: Bearer <API_TOKEN>" };
       }
+
+      if (isValidSession(sessionFromCookieHeader(request.headers.get("cookie") ?? undefined))) {
+        if (!isSafeMethod(request.method) && !isSameOriginRequest(request)) {
+          set.status = 403;
+          return { error: "Cross-origin request blocked" };
+        }
+        return;
+      }
+
+      set.status = 401;
+      return { error: "Invalid or missing API token. Send header: Authorization: Bearer <API_TOKEN>" };
     })
     .use(
       swagger({
@@ -129,8 +137,10 @@ export function buildApp({ checkReadiness }: BuildAppOptions = {}) {
                 "REST API for the Bookmark Manager Chrome extension.\n\n" +
                 "Manages bookmarks, tags, categories, sub-categories, and nested sub-sub-categories.\n\n" +
                "**Auth model:** bookmark-management routes accept `Authorization: Bearer <API_TOKEN>` " +
-               "or the HttpOnly `bm_session` cookie set by the browser UI pages. " +
-                "Health probes (`/health`, `/ready`), static UI pages (`/app`, `/manage-categories`, `/manage-tags`), " +
+               "or the HttpOnly `bm_session` cookie. The browser UI pages show a login form; " +
+               "`POST /session` checks the pasted token and sets the cookie to a random server-side session id " +
+               "(never the token). `DELETE /session` logs out. Cookie-authenticated writes must be same-origin. " +
+                "Health probes (`/health`, `/ready`), the UI pages and assets, `/session` " +
                "and the API docs (`/docs`) are exempt. " +
                "The `GET /backup` endpoint additionally requires its own `Authorization: Bearer <BACKUP_TOKEN>`.\n\n" +
                "**Data lifecycle:** records are never hard-deleted. Entity rows and bookmark association rows " +
@@ -157,6 +167,7 @@ export function buildApp({ checkReadiness }: BuildAppOptions = {}) {
         }),
       })
     )
+    .use(createUiRoutes())
     .use(tagRoutes)
     .use(subSubcategoryRoutes)
     .use(subcategoryRoutes)

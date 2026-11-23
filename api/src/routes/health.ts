@@ -1,40 +1,8 @@
 import { Elysia } from "elysia";
-import { readFileSync } from "fs";
-import { join } from "path";
 
 type HealthRoutesOptions = {
   checkReadiness?: () => Promise<void>;
 };
-
-const UI_DIR = join(import.meta.dir, "..", "ui");
-const HTML_CSP = [
-  "default-src 'self'",
-  "script-src 'unsafe-inline'",
-  "style-src 'unsafe-inline'",
-  "img-src 'self' data: http: https:",
-  "connect-src 'self'",
-].join("; ");
-
-function readUI(name: string): string {
-  return readFileSync(join(UI_DIR, name), "utf-8");
-}
-
-function sessionCookie(): string | null {
-  const token = process.env.API_TOKEN ?? "";
-  if (!token || token === "change_me_please") return null;
-  return `bm_session=${encodeURIComponent(token)}; HttpOnly; SameSite=Strict; Path=/`;
-}
-
-function htmlResponse(name: string): Response {
-  const headers: Record<string, string> = {
-    "Content-Type": "text/html; charset=utf-8",
-    "Cache-Control": "no-store",
-    "Content-Security-Policy": HTML_CSP,
-  };
-  const cookie = sessionCookie();
-  if (cookie) headers["Set-Cookie"] = cookie;
-  return new Response(readUI(name), { headers });
-}
 
 export function createHealthRoutes({ checkReadiness }: HealthRoutesOptions = {}) {
   return new Elysia()
@@ -60,54 +28,6 @@ export function createHealthRoutes({ checkReadiness }: HealthRoutesOptions = {})
         },
       },
     })
-    .get(
-      "/app",
-      () => htmlResponse("app.html"),
-      {
-        detail: {
-          tags: ["health"],
-          summary: "Bookmark viewer web UI",
-          description:
-            "Serves the static single-page bookmark viewer. " +
-            "This is the primary UI consumed by the Chrome extension side-panel and direct browser access.",
-          responses: {
-            200: { description: "HTML page" },
-          },
-        },
-      }
-    )
-    .get(
-      "/manage-categories",
-      () => htmlResponse("categories.html"),
-      {
-        detail: {
-          tags: ["health"],
-          summary: "Category management web UI",
-          description:
-            "Serves the static category and sub-category management page. " +
-            "Allows users to create, rename, archive, restore, and collapse categories and sub-categories.",
-          responses: {
-            200: { description: "HTML page" },
-          },
-        },
-      }
-    )
-    .get(
-      "/manage-tags",
-      () => htmlResponse("tags.html"),
-      {
-        detail: {
-          tags: ["health"],
-          summary: "Tag management web UI",
-          description:
-            "Serves the static tag management page. " +
-            "Allows users to create, rename, archive, and restore tags with archive guardrails when active bookmarks still use them.",
-          responses: {
-            200: { description: "HTML page" },
-          },
-        },
-      }
-    )
     .get(
       "/health",
       () => ({ status: "ok", check: "liveness" }),

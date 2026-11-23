@@ -144,12 +144,16 @@ api/
 
 ## Authentication
 
-All bookmark-management routes accept `Authorization: Bearer <API_TOKEN>` or the HttpOnly `bm_session` cookie set by the browser UI pages.
+All bookmark-management routes accept `Authorization: Bearer <API_TOKEN>` or the HttpOnly `bm_session` cookie from `POST /session`.
 
 **Auth-exempt routes:**
 - `/health`, `/ready` — health probes
-- `/app`, `/manage-categories`, `/manage-tags` — static UI pages that set `bm_session`
+- `/app`, `/manage-categories`, `/manage-tags` — UI pages; they serve a login form when there is no session and never set a cookie
+- `/ui/*` — static page scripts and styles
+- `/session` — `POST {"token"}` sets `bm_session` to a random server-side session id (never the token); `DELETE` logs out
 - `/docs`, `/openapi.json` — Swagger
+
+Cookie-authenticated writes must be same-origin (`Origin` / `Sec-Fetch-Site`). Extra allowed origins go in `ALLOWED_ORIGINS`. Sessions live in memory (`SESSION_TTL_HOURS`, default 168) and end on restart.
 
 **Backup auth** — `GET /backup` uses a separate `BACKUP_TOKEN` credential. The database password is passed to `mariadb-dump` through a temporary defaults file, not the process command line.
 

@@ -181,14 +181,20 @@ Set `API_TOKEN` in `api/.env` to a strong random value (`openssl rand -hex 32`).
 
 **Auth-exempt routes** (no token needed):
 - `/health`, `/ready` — health probes
-- `/app`, `/manage-categories`, `/manage-tags` — static UI pages. Each response sets `bm_session` so later API calls from that page send the cookie. Page scripts never read the token.
+- `/app`, `/manage-categories`, `/manage-tags` — UI pages. Without a session they show a login form; no cookie is set by these routes.
+- `/ui/*` — the pages' static scripts and styles
+- `/session` — `POST` with `{"token": "<API_TOKEN>"}` starts a browser session; `DELETE` logs out
 - `/docs`, `/openapi.json` — Swagger
+
+**Browser sessions** — paste the `API_TOKEN` into the login form once. `POST /session` compares it in constant time and sets `bm_session` to a random server-side session id (HttpOnly, `SameSite=Strict`, `Path=/`, `Secure` over https). The cookie never holds the token. Sessions are kept in memory, so they end when the API restarts; `SESSION_TTL_HOURS` (default 168) sets their lifetime. The **Log out** button ends the session. Cookie-authenticated writes (`POST`/`PATCH`/`DELETE`) must come from the app's own origin (`Origin` and `Sec-Fetch-Site` are checked); behind a reverse proxy on another host name, list it in `ALLOWED_ORIGINS` (comma-separated origins). `COOKIE_SECURE=true|false|auto` overrides the `Secure` detection.
+
+**Content Security Policy** — the UI pages send `script-src 'self'; style-src 'self'` with no `unsafe-inline`. All scripts and styles load from `/ui/*`; there are no inline handlers.
 
 **Backup auth** — `GET /backup` uses a separate `BACKUP_TOKEN` credential, also set in `api/.env`. Both tokens must be changed from the placeholder before the API will serve them. The dump reads the database password from a temporary defaults file, not from the process command line.
 
 **Network model** — the Quadlet pod binds the API port to `127.0.0.1:11650` only. No LAN access is possible at the network level regardless of token configuration. phpMyAdmin (`11651`) is also `127.0.0.1` only.
 
-**Extension token handling** — the token is stored in `chrome.storage.local` (never synced across devices) and sent as `Authorization: Bearer <token>` on every API call from the background service worker.
+**Extension token handling** — the token is stored in `chrome.storage.local` (never synced across devices) and sent as `Authorization: Bearer <token>` on every API call from the background service worker. The API Base URL must use `https://` unless the host is `localhost`, `127.0.0.1` or `[::1]`.
 
 ---
 
@@ -198,15 +204,15 @@ Set `API_TOKEN` in `api/.env` to a strong random value (`openssl rand -hex 32`).
 
 | Service | URL | Auth required |
 |---|---|---|
-| Bookmark viewer | `http://localhost:11650/app` | No (sets an HttpOnly session cookie) |
-| Category manager | `http://localhost:11650/manage-categories` | No (sets an HttpOnly session cookie) |
-| Tag manager | `http://localhost:11650/manage-tags` | No (sets an HttpOnly session cookie) |
+| Bookmark viewer | `http://localhost:11650/app` | Login form (API token, once per browser session) |
+| Category manager | `http://localhost:11650/manage-categories` | Login form (API token, once per browser session) |
+| Tag manager | `http://localhost:11650/manage-tags` | Login form (API token, once per browser session) |
 | Swagger UI | `http://localhost:11650/docs` | No |
 | OpenAPI JSON | `http://localhost:11650/openapi.json` | No |
 | API | `http://localhost:11650` | Bearer token |
 | phpMyAdmin | `http://localhost:11651` | MariaDB credentials |
 
-The browser UIs receive an HttpOnly `bm_session` cookie with the HTML response and send it on later API calls. The token is not written into the page.
+The browser UIs show a login form until you paste the API token. After that they use an HttpOnly `bm_session` cookie that holds a random session id, not the token.
 
 ---
 

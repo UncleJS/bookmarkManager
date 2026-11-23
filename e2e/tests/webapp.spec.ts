@@ -22,14 +22,48 @@ function authHeaders(): Record<string, string> {
   return headers;
 }
 
-// The web UI authenticates via a token stored in localStorage ("apiToken").
-// Inject it before navigation so authenticated views can load immediately.
+// The web UI shows a login form until the browser has a session. Sign in
+// through POST /session first; page.request shares the context's cookie jar,
+// so the HttpOnly bm_session cookie is sent on the next page.goto.
 async function injectToken(page: import("@playwright/test").Page): Promise<void> {
   if (!TOKEN) return;
-  await page.addInitScript((token) => {
-    localStorage.setItem("apiToken", token);
-  }, TOKEN);
+  const res = await page.request.post(`${BASE}/session`, {
+    data: { token: TOKEN },
+    headers: { Origin: new URL(BASE).origin },
+  });
+  expect(res.status()).toBe(200);
 }
+
+test.describe("Login (/app without a session)", () => {
+  test("shows the login form and sets no cookie", async ({ page, context }) => {
+    const res = await page.goto(`${BASE}/app`, { waitUntil: "domcontentloaded" });
+    expect(res?.headers()["set-cookie"]).toBeUndefined();
+    await expect(page.locator("#login-form")).toBeVisible();
+    expect((await context.cookies()).find((c) => c.name === "bm_session")).toBeUndefined();
+  });
+
+  test("a wrong token shows an error", async ({ page }) => {
+    await page.goto(`${BASE}/app`, { waitUntil: "domcontentloaded" });
+    await page.fill("#login-token", "definitely-wrong");
+    await page.click("#login-submit");
+    await expect(page.locator("#login-error")).toContainText(/invalid/i);
+  });
+
+  test("the right token opens the app, and log out returns to the form", async ({ page, context }) => {
+    test.skip(!TOKEN, "Skipped — API_TOKEN env var not set");
+    await page.goto(`${BASE}/app`, { waitUntil: "domcontentloaded" });
+    await page.fill("#login-token", TOKEN);
+    await page.click("#login-submit");
+    await expect(page.locator("#layout")).toBeVisible({ timeout: 10_000 });
+    const cookie = (await context.cookies()).find((c) => c.name === "bm_session");
+    expect(cookie?.httpOnly).toBe(true);
+    expect(cookie?.sameSite).toBe("Strict");
+    expect(cookie?.value).not.toBe(TOKEN);
+
+    await page.click('[data-action="logout"]');
+    await expect(page.locator("#login-form")).toBeVisible({ timeout: 10_000 });
+  });
+});
 
 test.describe("Bookmark Viewer UI (/app)", () => {
   test("page loads and shows the Bookmark Manager title", async ({ page }) => {
