@@ -16,6 +16,10 @@ Label=app=bookmark-manager
 Label=bookmark-manager.instance=bookmark
 ContainerName=bookmark-db
 
+# Server time zone UTC: every *_UTC column holds UTC (the API also sets the
+# session time zone on each connection).
+Exec=--default-time-zone=+00:00
+
 # Load only MariaDB init env vars from generated prod env file
 EnvironmentFile=%h/.config/bookmark-manager/env.db
 

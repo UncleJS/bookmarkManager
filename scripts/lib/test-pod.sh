@@ -32,7 +32,7 @@ testpod_create() {
     -e MARIADB_USER="${TEST_DB_USER}" \
     -e MARIADB_PASSWORD="${TEST_DB_PW}" \
     -v "${pod}-db-data:/var/lib/mysql:Z" \
-    "${MARIADB_IMAGE}" >/dev/null
+    "${MARIADB_IMAGE}" --default-time-zone=+00:00 >/dev/null
 
   info "Waiting for MariaDB in ${pod} ..."
   local i
