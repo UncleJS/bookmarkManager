@@ -108,12 +108,12 @@ describe("POST /session", () => {
     expect(res.status).toBe(403);
   });
 
-  it("sets an HttpOnly, SameSite=Strict, Path=/ cookie holding a random id, not the token", async () => {
+  it("sets an HttpOnly, SameSite=Lax, Path=/ cookie holding a random id, not the token", async () => {
     const res = await login();
     expect(res.status).toBe(200);
     const setCookie = res.headers.get("set-cookie") ?? "";
     expect(setCookie).toContain("HttpOnly");
-    expect(setCookie).toContain("SameSite=Strict");
+    expect(setCookie).toContain("SameSite=Lax");
     expect(setCookie).toContain("Path=/");
     expect(setCookie).not.toContain("Secure");
     const id = cookieValue(setCookie);
@@ -141,6 +141,25 @@ describe("POST /session", () => {
 });
 
 describe("cookie-authenticated API requests", () => {
+  it("serves the app on a cross-site link (Lax) but still blocks a cross-site write", async () => {
+    const id = await sessionId();
+    const page = await app.handle(new Request(`${BASE}/app`, {
+      headers: { Cookie: `${SESSION_COOKIE}=${id}`, "Sec-Fetch-Site": "cross-site" },
+    }));
+    expect(await page.text()).not.toContain('id="login-form"');
+    const write = await app.handle(new Request(`${BASE}/tags`, {
+      method: "POST",
+      headers: {
+        Cookie: `${SESSION_COOKIE}=${id}`,
+        "Content-Type": "application/json",
+        Origin: "https://evil.example",
+        "Sec-Fetch-Site": "cross-site",
+      },
+      body: JSON.stringify({ name: `lax-${Date.now()}` }),
+    }));
+    expect(write.status).toBe(403);
+  });
+
   it("allows GET with a session cookie", async () => {
     const id = await sessionId();
     const res = await app.handle(new Request(`${BASE}/tags`, {

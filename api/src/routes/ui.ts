@@ -163,7 +163,7 @@ export function createUiRoutes() {
         summary: "Start a browser session",
         description:
           "Exchanges the API token for a browser session. On success the response sets " +
-          "`bm_session=<random id>` (HttpOnly, SameSite=Strict, Path=/, Secure over https). " +
+          "`bm_session=<random id>` (HttpOnly, SameSite=Lax, Path=/, Secure over https). " +
           "The cookie holds a random server-side session id, never the token. " +
           "Only same-origin requests are accepted. API clients keep using `Authorization: Bearer <API_TOKEN>`.",
         responses: {

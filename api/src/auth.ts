@@ -123,12 +123,15 @@ export function isHttpsRequest(request: Request): boolean {
   return (request.headers.get("x-forwarded-proto") ?? "").split(",")[0].trim().toLowerCase() === "https";
 }
 
+// SameSite=Lax: a link to /app from another site keeps the user signed in.
+// Lax still withholds the cookie from cross-site POST/PATCH/DELETE, and every
+// cookie-authenticated write must also pass isSameOriginRequest().
 export function sessionCookie(id: string, maxAgeSeconds: number, secure: boolean): string {
-  return `${SESSION_COOKIE}=${id}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${maxAgeSeconds}${secure ? "; Secure" : ""}`;
+  return `${SESSION_COOKIE}=${id}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${maxAgeSeconds}${secure ? "; Secure" : ""}`;
 }
 
 export function clearedSessionCookie(secure: boolean): string {
-  return `${SESSION_COOKIE}=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0${secure ? "; Secure" : ""}`;
+  return `${SESSION_COOKIE}=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0${secure ? "; Secure" : ""}`;
 }
 
 // --- CSRF: origin check for cookie-authenticated writes ----------------------

@@ -57,7 +57,7 @@ test.describe("Login (/app without a session)", () => {
     await expect(page.locator("#layout")).toBeVisible({ timeout: 10_000 });
     const cookie = (await context.cookies()).find((c) => c.name === "bm_session");
     expect(cookie?.httpOnly).toBe(true);
-    expect(cookie?.sameSite).toBe("Strict");
+    expect(cookie?.sameSite).toBe("Lax");
     expect(cookie?.value).not.toBe(TOKEN);
 
     await page.click('[data-action="logout"]');
