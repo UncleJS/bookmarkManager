@@ -11,7 +11,9 @@ After=bookmark-pod.service
 After=bookmark-db-volume.service
 
 [Container]
-Image=docker.io/mariadb:11
+Image=docker.io/library/mariadb:11.8
+Label=app=bookmark-manager
+Label=bookmark-manager.instance=bookmark
 ContainerName=bookmark-db
 
 # Load only MariaDB init env vars from generated prod env file

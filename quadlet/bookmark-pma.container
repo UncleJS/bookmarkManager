@@ -11,7 +11,9 @@ PartOf=bookmark-pod.service
 After=bookmark-pod.service bookmark-db.service
 
 [Container]
-Image=docker.io/phpmyadmin:5
+Image=docker.io/library/phpmyadmin:5.2
+Label=app=bookmark-manager
+Label=bookmark-manager.instance=bookmark
 ContainerName=bookmark-pma
 
 # Load only phpMyAdmin env vars from generated prod env file

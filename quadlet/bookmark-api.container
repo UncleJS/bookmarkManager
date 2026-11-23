@@ -1,7 +1,7 @@
 # =============================================================================
 # Bookmark Manager Production API — Quadlet unit file
 # Installs to: ~/.config/containers/systemd/bookmark-api.container
-# Bun/Elysia API — built from api/Dockerfile.
+# Bun/Elysia API — built from api/Containerfile by scripts/build.sh.
 # =============================================================================
 
 [Unit]
@@ -12,6 +12,8 @@ After=bookmark-pod.service bookmark-db.service
 [Container]
 Image=localhost/bookmark-api:latest
 ContainerName=bookmark-api
+Label=app=bookmark-manager
+Label=bookmark-manager.instance=bookmark
 
 # Load only API env vars from generated prod env file
 EnvironmentFile=%h/.config/bookmark-manager/env.api

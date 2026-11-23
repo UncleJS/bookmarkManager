@@ -1,2 +1,5 @@
+# Bookmark Manager MariaDB data — named Podman volume.
 [Volume]
+Label=app=bookmark-manager
+Label=bookmark-manager.instance=bookmark
 VolumeName=bookmark-db-data
