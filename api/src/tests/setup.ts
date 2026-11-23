@@ -9,6 +9,9 @@
 import { afterAll } from "bun:test";
 
 afterAll(async () => {
+  // No DB env (e.g. an ad-hoc run of a DB-free subset): the client was never
+  // usable, so there is no pool to close and importing it would throw.
+  if (!process.env.DB_USER) return;
   const { pool } = await import("../db/client.ts");
   await pool.end();
 });
