@@ -20,6 +20,12 @@ let app: AppModule["app"];
 let db: DbModule["db"];
 let pool: DbModule["pool"];
 let schema: SchemaModule;
+let previousGlobalTimeZone: string | undefined;
+
+// The app must write UTC whatever the server zone is. The suite runs against a
+// server whose global zone is +05:00, so any NOW()/local-zone write shows up as
+// a 5-hour skew. The API pool pins its sessions to +00:00 (db/client.ts).
+const SKEWED_SERVER_TIME_ZONE = "+05:00";
 
 beforeAll(async () => {
   process.env.API_TOKEN ||= "test-api-token";
@@ -94,6 +100,11 @@ beforeAll(async () => {
     END
   `);
 
+  const [tzRows] = await adminConnection.query("SELECT @@global.time_zone AS tz");
+  previousGlobalTimeZone = (tzRows as Array<{ tz: string }>)[0]?.tz;
+  // New sessions (the API pool's) start in the skewed zone; this one keeps its own.
+  await adminConnection.query(`SET GLOBAL time_zone = '${SKEWED_SERVER_TIME_ZONE}'`);
+
   ({ app } = await import("../server.ts"));
   ({ db, pool } = await import("../db/client.ts"));
   schema = await import("../db/schema.ts");
@@ -101,6 +112,9 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await pool?.end();
+  if (previousGlobalTimeZone !== undefined) {
+    await adminConnection?.query("SET GLOBAL time_zone = ?", [previousGlobalTimeZone]);
+  }
   await adminConnection?.end();
 });
 
@@ -1493,6 +1507,94 @@ describe("search escapes LIKE wildcards (C4)", () => {
     const body = await res.json() as Array<{ name: string }> | { items: Array<{ name: string }> };
     const names = (Array.isArray(body) ? body : body.items).map((tag) => tag.name);
     expect(names).toEqual([`${marker}_a`]);
+  });
+});
+
+describe("UTC timestamps", () => {
+  const ISO_UTC = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{3})?Z$/;
+  const MAX_SKEW_MS = 60_000;
+
+  function expectNearNowUtc(value: unknown): void {
+    expect(typeof value).toBe("string");
+    expect(value as string).toMatch(ISO_UTC);
+    expect(Math.abs(Date.parse(value as string) - Date.now())).toBeLessThan(MAX_SKEW_MS);
+  }
+
+  // Seconds between the stored value and UTC_TIMESTAMP(); zone-independent.
+  async function secondsFromUtcNow(table: string, column: string, id: number): Promise<number> {
+    const [rows] = await adminConnection.query(
+      `SELECT TIMESTAMPDIFF(SECOND, \`${column}\`, UTC_TIMESTAMP()) AS diff FROM \`${table}\` WHERE id = ?`,
+      [id]
+    );
+    const diff = (rows as Array<{ diff: number | null }>)[0]?.diff;
+    expect(diff).not.toBeNull();
+    return Number(diff);
+  }
+
+  it("pins the API pool's session time zone to UTC", async () => {
+    const [rows] = await pool.query("SELECT @@session.time_zone AS session, @@global.time_zone AS global");
+    const [row] = rows as Array<{ session: string; global: string }>;
+    expect(row.global).toBe(SKEWED_SERVER_TIME_ZONE);
+    expect(row.session).toBe("+00:00");
+  });
+
+  it("names every date/time column *_UTC without local-zone defaults", async () => {
+    const [rows] = await adminConnection.query(
+      `SELECT table_name AS t, column_name AS c, column_default AS d, extra AS e
+         FROM information_schema.columns
+        WHERE table_schema = DATABASE()
+          AND table_name <> '__drizzle_migrations'
+          AND data_type IN ('datetime', 'timestamp', 'date', 'time')`
+    );
+    const columns = rows as Array<{ t: string; c: string; d: string | null; e: string }>;
+    expect(columns.length).toBeGreaterThan(0);
+    for (const col of columns) {
+      expect(`${col.t}.${col.c}`).toMatch(/_UTC$/);
+      expect(`${col.t}.${col.c} ${col.d ?? ""} ${col.e}`.toLowerCase()).not.toMatch(/current_timestamp|now\(/);
+    }
+  });
+
+  it("writes created/updated/archived times in UTC and returns ISO 8601 with Z", async () => {
+    const createRes = await app.handle(jsonRequest("/bookmarks", "POST", {
+      url: uniqueUrl("utc-bookmark"),
+      title: "UTC bookmark",
+    }));
+    expect(createRes.status).toBe(201);
+    const created = await createRes.json() as { id: number; createdAt: unknown };
+    expectNearNowUtc(created.createdAt);
+    expect(Math.abs(await secondsFromUtcNow("bookmarks", "created_UTC", created.id))).toBeLessThan(60);
+    expect(Math.abs(await secondsFromUtcNow("bookmarks", "updated_UTC", created.id))).toBeLessThan(60);
+
+    // Push updated_UTC into the past, then check an update moves it to UTC now.
+    await adminConnection.query(
+      "UPDATE bookmarks SET updated_UTC = UTC_TIMESTAMP() - INTERVAL 1 DAY WHERE id = ?",
+      [created.id]
+    );
+    const patchRes = await app.handle(jsonRequest(`/bookmarks/${created.id}`, "PATCH", { title: "UTC bookmark 2" }));
+    expect(patchRes.status).toBe(200);
+    expect(Math.abs(await secondsFromUtcNow("bookmarks", "updated_UTC", created.id))).toBeLessThan(60);
+
+    const archiveRes = await app.handle(request(`/bookmarks/${created.id}/archive`, "PATCH"));
+    expect(archiveRes.status).toBe(200);
+    expect(Math.abs(await secondsFromUtcNow("bookmarks", "archived_UTC", created.id))).toBeLessThan(60);
+  });
+
+  it("archives tags in UTC and lists archivedAt as ISO 8601 with Z", async () => {
+    const name = uniqueName("utc-tag");
+    const createRes = await app.handle(jsonRequest("/tags", "POST", { name }));
+    expect(createRes.status).toBe(201);
+    const tag = await createRes.json() as { id: number };
+
+    const archiveRes = await app.handle(request(`/tags/${tag.id}/archive`, "PATCH"));
+    expect(archiveRes.status).toBe(200);
+    expect(Math.abs(await secondsFromUtcNow("tags", "archived_UTC", tag.id))).toBeLessThan(60);
+
+    const listRes = await app.handle(request(`/tags?archived=true&exact=true&query=${encodeURIComponent(name)}`));
+    expect(listRes.status).toBe(200);
+    const body = await listRes.json() as { items: Array<{ id: number; archivedAt: unknown }> };
+    const listed = body.items.find((row) => row.id === tag.id);
+    expect(listed).toBeDefined();
+    expectNearNowUtc(listed!.archivedAt);
   });
 });
 
