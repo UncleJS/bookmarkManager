@@ -1,0 +1,13 @@
+# Build context for e2e/Containerfile (repo root). Keep secrets and bulk out.
+.git
+**/node_modules
+api/.env
+api/.env.*
+backups
+e2e/playwright-report
+e2e/test-results
+e2e/.tmp-chrome-*
+.idea
+.opencode
+home.png
+editModul.png

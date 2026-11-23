@@ -1,0 +1,32 @@
+# =============================================================================
+# Bookmark Manager E2E — Playwright test image
+#
+# Build context is the repo root (the suite loads ../extension).
+# scripts/build.sh --e2e passes PLAYWRIGHT_IMAGE, BUN_IMAGE and INSTANCE.
+# PLAYWRIGHT_IMAGE must match @playwright/test in e2e/bun.lock exactly.
+# =============================================================================
+ARG PLAYWRIGHT_IMAGE=mcr.microsoft.com/playwright:v1.63.0-noble
+ARG BUN_IMAGE=docker.io/oven/bun:1.4
+
+FROM ${BUN_IMAGE} AS bun
+
+FROM ${PLAYWRIGHT_IMAGE}
+ARG INSTANCE=bookmark
+LABEL app=bookmark-manager \
+      bookmark-manager.instance=${INSTANCE} \
+      bookmark-manager.role=test
+
+# bun only installs the locked deps; the suite itself runs on Node.
+COPY --from=bun /usr/local/bin/bun /usr/local/bin/bun
+
+WORKDIR /work/e2e
+COPY e2e/package.json e2e/bun.lock ./
+RUN bun install --frozen-lockfile
+COPY e2e/ ./
+COPY extension/ /work/extension/
+RUN chown -R pwuser:pwuser /work
+
+USER pwuser
+ENV CI=1
+# The extension tests need a headed Chromium, so run under a virtual display.
+ENTRYPOINT ["xvfb-run", "--auto-servernum", "--", "npx", "playwright", "test"]
