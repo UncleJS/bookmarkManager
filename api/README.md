@@ -254,7 +254,7 @@ Returns `409` with a `duplicates` array if an active bookmark already has the sa
 
 All tables carry `archived_UTC DATETIME NULL`. `NULL` = active. Setting `archived_UTC = UTC_TIMESTAMP()` is the only form of deletion. Replaced bookmark associations (tags, sub-categories, sub-sub-categories) archive removed junction rows and reactivate them if the same link is added later.
 
-Timestamps: every date/time column is UTC and ends in `_UTC` (`created_UTC`, `updated_UTC`, `archived_UTC`, all `DATETIME`, written with `UTC_TIMESTAMP()`). The pool sets `time_zone = '+00:00'` on every connection and the MariaDB server runs with `--default-time-zone=+00:00`. JSON fields keep their names (`createdAt`, `updatedAt`, `archivedAt`) and carry ISO 8601 UTC strings such as `2026-11-23T14:05:09.000Z`. Migration `0013_utc_timestamp_columns` renamed the old `*_at` columns in place.
+Timestamps: every date/time column is UTC and ends in `_UTC` (`created_UTC`, `updated_UTC`, `archived_UTC`, all `DATETIME`, written with `UTC_TIMESTAMP()`). The pool sets `time_zone = '+00:00'` on every connection and the MariaDB server runs with `--default-time-zone=+00:00`. JSON fields keep their names (`createdAt`, `updatedAt`, `archivedAt`) and carry ISO 8601 UTC strings such as `2026-11-23T14:05:09.000Z`. Migration `0013_utc_timestamp_columns` renamed the old `*_at` columns in place; it is safe to re-run if it stops half-way. Back up first (`scripts/backup.sh`). `bookmarks.updated_UTC` is set by the API on every update (Drizzle `$onUpdate`), not by the database, so edits made outside the API (phpMyAdmin, raw SQL) don't change it.
 
 | Table | Purpose |
 |---|---|

@@ -33,7 +33,11 @@ const pool = mysql.createPool({
 export const SESSION_TIME_ZONE = "+00:00";
 pool.pool.on("connection", (connection) => {
   connection.query(`SET time_zone = '${SESSION_TIME_ZONE}'`, (error) => {
-    if (error) console.error("Failed to set the DB session time zone:", error.message);
+    if (!error) return;
+    // Never hand out a connection in the wrong zone: drop it so the pool
+    // opens a new one and the query that was waiting on it fails loudly.
+    console.error("Failed to set the DB session time zone:", error.message);
+    connection.destroy();
   });
 });
 
