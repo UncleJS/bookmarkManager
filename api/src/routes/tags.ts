@@ -1,8 +1,8 @@
 import { Elysia, t } from "elysia";
-import { and, asc, desc, eq, isNotNull, isNull, like, sql } from "drizzle-orm";
+import { and, asc, desc, eq, isNotNull, isNull, sql } from "drizzle-orm";
 import { db } from "../db/client.ts";
 import { bookmarks, bookmarkTags, tags } from "../db/schema.ts";
-import { ErrorResp, OkResp, PositiveIdParam, S, isDupEntry } from "./shared.ts";
+import { ErrorResp, OkResp, PositiveIdParam, S, escapeLike, isDupEntry } from "./shared.ts";
 
 export const tagRoutes = new Elysia()
   .get(
@@ -38,7 +38,7 @@ export const tagRoutes = new Elysia()
         search
           ? exact
             ? sql`LOWER(${tags.name}) = LOWER(${search})`
-            : like(tags.name, `%${search}%`)
+            : sql`${tags.name} LIKE ${`%${escapeLike(search)}%`} ESCAPE '!'`
           : undefined
       );
 
@@ -84,7 +84,7 @@ export const tagRoutes = new Elysia()
     },
     {
       query: t.Object({
-        query: t.Optional(t.String({ description: "Search term - filters tag names using a LIKE %term% match (case-insensitive)" })),
+        query: t.Optional(t.String({ maxLength: 255, description: "Search term - filters tag names using a LIKE %term% match (case-insensitive)" })),
         exact: t.Optional(t.String({ description: "When `true`, returns only exact case-insensitive matches for `query`." })),
         limit: t.Optional(t.String({ description: "Maximum number of tags to return. Default: 20, max: 100" })),
         offset: t.Optional(t.String({ description: "Zero-based offset for pagination. Default: 0" })),
@@ -159,7 +159,7 @@ export const tagRoutes = new Elysia()
     },
     {
       body: t.Object({
-        name: t.String({ description: "Tag name. Must be unique among active tags. Whitespace is trimmed." }),
+        name: t.String({ maxLength: 255, description: "Tag name. Must be unique among active tags. Whitespace is trimmed." }),
       }),
       detail: {
         tags: ["tags"],
@@ -217,7 +217,7 @@ export const tagRoutes = new Elysia()
     {
       params: PositiveIdParam,
       body: t.Object({
-        name: t.String({ description: "New tag name. Must be non-empty after trimming and unique among active tags." }),
+        name: t.String({ maxLength: 255, description: "New tag name. Must be non-empty after trimming and unique among active tags." }),
       }),
       detail: {
         tags: ["tags"],

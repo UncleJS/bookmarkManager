@@ -33,8 +33,8 @@ export const categoryRoutes = new Elysia()
     },
     {
       body: t.Object({
-        name: t.String({ description: "Category name. Must be unique among active categories. Whitespace is trimmed." }),
-        description: t.Optional(t.String({ description: "Optional description for the category." })),
+        name: t.String({ maxLength: 255, description: "Category name. Must be unique among active categories. Whitespace is trimmed." }),
+        description: t.Optional(t.String({ maxLength: 10000, description: "Optional description for the category." })),
       }),
       detail: {
         tags: ["categories"],
@@ -272,7 +272,7 @@ export const categoryRoutes = new Elysia()
     {
       params: PositiveIdParam,
       body: t.Object({
-        name: t.String({ description: "New category name. Must be non-empty after trimming." }),
+        name: t.String({ maxLength: 255, description: "New category name. Must be non-empty after trimming." }),
         description: t.Optional(t.Union([t.String(), t.Null()], { description: "Optional description. Pass null or empty string to clear." })),
       }),
       detail: {

@@ -1,5 +1,5 @@
 import { Elysia, t } from "elysia";
-import { and, asc, desc, eq, inArray, isNotNull, isNull, like, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
 import { db } from "../db/client.ts";
 import {
   bookmarkCategories,
@@ -17,8 +17,10 @@ import {
   BOOKMARK_SORT_VALUES,
   duplicateUrlResponse,
   ErrorResp,
+  escapeLike,
   findActiveBookmarksByUrl,
   isDupEntry,
+  isMissingReference,
   OkResp,
   PositiveIdParam,
   S,
@@ -38,10 +40,84 @@ function isHttpUrl(value: string): boolean {
   }
 }
 
-function normalizeOptionalFaviconUrl(faviconUrl?: string | null): string | null {
-  if (typeof faviconUrl !== "string") return null;
+// Request size limits (S7). The DB columns are TEXT/VARCHAR(1024); these keep
+// single requests small and match what the UI and extension ever send.
+export const LIMITS = {
+  url: 8192,
+  title: 1024,
+  description: 10000,
+  faviconUrl: 32768,
+  httpFaviconUrl: 2048,
+  ids: 200,
+} as const;
+
+const DATA_IMAGE_RE = /^data:image\/(png|gif|jpeg|jpg|webp|x-icon|vnd\.microsoft\.icon|svg\+xml|avif|bmp);base64,[A-Za-z0-9+/=\s]+$/i;
+
+type FaviconResult = { ok: true; value: string | null } | { ok: false; error: string };
+
+/**
+ * Accepts http(s) URLs up to 2048 chars and base64 data:image URLs up to
+ * 32768 chars. Empty or null clears the favicon. Anything else is rejected (S6).
+ */
+function normalizeOptionalFaviconUrl(faviconUrl?: string | null): FaviconResult {
+  if (typeof faviconUrl !== "string") return { ok: true, value: null };
   const trimmed = faviconUrl.trim();
-  return trimmed.length > 0 ? trimmed : null;
+  if (trimmed.length === 0) return { ok: true, value: null };
+  if (trimmed.toLowerCase().startsWith("data:")) {
+    if (trimmed.length <= LIMITS.faviconUrl && DATA_IMAGE_RE.test(trimmed)) return { ok: true, value: trimmed };
+    return { ok: false, error: "faviconUrl data URL must be a base64 data:image of at most 32768 characters" };
+  }
+  if (trimmed.length <= LIMITS.httpFaviconUrl && isHttpUrl(trimmed)) return { ok: true, value: trimmed };
+  return { ok: false, error: "faviconUrl must be an http(s) URL of at most 2048 characters, or a data:image URL" };
+}
+
+type ReferenceIds = {
+  tagIds: number[];
+  categoryIds: number[];
+  subcategoryIds: number[];
+  subSubcategoryIds: number[];
+};
+
+const REFERENCE_TABLES = {
+  tagIds: { table: tags, label: "tag" },
+  categoryIds: { table: categories, label: "category" },
+  subcategoryIds: { table: subcategories, label: "sub-category" },
+  subSubcategoryIds: { table: subSubcategories, label: "sub-sub-category" },
+} as const;
+
+/**
+ * Returns an error message when any id does not exist or is archived (C1).
+ * Ids in `alreadyLinked` are skipped, so a PATCH can keep an existing link
+ * whose target was archived later.
+ */
+async function findInvalidReferenceError(
+  ids: Partial<ReferenceIds>,
+  alreadyLinked: Partial<ReferenceIds> = {},
+): Promise<string | null> {
+  for (const key of Object.keys(REFERENCE_TABLES) as (keyof ReferenceIds)[]) {
+    const keep = new Set(alreadyLinked[key] ?? []);
+    const wanted = (ids[key] ?? []).filter((value) => !keep.has(value));
+    if (wanted.length === 0) continue;
+    const { table, label } = REFERENCE_TABLES[key];
+    const rows = await db
+      .select({ id: table.id })
+      .from(table)
+      .where(and(inArray(table.id, wanted), isNull(table.archivedAt)));
+    const found = new Set(rows.map((row) => row.id));
+    const missing = wanted.filter((value) => !found.has(value));
+    if (missing.length > 0) {
+      return `Unknown or archived ${label} id(s): ${missing.join(", ")}`;
+    }
+  }
+  return null;
+}
+
+async function getActiveTagIds(bookmarkId: number): Promise<number[]> {
+  const rows = await db
+    .select({ tagId: bookmarkTags.tagId })
+    .from(bookmarkTags)
+    .where(and(eq(bookmarkTags.bookmarkId, bookmarkId), isNull(bookmarkTags.archivedAt)));
+  return rows.map((row) => row.tagId);
 }
 
 async function getActiveClassificationIds(bookmarkId: number): Promise<{
@@ -162,6 +238,18 @@ export const bookmarkRoutes = new Elysia()
       const subcategoryIds = uniqueIds(body.subcategoryIds);
       const subSubcategoryIds = uniqueIds(body.subSubcategoryIds);
 
+      const favicon = normalizeOptionalFaviconUrl(body.faviconUrl);
+      if (!favicon.ok) {
+        set.status = 400;
+        return { error: favicon.error };
+      }
+
+      const referenceError = await findInvalidReferenceError({ tagIds, categoryIds, subcategoryIds, subSubcategoryIds });
+      if (referenceError) {
+        set.status = 400;
+        return { error: referenceError };
+      }
+
       const overlapError =
         await findClassificationOverlapError(categoryIds, subcategoryIds, subSubcategoryIds) ??
         await findCategoryDepthOverlapError(categoryIds, subcategoryIds, subSubcategoryIds);
@@ -179,7 +267,7 @@ export const bookmarkRoutes = new Elysia()
               url,
               title,
               description: body.description ?? null,
-              faviconUrl: normalizeOptionalFaviconUrl(body.faviconUrl),
+              faviconUrl: favicon.value,
               readLater: flags.readLater ? 1 : 0,
               hotTopic: flags.hotTopic ? 1 : 0,
               cheatsheets: flags.cheatsheets ? 1 : 0,
@@ -223,6 +311,11 @@ export const bookmarkRoutes = new Elysia()
           set.status = 409;
           return duplicateUrlResponse(existing);
         }
+        if (isMissingReference(err)) {
+          // A referenced tag or category was deleted between the check and the insert.
+          set.status = 400;
+          return { error: "A referenced tag or category does not exist" };
+        }
         throw err;
       }
 
@@ -241,13 +334,13 @@ export const bookmarkRoutes = new Elysia()
     },
     {
       body: t.Object({
-        url: t.String({ description: "Full URL of the page to bookmark. Whitespace is trimmed. Required." }),
-        title: t.String({ description: "Page title. Whitespace is trimmed. Required." }),
-        description: t.Optional(t.String({ description: "Optional freeform notes or description for the bookmark." })),
-        categoryIds: t.Optional(t.Array(t.Number(), { description: "IDs of top-level categories to attach directly. Duplicates are deduplicated automatically." })),
-        subcategoryIds: t.Optional(t.Array(t.Number(), { description: "IDs of sub-categories to attach. Duplicates are deduplicated automatically." })),
-        subSubcategoryIds: t.Optional(t.Array(t.Number(), { description: "IDs of sub-sub-categories to attach. Duplicates are deduplicated automatically." })),
-        tags: t.Optional(t.Array(t.Number(), { description: "IDs of tags to attach. Duplicates are deduplicated automatically." })),
+        url: t.String({ maxLength: LIMITS.url, description: "Full URL of the page to bookmark. Whitespace is trimmed. Required." }),
+        title: t.String({ maxLength: LIMITS.title, description: "Page title. Whitespace is trimmed. Required." }),
+        description: t.Optional(t.String({ maxLength: LIMITS.description, description: "Optional freeform notes or description for the bookmark." })),
+        categoryIds: t.Optional(t.Array(t.Number(), { maxItems: LIMITS.ids, description: "IDs of top-level categories to attach directly. Duplicates are deduplicated automatically." })),
+        subcategoryIds: t.Optional(t.Array(t.Number(), { maxItems: LIMITS.ids, description: "IDs of sub-categories to attach. Duplicates are deduplicated automatically." })),
+        subSubcategoryIds: t.Optional(t.Array(t.Number(), { maxItems: LIMITS.ids, description: "IDs of sub-sub-categories to attach. Duplicates are deduplicated automatically." })),
+        tags: t.Optional(t.Array(t.Number(), { maxItems: LIMITS.ids, description: "IDs of tags to attach. Duplicates are deduplicated automatically." })),
         flags: t.Optional(
           t.Object({
             readLater: t.Optional(t.Boolean({ description: "Flag this bookmark as Read Later." })),
@@ -257,7 +350,7 @@ export const bookmarkRoutes = new Elysia()
             archived: t.Optional(t.Boolean({ description: "If true, the bookmark is created already archived (archivedAt set to NOW())." })),
           })
         ),
-        faviconUrl: t.Optional(t.Nullable(t.String({ description: "URL of the page favicon, typically captured by the extension at save time. Pass null or empty string to clear." }))),
+        faviconUrl: t.Optional(t.Nullable(t.String({ maxLength: LIMITS.faviconUrl, description: "URL of the page favicon (http/https up to 2048 characters, or a base64 data:image URL up to 32768), typically captured by the extension at save time. Pass null or empty string to clear." }))),
         allowDuplicate: t.Optional(t.Boolean({ description: "Set to true to skip the pre-insert duplicate lookup and rely on the database constraint. Active duplicate URLs still return 409." })),
       }),
       detail: {
@@ -289,7 +382,7 @@ export const bookmarkRoutes = new Elysia()
               },
             },
           },
-          400: { ...ErrorResp, description: "Validation error - url or title is blank after trimming" },
+          400: { ...ErrorResp, description: "Validation error - url or title is blank after trimming, an invalid faviconUrl, or an unknown or archived tag/category id" },
           409: {
             description: "Duplicate URL detected, or the request linked conflicting taxonomy levels in the same branch.",
             content: {
@@ -472,12 +565,13 @@ export const bookmarkRoutes = new Elysia()
       ];
 
       if (q) {
-        const pattern = `%${q}%`;
+        // Escape LIKE wildcards so a literal % or _ in the query matches itself (C4).
+        const pattern = `%${escapeLike(q)}%`;
         conditions.push(
           or(
-            like(bookmarks.title, pattern),
-            like(bookmarks.url, pattern),
-            like(bookmarks.description, pattern),
+            sql`${bookmarks.title} LIKE ${pattern} ESCAPE '!'`,
+            sql`${bookmarks.url} LIKE ${pattern} ESCAPE '!'`,
+            sql`${bookmarks.description} LIKE ${pattern} ESCAPE '!'`,
           )!
         );
       }
@@ -589,10 +683,12 @@ export const bookmarkRoutes = new Elysia()
         archivedAt: bookmarks.archivedAt,
       };
 
-      const [rows, [{ total }]] = await Promise.all([
-        db.select(bookmarkCols).from(bookmarks).where(where).orderBy(orderCol).limit(limit).offset(offset),
-        db.select({ total: sql<number>`COUNT(*)` }).from(bookmarks).where(where),
-      ]);
+      // Page and total come from one consistent snapshot, so they always agree (C5).
+      const { rows, total } = await db.transaction(async (tx) => {
+        const pageRows = await tx.select(bookmarkCols).from(bookmarks).where(where).orderBy(orderCol).limit(limit).offset(offset);
+        const [{ total: count }] = await tx.select({ total: sql<number>`COUNT(*)` }).from(bookmarks).where(where);
+        return { rows: pageRows, total: count };
+      }, { isolationLevel: "repeatable read", withConsistentSnapshot: true });
 
       const ids = rows.map((r) => r.id);
       const [tagRows, categoryRows, classRows, childClassRows] =
@@ -687,7 +783,7 @@ export const bookmarkRoutes = new Elysia()
       query: t.Object({
         limit: t.Optional(t.String({ description: "Maximum number of bookmarks to return. Integer 1–100. Default: 20." })),
         offset: t.Optional(t.String({ description: "Zero-based pagination offset. Non-negative integer. Default: 0." })),
-        q: t.Optional(t.String({ description: "Full-text search query. Matches against title, URL, and description using a case-insensitive LIKE search. Combinable with all other filters." })),
+        q: t.Optional(t.String({ maxLength: 500, description: "Full-text search query. Matches against title, URL, and description using a case-insensitive LIKE search. Combinable with all other filters." })),
         subcategoryId: t.Optional(t.String({ description: "Filter to bookmarks assigned to this subcategory ID. Must be a positive integer." })),
         subSubcategoryId: t.Optional(t.String({ description: "Filter to bookmarks assigned to this sub-sub-category ID. Must be a positive integer." })),
         categoryId: t.Optional(t.String({ description: "Filter to bookmarks linked directly to this category, or to an active sub-category or sub-sub-category inside it. Must be a positive integer." })),
@@ -784,7 +880,11 @@ export const bookmarkRoutes = new Elysia()
         updates.url = url;
       }
       if (body.description !== undefined) updates.description = body.description ?? null;
-      if (body.faviconUrl !== undefined) updates.faviconUrl = normalizeOptionalFaviconUrl(body.faviconUrl);
+      if (body.faviconUrl !== undefined) {
+        const favicon = normalizeOptionalFaviconUrl(body.faviconUrl);
+        if (!favicon.ok) { set.status = 400; return { error: favicon.error }; }
+        updates.faviconUrl = favicon.value;
+      }
       if (body.flags !== undefined) {
         const flags = body.flags;
         if (flags.readLater !== undefined) updates.readLater = flags.readLater ? 1 : 0;
@@ -797,6 +897,23 @@ export const bookmarkRoutes = new Elysia()
       const nextCategoryIds = body.categoryIds !== undefined ? uniqueIds(body.categoryIds) : null;
       const nextSubcategoryIds = body.subcategoryIds !== undefined ? uniqueIds(body.subcategoryIds) : null;
       const nextSubSubcategoryIds = body.subSubcategoryIds !== undefined ? uniqueIds(body.subSubcategoryIds) : null;
+
+      if (nextTagIds !== null || nextCategoryIds !== null || nextSubcategoryIds !== null || nextSubSubcategoryIds !== null) {
+        const linked = await getActiveClassificationIds(id);
+        const referenceError = await findInvalidReferenceError(
+          {
+            tagIds: nextTagIds ?? [],
+            categoryIds: nextCategoryIds ?? [],
+            subcategoryIds: nextSubcategoryIds ?? [],
+            subSubcategoryIds: nextSubSubcategoryIds ?? [],
+          },
+          { ...linked, tagIds: nextTagIds !== null ? await getActiveTagIds(id) : [] },
+        );
+        if (referenceError) {
+          set.status = 400;
+          return { error: referenceError };
+        }
+      }
 
       if (nextCategoryIds !== null || nextSubcategoryIds !== null || nextSubSubcategoryIds !== null) {
         const currentClassificationIds = await getActiveClassificationIds(id);
@@ -1011,20 +1128,24 @@ export const bookmarkRoutes = new Elysia()
           set.status = 409;
           return { error: "An active bookmark with this URL already exists" };
         }
+        if (isMissingReference(err)) {
+          set.status = 400;
+          return { error: "A referenced tag or category does not exist" };
+        }
         throw err;
       }
     },
     {
       params: PositiveIdParam,
       body: t.Object({
-        title: t.Optional(t.String({ description: "New title. Whitespace is trimmed. Cannot be set to an empty string." })),
-        url: t.Optional(t.String({ description: "New URL. Whitespace is trimmed. Cannot be set to an empty string." })),
-        description: t.Optional(t.Nullable(t.String({ description: "New description. Pass null to clear the existing description." }))),
-        faviconUrl: t.Optional(t.Nullable(t.String({ description: "New favicon URL. Pass null or an empty string to clear it. Whitespace is trimmed." }))),
-        tagIds: t.Optional(t.Array(t.Number(), { description: "Replacement tag ID list. When provided, ALL existing tag associations are replaced with this set. Pass an empty array to remove all tags." })),
-        categoryIds: t.Optional(t.Array(t.Number(), { description: "Replacement top-level category ID list. When provided, ALL existing direct category associations are replaced with this set. Pass an empty array to remove all direct categories." })),
-        subcategoryIds: t.Optional(t.Array(t.Number(), { description: "Replacement sub-category ID list. When provided, ALL existing sub-category associations are replaced with this set. Pass an empty array to remove all sub-categories." })),
-        subSubcategoryIds: t.Optional(t.Array(t.Number(), { description: "Replacement sub-sub-category ID list. When provided, ALL existing sub-sub-category associations are replaced with this set. Pass an empty array to remove all nested selections." })),
+        title: t.Optional(t.String({ maxLength: LIMITS.title, description: "New title. Whitespace is trimmed. Cannot be set to an empty string." })),
+        url: t.Optional(t.String({ maxLength: LIMITS.url, description: "New URL. Whitespace is trimmed. Cannot be set to an empty string." })),
+        description: t.Optional(t.Nullable(t.String({ maxLength: LIMITS.description, description: "New description. Pass null to clear the existing description." }))),
+        faviconUrl: t.Optional(t.Nullable(t.String({ maxLength: LIMITS.faviconUrl, description: "New favicon URL (http/https up to 2048 characters, or a base64 data:image URL). Pass null or an empty string to clear it. Whitespace is trimmed." }))),
+        tagIds: t.Optional(t.Array(t.Number(), { maxItems: LIMITS.ids, description: "Replacement tag ID list. When provided, ALL existing tag associations are replaced with this set. Pass an empty array to remove all tags." })),
+        categoryIds: t.Optional(t.Array(t.Number(), { maxItems: LIMITS.ids, description: "Replacement top-level category ID list. When provided, ALL existing direct category associations are replaced with this set. Pass an empty array to remove all direct categories." })),
+        subcategoryIds: t.Optional(t.Array(t.Number(), { maxItems: LIMITS.ids, description: "Replacement sub-category ID list. When provided, ALL existing sub-category associations are replaced with this set. Pass an empty array to remove all sub-categories." })),
+        subSubcategoryIds: t.Optional(t.Array(t.Number(), { maxItems: LIMITS.ids, description: "Replacement sub-sub-category ID list. When provided, ALL existing sub-sub-category associations are replaced with this set. Pass an empty array to remove all nested selections." })),
         flags: t.Optional(t.Object({
           readLater: t.Optional(t.Boolean({ description: "Set or clear the Read Later flag." })),
           hotTopic: t.Optional(t.Boolean({ description: "Set or clear the Hot Topic flag." })),

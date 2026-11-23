@@ -124,8 +124,8 @@ export const subSubcategoryRoutes = new Elysia()
     },
     {
       body: t.Object({
-        name: t.String({ description: "Sub-sub-category name. Must be unique within the parent sub-category." }),
-        description: t.Optional(t.Nullable(t.String({ description: "Optional description for the sub-sub-category." }))),
+        name: t.String({ maxLength: 255, description: "Sub-sub-category name. Must be unique within the parent sub-category." }),
+        description: t.Optional(t.Nullable(t.String({ maxLength: 10000, description: "Optional description for the sub-sub-category." }))),
         subcategoryId: t.Number({ description: "Parent sub-category ID." }),
       }),
       detail: {
@@ -240,8 +240,8 @@ export const subSubcategoryRoutes = new Elysia()
     {
       params: PositiveIdParam,
       body: t.Object({
-        name: t.String({ description: "New sub-sub-category name. Must be non-empty after trimming." }),
-        description: t.Optional(t.Nullable(t.String({ description: "Optional description. Pass null or empty string to clear." }))),
+        name: t.String({ maxLength: 255, description: "New sub-sub-category name. Must be non-empty after trimming." }),
+        description: t.Optional(t.Nullable(t.String({ maxLength: 10000, description: "Optional description. Pass null or empty string to clear." }))),
       }),
       detail: {
         tags: ["subSubcategories"],

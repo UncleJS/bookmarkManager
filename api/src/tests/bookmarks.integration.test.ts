@@ -1,7 +1,8 @@
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
-import { readFile } from "fs/promises";
 import mysql from "mysql2/promise";
 import { eq } from "drizzle-orm";
+
+import { resetTestDatabase } from "./testDb.ts";
 
 const FAILING_TAG_ID = 900001;
 const FAILING_CLASSIFICATION_ID = 900002;
@@ -43,41 +44,19 @@ beforeAll(async () => {
     multipleStatements: true,
   });
 
-  const journal = JSON.parse(await readFile(
-    new URL("../db/migrations/meta/_journal.json", import.meta.url),
-    "utf-8"
-  )) as {
-    entries: Array<{ tag: string }>;
-  };
+  await resetTestDatabase(adminConnection);
 
-  await adminConnection.query("DROP TRIGGER IF EXISTS fail_bookmark_tags_insert");
-  await adminConnection.query("DROP TRIGGER IF EXISTS fail_bookmark_subcategories_insert");
-  await adminConnection.query("DROP TRIGGER IF EXISTS fail_bookmark_sub_subcategories_insert");
-  await adminConnection.query("DROP TABLE IF EXISTS bookmark_sub_subcategories");
-  await adminConnection.query("DROP TABLE IF EXISTS bookmark_subcategories");
-  await adminConnection.query("DROP TABLE IF EXISTS bookmark_categories");
-  await adminConnection.query("DROP TABLE IF EXISTS sub_subcategories");
-  await adminConnection.query("DROP TABLE IF EXISTS bookmark_tags");
-  await adminConnection.query("DROP TABLE IF EXISTS bookmarks");
-  await adminConnection.query("DROP TABLE IF EXISTS subcategories");
-  await adminConnection.query("DROP TABLE IF EXISTS categories");
-  await adminConnection.query("DROP TABLE IF EXISTS tags");
-
-  for (const entry of journal.entries) {
-    const migration = await readFile(
-      new URL(`../db/migrations/${entry.tag}.sql`, import.meta.url),
-      "utf-8"
-    );
-
-    const statements = migration
-      .split("--> statement-breakpoint")
-      .map((statement) => statement.trim())
-      .filter(Boolean);
-
-    for (const statement of statements) {
-      await adminConnection.query(statement);
-    }
-  }
+  // Real rows for the trigger ids, so the FK pre-check passes and the forced
+  // insert failure (not a 400) exercises the rollback path.
+  await adminConnection.query("INSERT INTO tags (id, name) VALUES (?, 'failing-tag')", [FAILING_TAG_ID]);
+  await adminConnection.query(
+    "INSERT INTO subcategories (id, name, category_id) VALUES (?, 'failing-subcategory', NULL)",
+    [FAILING_CLASSIFICATION_ID],
+  );
+  await adminConnection.query(
+    "INSERT INTO sub_subcategories (id, subcategory_id, name) VALUES (?, ?, 'failing-sub-subcategory')",
+    [FAILING_SUB_SUBCATEGORY_ID, FAILING_CLASSIFICATION_ID],
+  );
 
   await adminConnection.query(`
     CREATE TRIGGER fail_bookmark_tags_insert
@@ -1373,6 +1352,136 @@ describe("remaining review fixes", () => {
       .from(schema.categories)
       .where(eq(schema.categories.name, categoryName));
     expect(rows).toHaveLength(0);
+  });
+});
+
+describe("reference ids must exist and be active (C1)", () => {
+  it("returns 400 for an unknown tag id on create", async () => {
+    const url = uniqueUrl("unknown-tag");
+    const res = await app.handle(jsonRequest("/bookmarks", "POST", { url, title: "Unknown tag", tags: [987654321] }));
+    expect(res.status).toBe(400);
+    await expect(res.json()).resolves.toMatchObject({ error: expect.stringContaining("tag id(s): 987654321") });
+    const rows = await db.select({ id: schema.bookmarks.id }).from(schema.bookmarks).where(eq(schema.bookmarks.url, url));
+    expect(rows).toHaveLength(0);
+  });
+
+  it("returns 400 for unknown category, sub-category and sub-sub-category ids on create", async () => {
+    for (const field of ["categoryIds", "subcategoryIds", "subSubcategoryIds"]) {
+      const res = await app.handle(jsonRequest("/bookmarks", "POST", {
+        url: uniqueUrl(`unknown-${field}`),
+        title: "Unknown taxonomy",
+        [field]: [987654321],
+      }));
+      expect(res.status).toBe(400);
+    }
+  });
+
+  it("returns 400 for an archived tag on create", async () => {
+    const [{ id: tagId }] = await db.insert(schema.tags).values({ name: uniqueName("archived-tag") }).$returningId();
+    await db.update(schema.tags).set({ archivedAt: new Date() }).where(eq(schema.tags.id, tagId));
+    const res = await app.handle(jsonRequest("/bookmarks", "POST", { url: uniqueUrl("archived-tag"), title: "Archived tag", tags: [tagId] }));
+    expect(res.status).toBe(400);
+  });
+
+  it("returns 400 for an unknown id on PATCH and leaves the bookmark unchanged", async () => {
+    const [{ id: bookmarkId }] = await db.insert(schema.bookmarks).values({ url: uniqueUrl("patch-unknown"), title: "Before" }).$returningId();
+    const res = await app.handle(jsonRequest(`/bookmarks/${bookmarkId}`, "PATCH", { title: "After", subcategoryIds: [987654321] }));
+    expect(res.status).toBe(400);
+    const [row] = await db.select({ title: schema.bookmarks.title }).from(schema.bookmarks).where(eq(schema.bookmarks.id, bookmarkId));
+    expect(row?.title).toBe("Before");
+  });
+
+  it("lets PATCH keep a link whose tag was archived later", async () => {
+    const [{ id: tagId }] = await db.insert(schema.tags).values({ name: uniqueName("kept-tag") }).$returningId();
+    const [{ id: bookmarkId }] = await db.insert(schema.bookmarks).values({ url: uniqueUrl("patch-keep"), title: "Keep" }).$returningId();
+    await db.insert(schema.bookmarkTags).values({ bookmarkId, tagId });
+    await db.update(schema.tags).set({ archivedAt: new Date() }).where(eq(schema.tags.id, tagId));
+    const res = await app.handle(jsonRequest(`/bookmarks/${bookmarkId}`, "PATCH", { tagIds: [tagId] }));
+    expect(res.status).toBe(200);
+  });
+});
+
+describe("faviconUrl validation (S6)", () => {
+  it("accepts http(s) and data:image favicons", async () => {
+    for (const faviconUrl of [
+      "https://example.com/favicon.ico",
+      "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNgYGD4DwABBAEAwS2OUAAAAABJRU5ErkJggg==",
+    ]) {
+      const res = await app.handle(jsonRequest("/bookmarks", "POST", { url: uniqueUrl("favicon-ok"), title: "Favicon", faviconUrl }));
+      expect(res.status).toBe(201);
+    }
+  });
+
+  it("rejects javascript:, data:text and over-long favicons", async () => {
+    for (const faviconUrl of [
+      "javascript:alert(1)",
+      "data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==",
+      "ftp://example.com/icon.png",
+      `https://example.com/${"a".repeat(2100)}`,
+    ]) {
+      const res = await app.handle(jsonRequest("/bookmarks", "POST", { url: uniqueUrl("favicon-bad"), title: "Favicon", faviconUrl }));
+      expect(res.status).toBe(400);
+    }
+  });
+
+  it("rejects a bad favicon on PATCH", async () => {
+    const [{ id: bookmarkId }] = await db.insert(schema.bookmarks).values({ url: uniqueUrl("favicon-patch"), title: "Favicon" }).$returningId();
+    const res = await app.handle(jsonRequest(`/bookmarks/${bookmarkId}`, "PATCH", { faviconUrl: "javascript:alert(1)" }));
+    expect(res.status).toBe(400);
+  });
+});
+
+describe("request size limits (S7)", () => {
+  it("rejects an over-long title, description and url", async () => {
+    const cases = [
+      { url: uniqueUrl("long-title"), title: "t".repeat(1025) },
+      { url: uniqueUrl("long-desc"), title: "ok", description: "d".repeat(10001) },
+      { url: `https://example.com/${"u".repeat(8200)}`, title: "ok" },
+    ];
+    for (const body of cases) {
+      const res = await app.handle(jsonRequest("/bookmarks", "POST", body));
+      expect(res.status).toBe(400);
+    }
+  });
+
+  it("rejects more than 200 ids in one list", async () => {
+    const tags = Array.from({ length: 201 }, (_, i) => i + 1);
+    const res = await app.handle(jsonRequest("/bookmarks", "POST", { url: uniqueUrl("many-tags"), title: "Many", tags }));
+    expect(res.status).toBe(400);
+  });
+
+  it("rejects an over-long tag name", async () => {
+    const res = await app.handle(jsonRequest("/tags", "POST", { name: "n".repeat(256) }));
+    expect(res.status).toBe(400);
+  });
+});
+
+describe("search escapes LIKE wildcards (C4)", () => {
+  it("treats % and _ in q as literal characters", async () => {
+    const marker = uniqueName("likeesc").replace(/-/g, "");
+    const literal = `${marker}%_x`;
+    await db.insert(schema.bookmarks).values([
+      { url: uniqueUrl("like-literal"), title: `Has ${literal}` },
+      { url: uniqueUrl("like-other"), title: `Has ${marker}ABCx` },
+    ]);
+
+    const pct = await app.handle(request(`/bookmarks?q=${encodeURIComponent(`${marker}%`)}`));
+    const pctBody = await pct.json() as { items: Array<{ title: string }>; total: number };
+    expect(pct.status).toBe(200);
+    expect(pctBody.items.map((b) => b.title)).toEqual([`Has ${literal}`]);
+
+    const under = await app.handle(request(`/bookmarks?q=${encodeURIComponent(`${marker}%_x`)}`));
+    const underBody = await under.json() as { items: Array<{ title: string }> };
+    expect(underBody.items.map((b) => b.title)).toEqual([`Has ${literal}`]);
+  });
+
+  it("escapes wildcards in tag search", async () => {
+    const marker = uniqueName("tagesc").replace(/-/g, "");
+    await db.insert(schema.tags).values([{ name: `${marker}_a` }, { name: `${marker}ba` }]);
+    const res = await app.handle(request(`/tags?query=${encodeURIComponent(`${marker}_`)}`));
+    const body = await res.json() as Array<{ name: string }> | { items: Array<{ name: string }> };
+    const names = (Array.isArray(body) ? body : body.items).map((tag) => tag.name);
+    expect(names).toEqual([`${marker}_a`]);
   });
 });
 

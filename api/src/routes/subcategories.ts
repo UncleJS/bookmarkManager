@@ -248,10 +248,10 @@ export const subcategoryRoutes = new Elysia()
     },
     {
       body: t.Object({
-        name: t.String({ description: "Sub-category name. Must be unique within the target category. Whitespace is trimmed." }),
-        description: t.Optional(t.Nullable(t.String({ description: "Optional description for the sub-category. Whitespace is trimmed; empty string is stored as null." }))),
+        name: t.String({ maxLength: 255, description: "Sub-category name. Must be unique within the target category. Whitespace is trimmed." }),
+        description: t.Optional(t.Nullable(t.String({ maxLength: 10000, description: "Optional description for the sub-category. Whitespace is trimmed; empty string is stored as null." }))),
         categoryId: t.Optional(t.Nullable(t.Number({ description: "ID of an existing category to assign this sub-category to. Omit or pass null to leave uncategorized." }))),
-        categoryName: t.Optional(t.Nullable(t.String({ description: "If provided (and `categoryId` is absent), a new category with this name is created and the sub-category is placed inside it." }))),
+        categoryName: t.Optional(t.Nullable(t.String({ maxLength: 255, description: "If provided (and `categoryId` is absent), a new category with this name is created and the sub-category is placed inside it." }))),
       }),
       detail: {
         tags: ["subcategories"],
@@ -408,8 +408,8 @@ export const subcategoryRoutes = new Elysia()
     {
       params: PositiveIdParam,
       body: t.Object({
-        name: t.String({ description: "New sub-category name. Must be non-empty after trimming. Must be unique within the same category among active sub-categories." }),
-        description: t.Optional(t.Nullable(t.String({ description: "New description. Pass null or empty string to clear. Omit to leave unchanged." }))),
+        name: t.String({ maxLength: 255, description: "New sub-category name. Must be non-empty after trimming. Must be unique within the same category among active sub-categories." }),
+        description: t.Optional(t.Nullable(t.String({ maxLength: 10000, description: "New description. Pass null or empty string to clear. Omit to leave unchanged." }))),
       }),
       detail: {
         tags: ["subcategories"],

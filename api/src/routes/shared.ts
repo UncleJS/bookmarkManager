@@ -57,6 +57,23 @@ export function getValidationErrorMessage(error: {
     ?? "Validation error";
 }
 
+/** True when an insert referenced a parent row that does not exist (FK violation). */
+export function isMissingReference(err: unknown): boolean {
+  const code =
+    typeof err === "object" && err !== null && "code" in err
+      ? err.code
+      : typeof err === "object" && err !== null && "cause" in err && typeof err.cause === "object" && err.cause !== null && "code" in err.cause
+        ? err.cause.code
+        : undefined;
+
+  return code === "ER_NO_REFERENCED_ROW_2" || code === "ER_NO_REFERENCED_ROW";
+}
+
+/** Escapes `!`, `%` and `_` for a `LIKE ... ESCAPE '!'` pattern. */
+export function escapeLike(value: string): string {
+  return value.replace(/[!%_]/g, (ch) => `!${ch}`);
+}
+
 export function isDupEntry(err: unknown): boolean {
   const code =
     typeof err === "object" && err !== null && "code" in err
