@@ -460,8 +460,16 @@ function selectTag(id, label, btnEl) {
 
 function selectCategory(id, label) {
   clearNavActive();
-  const heading = document.querySelector(`.nav-section-label[data-category-id="cat-category-${id}"]`);
+  const categoryDomId = `cat-category-${id}`;
+  const heading = document.querySelector(`.nav-section-label[data-category-id="${categoryDomId}"]`);
   if (heading) heading.classList.add('active');
+  // Selecting a category also expands it, as the sidebar does when it re-renders.
+  const items = document.querySelector(`.nav-category-items[data-category-id="${categoryDomId}"]`);
+  if (heading && items && !heading.classList.contains('open')) {
+    heading.classList.add('open');
+    setCollapsibleOpen(items, true);
+    state.openCategories.add(categoryDomId);
+  }
   state.categoryId = id;
   state.subcategoryId = null;
   state.subSubcategoryId = null;

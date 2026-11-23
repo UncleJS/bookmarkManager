@@ -8,15 +8,19 @@ const openSubcategoryIds = new Set();
 const seenCategoryIds = new Set();
 const seenSubcategoryIds = new Set();
 
+// Sections start expanded. Ids seen before keep whatever the user chose, so a
+// collapsed section stays collapsed across re-renders; new ones open.
 function syncCollapseState() {
   for (const category of categories) {
     if (!seenCategoryIds.has(category.id)) {
       seenCategoryIds.add(category.id);
+      openCategoryIds.add(category.id);
     }
 
     for (const subcategory of (category.subcategories || [])) {
       if (!seenSubcategoryIds.has(subcategory.id)) {
         seenSubcategoryIds.add(subcategory.id);
+        openSubcategoryIds.add(subcategory.id);
       }
     }
   }
