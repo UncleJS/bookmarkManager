@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 UncleJS
+
 // =============================================================================
 // Full end-to-end smoke test — hits the live API at http://localhost:API_PORT
 // Requires: API running, API_TOKEN and BACKUP_TOKEN set in environment.

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 UncleJS
+
 // Minimal smoke test — starts the real app on a random port and hits /health and /ready.
 // Uses an injected readiness probe so route behavior is verified without a live DB.
 import { buildApp } from "../server.ts";

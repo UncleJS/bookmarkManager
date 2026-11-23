@@ -2,6 +2,7 @@
   "name": "bookmark-manager-e2e",
   "version": "0.1.0",
   "private": true,
+  "license": "AGPL-3.0-or-later",
   "description": "Playwright E2E tests for the Bookmark Manager extension + web UI",
   "type": "module",
   "scripts": {

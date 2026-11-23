@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 UncleJS
+
 import { migrate } from "drizzle-orm/mysql2/migrator";
 import { db, pool } from "./client.ts";
 

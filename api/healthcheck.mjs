@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 UncleJS
+
 // Simple readiness check script — used by container HealthCmd.
 // Exits 0 if /ready returns 2xx, exits 1 otherwise.
 // Reads API_PORT from env (defaults to 11650) so dev (11660) and prod (11650) both work.
