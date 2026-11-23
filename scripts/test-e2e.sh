@@ -76,7 +76,7 @@ else
   testpod_create "${E2E_POD}"
   TARGET_POD="${E2E_POD}"
   API_TOKEN="$(random_secret 32)"
-  podman run -d --pod "${E2E_POD}" --name "${E2E_POD}-api" "${TEST_LABEL_ARGS[@]}" \
+  podman run -d --init --pod "${E2E_POD}" --name "${E2E_POD}-api" "${TEST_LABEL_ARGS[@]}" \
     -e API_PORT="${API_CONTAINER_PORT}" -e LOG_LEVEL=info \
     -e DB_HOST=127.0.0.1 -e DB_PORT=3306 -e DB_NAME=bookmarks \
     -e DB_USER="${TEST_DB_USER}" -e DB_PASSWORD="${TEST_DB_PW}" \
@@ -96,11 +96,11 @@ else
 fi
 
 # Inside the pod the API is on localhost:11650, the origin the extension's
-# host_permissions allow.
+# host_permissions allow. --init: xvfb-run hangs when it is PID 1.
 info "Running Playwright in ${E2E_IMAGE} (pod ${TARGET_POD}) ..."
 set +e
 podman run --name "${RUNNER}" --pod "${TARGET_POD}" "${TEST_LABEL_ARGS[@]}" \
-  --ipc=private --shm-size=1g \
+  --init --ipc=private --shm-size=1g \
   -e API_BASE_URL="http://localhost:${API_CONTAINER_PORT}" \
   -e API_TOKEN="${API_TOKEN}" \
   "${E2E_IMAGE}" "${PW_ARGS[@]}"
