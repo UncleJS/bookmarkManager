@@ -65,6 +65,22 @@ test.describe("Login (/app without a session)", () => {
   });
 });
 
+test.describe("Strict CSP (no inline scripts, styles or handlers)", () => {
+  for (const path of ["/app", "/manage-categories", "/manage-tags"]) {
+    test(`${path} loads without CSP violations or script errors`, async ({ page }) => {
+      test.skip(!TOKEN, "Skipped — API_TOKEN env var not set");
+      const problems: string[] = [];
+      page.on("console", (msg) => {
+        if (msg.type() === "error" && /Content Security Policy|Refused to/i.test(msg.text())) problems.push(msg.text());
+      });
+      page.on("pageerror", (err) => problems.push(err.message));
+      await injectToken(page);
+      await page.goto(`${BASE}${path}`, { waitUntil: "networkidle" });
+      expect(problems).toEqual([]);
+    });
+  }
+});
+
 test.describe("Bookmark Viewer UI (/app)", () => {
   test("page loads and shows the Bookmark Manager title", async ({ page }) => {
     await injectToken(page);
