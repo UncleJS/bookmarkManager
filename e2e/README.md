@@ -23,6 +23,7 @@ Tests cover four areas:
 - [README Links](#readme-links)
 - [Prerequisites](#prerequisites)
 - [Running tests](#running-tests)
+  - [Environment variables](#environment-variables)
 - [How extension tests work](#how-extension-tests-work)
 - [Project structure](#project-structure)
 - [CI notes](#ci-notes)

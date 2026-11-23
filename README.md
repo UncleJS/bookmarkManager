@@ -1,6 +1,6 @@
 # Bookmark Manager
 
-[![License: CC BY-SA 4.0](https://img.shields.io/badge/License-CC%20BY--SA%204.0-lightgrey.svg)](https://creativecommons.org/licenses/by-sa/4.0/)
+[![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](LICENSE)
 [![Bun](https://img.shields.io/badge/Runtime-Bun-black?logo=bun)](https://bun.sh)
 [![Elysia](https://img.shields.io/badge/Framework-Elysia-5f67ff)](https://elysiajs.com)
 [![MariaDB](https://img.shields.io/badge/Database-MariaDB%2011.8%20LTS-003545?logo=mariadb)](https://mariadb.org)
@@ -18,21 +18,57 @@ A self-hosted bookmark manager: a Chrome MV3 extension captures bookmarks and se
 
 - [README Links](#readme-links)
 - [Screenshots](#screenshots)
+  - [Homepage](#homepage)
+  - [Edit Modul](#edit-modul)
 - [Features](#features)
 - [Stack](#stack)
 - [Architecture](#architecture)
 - [Quick Start](#quick-start)
+  - [1. Configure environment](#1-configure-environment)
+  - [2. Install](#2-install)
+  - [3. Health check](#3-health-check)
+  - [4. Load the Chrome extension](#4-load-the-chrome-extension)
 - [Auth and Security Model](#auth-and-security-model)
 - [Web UIs and Service URLs](#web-uis-and-service-urls)
 - [Chrome Extension](#chrome-extension)
+  - [Setup](#setup)
+  - [Capture methods](#capture-methods)
+  - [Popup form](#popup-form)
+  - [Duplicate URL handling](#duplicate-url-handling)
+  - [Background service worker messages](#background-service-worker-messages)
+  - [Permissions](#permissions)
 - [API Overview](#api-overview)
+  - [Authentication](#authentication)
+  - [Health & UI](#health--ui)
+  - [Bookmarks](#bookmarks)
+  - [Tags](#tags)
+  - [Sub-categories](#sub-categories)
+  - [Sub-sub-categories](#sub-sub-categories)
+  - [Categories](#categories)
 - [Data Model](#data-model)
 - [Scripts](#scripts)
+  - [Job instances (`JOB` / `PORT_OFFSET`)](#job-instances-job--port_offset)
 - [Bun Scripts (in `api/`)](#bun-scripts-in-api)
 - [Testing](#testing)
+  - [Integration tests (Bun)](#integration-tests-bun)
+  - [E2E tests (Playwright)](#e2e-tests-playwright)
 - [Backup and Restore](#backup-and-restore)
+  - [Shell script (recommended for cron/automation)](#shell-script-recommended-for-cronautomation)
+  - [API endpoint](#api-endpoint)
+  - [Restore](#restore)
+  - [Verify a backup](#verify-a-backup)
 - [Library Import Scripts](#library-import-scripts)
+  - [Import categories and sub-categories (levels 1 and 2)](#import-categories-and-sub-categories-levels-1-and-2)
+  - [Import sub-sub-categories (level 3)](#import-sub-sub-categories-level-3)
+  - [Prerequisites for both scripts](#prerequisites-for-both-scripts)
 - [Infrastructure](#infrastructure)
+  - [Pod and containers](#pod-and-containers)
+  - [Quadlet unit files](#quadlet-unit-files)
+  - [DB data volume](#db-data-volume)
+  - [Boot persistence](#boot-persistence)
+  - [Environment files](#environment-files)
+  - [Environment variables reference](#environment-variables-reference)
+  - [API container hardening](#api-container-hardening)
 - [Repository Structure](#repository-structure)
 - [Troubleshooting](#troubleshooting)
 - [License](#license)
@@ -47,21 +83,25 @@ A self-hosted bookmark manager: a Chrome MV3 extension captures bookmarks and se
 - [Scripts README](./scripts/README.md)
 - [E2E README](./e2e/README.md)
 
+[↑ Back to TOC](#table-of-contents)
+
 ---
 
-# Screenshots
+## Screenshots
 
 </br>
 
-## Homepage
+### Homepage
 </br>
 
 ![Homepage](home.png)
 </br></br>
 
-## Edit Modul
+### Edit Modul
 ![Edit Bookmark](editModul.png)
 </br>
+
+[↑ Back to TOC](#table-of-contents)
 
 ---
 
@@ -79,7 +119,7 @@ A self-hosted bookmark manager: a Chrome MV3 extension captures bookmarks and se
 
 ---
 
-[↑ Table of Contents](#table-of-contents)
+[↑ Back to TOC](#table-of-contents)
 
 ## Stack
 
@@ -93,7 +133,7 @@ A self-hosted bookmark manager: a Chrome MV3 extension captures bookmarks and se
 
 ---
 
-[↑ Table of Contents](#table-of-contents)
+[↑ Back to TOC](#table-of-contents)
 
 ## Architecture
 
@@ -118,7 +158,7 @@ flowchart TD
 
 ---
 
-[↑ Table of Contents](#table-of-contents)
+[↑ Back to TOC](#table-of-contents)
 
 ## Quick Start
 
@@ -171,7 +211,7 @@ curl http://localhost:11650/ready    # → {"status":"ok","check":"readiness"}
 
 ---
 
-[↑ Table of Contents](#table-of-contents)
+[↑ Back to TOC](#table-of-contents)
 
 ## Auth and Security Model
 
@@ -198,7 +238,7 @@ Set `API_TOKEN` in `api/.env` to a strong random value (`openssl rand -hex 32`).
 
 ---
 
-[↑ Table of Contents](#table-of-contents)
+[↑ Back to TOC](#table-of-contents)
 
 ## Web UIs and Service URLs
 
@@ -214,9 +254,13 @@ Set `API_TOKEN` in `api/.env` to a strong random value (`openssl rand -hex 32`).
 
 The browser UIs show a login form until you paste the API token. After that they use an HttpOnly `bm_session` cookie that holds a random session id, not the token.
 
+The UIs are dark by default. The **☀ Light / ☾ Dark** button in each page header switches the theme; the choice is saved in the browser (`localStorage`, key `bm-theme`) and applied by `/ui/theme-init.js` before the first paint. Colours live in one place, `api/src/ui/theme.css`.
+
+Dates and times are stored and sent by the API in UTC and shown in your local time as `yyyy-MM-dd HH:mm:ss` (24-hour). The web UI formats them with `api/src/ui/datetime.js` and the extension with `extension/lib/datetime.js`; a unit test keeps the two in sync.
+
 ---
 
-[↑ Table of Contents](#table-of-contents)
+[↑ Back to TOC](#table-of-contents)
 
 ## Chrome Extension
 
@@ -272,7 +316,7 @@ If the URL already has an active bookmark, the API returns `409` with a `duplica
 
 ---
 
-[↑ Table of Contents](#table-of-contents)
+[↑ Back to TOC](#table-of-contents)
 
 ## API Overview
 
@@ -372,7 +416,7 @@ Third-level taxonomy items nested inside a sub-category. Bookmarks can be linked
 
 ---
 
-[↑ Table of Contents](#table-of-contents)
+[↑ Back to TOC](#table-of-contents)
 
 ## Data Model
 
@@ -398,7 +442,7 @@ All tables carry `archived_at DATETIME NULL`. `NULL` = active. "Deleting" sets `
 
 ---
 
-[↑ Table of Contents](#table-of-contents)
+[↑ Back to TOC](#table-of-contents)
 
 ## Scripts
 
@@ -439,7 +483,7 @@ See [`scripts/README.md`](scripts/README.md) for full per-script documentation.
 
 ---
 
-[↑ Table of Contents](#table-of-contents)
+[↑ Back to TOC](#table-of-contents)
 
 ## Bun Scripts (in `api/`)
 
@@ -479,7 +523,7 @@ podman rm bm-gen
 
 ---
 
-[↑ Table of Contents](#table-of-contents)
+[↑ Back to TOC](#table-of-contents)
 
 ## Testing
 
@@ -515,7 +559,7 @@ See [`e2e/README.md`](e2e/README.md) for full E2E documentation.
 
 ---
 
-[↑ Table of Contents](#table-of-contents)
+[↑ Back to TOC](#table-of-contents)
 
 ## Backup and Restore
 
@@ -557,7 +601,7 @@ Validates the `.sql.gz` archive with `gzip -t`, restores into a temporary databa
 
 ---
 
-[↑ Table of Contents](#table-of-contents)
+[↑ Back to TOC](#table-of-contents)
 
 ## Library Import Scripts
 
@@ -608,7 +652,7 @@ Reads level-3 entries from the same seed file and maps them to live sub-categori
 
 ---
 
-[↑ Table of Contents](#table-of-contents)
+[↑ Back to TOC](#table-of-contents)
 
 ## Infrastructure
 
@@ -687,7 +731,7 @@ The pod allows up to 10 restart attempts in 5 minutes, so a boot where the rootl
 
 ---
 
-[↑ Table of Contents](#table-of-contents)
+[↑ Back to TOC](#table-of-contents)
 
 ## Repository Structure
 
@@ -761,7 +805,7 @@ bookmarkManager/
 
 ---
 
-[↑ Table of Contents](#table-of-contents)
+[↑ Back to TOC](#table-of-contents)
 
 ## Troubleshooting
 
@@ -779,16 +823,18 @@ bookmarkManager/
 
 ---
 
-[↑ Table of Contents](#table-of-contents)
+[↑ Back to TOC](#table-of-contents)
 
 ## License
 
-Creative Commons Attribution-ShareAlike 4.0 International (CC BY-SA 4.0)
+Copyright (C) 2026 UncleJS. This program is free software: you can redistribute it and/or modify it under the terms of the GNU Affero General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
 
-https://creativecommons.org/licenses/by-sa/4.0/
+This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the [GNU Affero General Public License](LICENSE) for more details.
 
-[↑ Table of Contents](#table-of-contents)
+SPDX identifier: `AGPL-3.0-or-later`. Earlier releases were published under CC BY-SA 4.0.
+
+[↑ Back to TOC](#table-of-contents)
 
 ---
 
-© 2026 Jaco Steyn — Licensed under CC BY-SA 4.0
+© 2026 UncleJS — Licensed under [AGPL-3.0-or-later](https://www.gnu.org/licenses/agpl-3.0.txt)

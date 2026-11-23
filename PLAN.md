@@ -1,5 +1,7 @@
 # PLAN.md — Deprecated
 
+[![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](LICENSE)
+
 > **This file is no longer maintained.**
 >
 > All project documentation has been consolidated into [`README.md`](README.md), which is the canonical source of truth.
@@ -16,3 +18,7 @@
 | Script-by-script operational reference | [`scripts/README.md`](scripts/README.md) |
 | E2E test suite, Playwright projects, extension test fixtures | [`e2e/README.md`](e2e/README.md) |
 | Live API docs (always in sync) | `http://localhost:11650/docs` |
+
+---
+
+© 2026 UncleJS — Licensed under [AGPL-3.0-or-later](https://www.gnu.org/licenses/agpl-3.0.txt)

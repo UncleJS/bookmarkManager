@@ -1,6 +1,6 @@
 # Bookmark Manager Chrome Extension
 
-[![License: CC BY-SA 4.0](https://img.shields.io/badge/License-CC%20BY--SA%204.0-lightgrey.svg)](https://creativecommons.org/licenses/by-sa/4.0/)
+[![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](../LICENSE)
 [![Chrome Extension](https://img.shields.io/badge/Extension-Manifest%20V3-4285F4?logo=googlechrome&logoColor=white)](https://developer.chrome.com/docs/extensions/mv3/)
 [![JavaScript](https://img.shields.io/badge/Language-JavaScript-f7df1e?logo=javascript&logoColor=black)](https://developer.mozilla.org/en-US/docs/Web/JavaScript)
 
@@ -32,6 +32,8 @@ Chrome Manifest V3 extension for capturing bookmarks and sending them to the loc
 - [Scripts README](../scripts/README.md)
 - [E2E README](../e2e/README.md)
 
+[↑ Back to TOC](#table-of-contents)
+
 ---
 
 ## Setup
@@ -45,7 +47,7 @@ Chrome Manifest V3 extension for capturing bookmarks and sending them to the loc
 
 ---
 
-[↑ Table of Contents](#table-of-contents)
+[↑ Back to TOC](#table-of-contents)
 
 ## Capture Methods
 
@@ -57,7 +59,7 @@ Chrome Manifest V3 extension for capturing bookmarks and sending them to the loc
 
 ---
 
-[↑ Table of Contents](#table-of-contents)
+[↑ Back to TOC](#table-of-contents)
 
 ## Popup Form
 
@@ -76,7 +78,7 @@ On submit: form is validated → message sent to background service worker → `
 
 ---
 
-[↑ Table of Contents](#table-of-contents)
+[↑ Back to TOC](#table-of-contents)
 
 ## Duplicate URL Handling
 
@@ -84,7 +86,7 @@ If the URL already has an active bookmark, the API returns `409` with a `duplica
 
 ---
 
-[↑ Table of Contents](#table-of-contents)
+[↑ Back to TOC](#table-of-contents)
 
 ## API Token
 
@@ -96,7 +98,7 @@ If the token is wrong or missing, API calls return `401` and the popup shows an 
 
 ---
 
-[↑ Table of Contents](#table-of-contents)
+[↑ Back to TOC](#table-of-contents)
 
 ## Architecture
 
@@ -137,7 +139,7 @@ extension/
 
 ---
 
-[↑ Table of Contents](#table-of-contents)
+[↑ Back to TOC](#table-of-contents)
 
 ## Permissions
 
@@ -153,7 +155,7 @@ extension/
 
 ---
 
-[↑ Table of Contents](#table-of-contents)
+[↑ Back to TOC](#table-of-contents)
 
 ## Edge Cases
 
@@ -167,8 +169,8 @@ extension/
 | Extension icon on `chrome://` page | `activeTab` unavailable; graceful error shown |
 | Quick Save on `chrome://` page | Toast injection fails; falls back to OS notification |
 
-[↑ Table of Contents](#table-of-contents)
+[↑ Back to TOC](#table-of-contents)
 
 ---
 
-© 2026 Jaco Steyn — Licensed under CC BY-SA 4.0
+© 2026 UncleJS — Licensed under [AGPL-3.0-or-later](https://www.gnu.org/licenses/agpl-3.0.txt)

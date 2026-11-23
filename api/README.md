@@ -1,6 +1,6 @@
 # Bookmark Manager API
 
-[![License: CC BY-SA 4.0](https://img.shields.io/badge/License-CC%20BY--SA%204.0-lightgrey.svg)](https://creativecommons.org/licenses/by-sa/4.0/)
+[![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](../LICENSE)
 [![Bun](https://img.shields.io/badge/Runtime-Bun-black?logo=bun)](https://bun.sh)
 [![Elysia](https://img.shields.io/badge/Framework-Elysia-5f67ff)](https://elysiajs.com)
 [![MariaDB](https://img.shields.io/badge/Database-MariaDB%2011-003545?logo=mariadb)](https://mariadb.org)
@@ -21,6 +21,12 @@ Bun + Elysia API for managing bookmarks, tags, and a 3-level category taxonomy. 
 - [Project Structure](#project-structure)
 - [Authentication](#authentication)
 - [Endpoint Summary](#endpoint-summary)
+  - [Health & UI](#health--ui)
+  - [Bookmarks](#bookmarks)
+  - [Tags](#tags)
+  - [Sub-categories](#sub-categories)
+  - [Sub-sub-categories](#sub-sub-categories)
+  - [Categories](#categories)
 - [Database Schema](#database-schema)
 - [Environment Variables](#environment-variables)
 - [Infrastructure Notes](#infrastructure-notes)
@@ -35,6 +41,8 @@ Bun + Elysia API for managing bookmarks, tags, and a 3-level category taxonomy. 
 - [Extension README](../extension/README.md)
 - [Scripts README](../scripts/README.md)
 - [E2E README](../e2e/README.md)
+
+[↑ Back to TOC](#table-of-contents)
 
 ---
 
@@ -60,7 +68,7 @@ loginctl enable-linger $USER
 
 ---
 
-[↑ Table of Contents](#table-of-contents)
+[↑ Back to TOC](#table-of-contents)
 
 ## Bun Scripts
 
@@ -101,7 +109,7 @@ podman rm bm-gen
 
 ---
 
-[↑ Table of Contents](#table-of-contents)
+[↑ Back to TOC](#table-of-contents)
 
 ## Project Structure
 
@@ -140,7 +148,7 @@ api/
 
 ---
 
-[↑ Table of Contents](#table-of-contents)
+[↑ Back to TOC](#table-of-contents)
 
 ## Authentication
 
@@ -163,7 +171,7 @@ The pod binds the API port to `127.0.0.1:11650` only — no LAN access is possib
 
 ---
 
-[↑ Table of Contents](#table-of-contents)
+[↑ Back to TOC](#table-of-contents)
 
 ## Endpoint Summary
 
@@ -240,7 +248,7 @@ Returns `409` with a `duplicates` array if an active bookmark already has the sa
 
 ---
 
-[↑ Table of Contents](#table-of-contents)
+[↑ Back to TOC](#table-of-contents)
 
 ## Database Schema
 
@@ -262,7 +270,7 @@ All tables carry `archived_at DATETIME NULL`. `NULL` = active. Setting `archived
 
 ---
 
-[↑ Table of Contents](#table-of-contents)
+[↑ Back to TOC](#table-of-contents)
 
 ## Environment Variables
 
@@ -289,7 +297,7 @@ Set values in `api/.env`. `./scripts/install.sh` splits that file into `api/.env
 
 ---
 
-[↑ Table of Contents](#table-of-contents)
+[↑ Back to TOC](#table-of-contents)
 
 ## Infrastructure Notes
 
@@ -301,14 +309,14 @@ Set values in `api/.env`. `./scripts/install.sh` splits that file into `api/.env
 
 ---
 
-[↑ Table of Contents](#table-of-contents)
+[↑ Back to TOC](#table-of-contents)
 
 ## phpMyAdmin
 
 Available at `http://localhost:11651`. Auto-login is disabled — connect with the `bookmark` user or `root`.
 
-[↑ Table of Contents](#table-of-contents)
+[↑ Back to TOC](#table-of-contents)
 
 ---
 
-© 2026 Jaco Steyn — Licensed under CC BY-SA 4.0
+© 2026 UncleJS — Licensed under [AGPL-3.0-or-later](https://www.gnu.org/licenses/agpl-3.0.txt)
