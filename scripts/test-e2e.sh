@@ -19,7 +19,7 @@ Usage: [JOB=<slug>] scripts/test-e2e.sh [--installed [--allow-main]] [--no-build
   --installed    use the installed pod ${POD_NAME} and the API_TOKEN from
                  its env file. The suite writes data, so the main
                  (production) instance is refused without --allow-main.
-  --no-build     reuse the existing ${API_IMAGE} and ${E2E_IMAGE}
+  --no-build     reuse the existing ${API_E2E_IMAGE} and ${E2E_IMAGE}
   --keep         keep the throwaway pod afterwards (for debugging)
   -h, --help     show this help
 
@@ -70,7 +70,8 @@ if (( INSTALLED )); then
   API_TOKEN="$(load_env_value "${API_ENV_FILE}" API_TOKEN)"
   (( BUILD )) && "${REPO_ROOT}/scripts/build.sh" --e2e
 else
-  (( BUILD )) && "${REPO_ROOT}/scripts/build.sh" --api --e2e
+  # Own API tag, so the installed instance's image is never replaced.
+  (( BUILD )) && "${REPO_ROOT}/scripts/build.sh" --api-e2e --e2e
   podman image exists "${MARIADB_IMAGE}" || podman pull -q "${MARIADB_IMAGE}" >/dev/null
   testpod_create "${E2E_POD}"
   TARGET_POD="${E2E_POD}"
@@ -80,7 +81,7 @@ else
     -e DB_HOST=127.0.0.1 -e DB_PORT=3306 -e DB_NAME=bookmarks \
     -e DB_USER="${TEST_DB_USER}" -e DB_PASSWORD="${TEST_DB_PW}" \
     -e API_TOKEN="${API_TOKEN}" -e BACKUP_TOKEN="$(random_secret 32)" \
-    "${API_IMAGE}" >/dev/null
+    "${API_E2E_IMAGE}" >/dev/null
   info "Waiting for the API in ${E2E_POD} ..."
   ready=0
   for _ in $(seq 1 45); do

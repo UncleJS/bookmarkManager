@@ -401,7 +401,7 @@ All scripts live in `scripts/`, work from any directory (they `cd` to the repo r
 | Script | Args | Description |
 |---|---|---|
 | `install.sh` | `[--no-start]` | Check prerequisites, build the image, install the Quadlet units, start the pod, wait for readiness |
-| `build.sh` | `[--api] [--test] [--e2e] [--all]` | Build the API runtime, API test and Playwright images |
+| `build.sh` | `[--api] [--api-e2e] [--test] [--e2e] [--all]` | Build the API runtime, API test and Playwright images |
 | `uninstall.sh` | `[--purge] [--remove-quadlets]` | Remove containers, pods, images, build cache and env copies; keeps volumes and units unless flagged; ends with a leftover check |
 | `rebuild.sh` | — | Rebuild API image and restart `bookmark-api.service`; polls `/ready` until ready |
 | `start.sh` | — | Start the pod (all three containers) and print the URLs |
@@ -413,7 +413,7 @@ All scripts live in `scripts/`, work from any directory (they `cd` to the repo r
 | `backup.sh` | — | Dump MariaDB to `backups/bookmark_YYYY-MM-DD_HHMMSS.sql.gz` |
 | `verify-backup.sh` | `--source script\|api` / `--file <path>` | Validate and test-restore a backup dump |
 | `test-integration.sh` | `[--no-build] [--keep]` | Bun integration suite + backup/restore check in a throwaway pod |
-| `test-e2e.sh` | `[--installed] [-- playwright args]` | Playwright E2E suite in a container, against a throwaway pod |
+| `test-e2e.sh` | `[--installed [--allow-main]] [--no-build] [--keep] [-- playwright args]` | Playwright E2E suite in a container, against a throwaway pod |
 | `import-library-categories.sh` | `[--dry-run\|--apply] [--keep-stage-db]` | Bulk-import library categories/sub-categories from a seed SQL file |
 | `import-library-sub-subcategories.sh` | `[--dry-run\|--apply]` | Bulk-import level-3 sub-sub-categories from the same seed SQL file |
 

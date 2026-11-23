@@ -62,7 +62,7 @@ Every script uses `set -euo pipefail`, supports `-h`/`--help`, `cd`s to the repo
 | Script | Args | Description |
 |---|---|---|
 | `install.sh` | `[--no-start]` | Check prerequisites, build, install the Quadlet units, start |
-| `build.sh` | `[--api] [--test] [--e2e] [--all]` | Build the container images |
+| `build.sh` | `[--api] [--api-e2e] [--test] [--e2e] [--all]` | Build the container images |
 | `uninstall.sh` | `[--purge] [--remove-quadlets]` | Remove everything the instance created; leftover check |
 | `rebuild.sh` | — | Rebuild the API image and restart the API service |
 | `start.sh` | — | Start the pod and print the URLs |
@@ -89,7 +89,7 @@ Every script uses `set -euo pipefail`, supports `-h`/`--help`, `cd`s to the repo
 | Variable | Default | Effect |
 |---|---|---|
 | `JOB` | *(empty = main instance)* | Suffix every name with `-<JOB>` (lowercase letters, digits, dashes) |
-| `PORT_OFFSET` | `0` | Added to every published host port |
+| `PORT_OFFSET` | read back from the installed pod unit, else `0` | Added to every published host port |
 
 ```bash
 JOB=feature-x PORT_OFFSET=2000 ./scripts/install.sh     # API on :13650, phpMyAdmin on :13651
@@ -97,7 +97,7 @@ JOB=feature-x PORT_OFFSET=2000 ./scripts/status.sh
 JOB=feature-x PORT_OFFSET=2000 ./scripts/uninstall.sh --purge --remove-quadlets
 ```
 
-A job instance runs next to the main one and never touches its pod, volume or env files. On first install it gets `api/.env.job-<slug>` with random secrets (git-ignored). Its pod has no `WantedBy=default.target`, so it does not start at boot.
+`install.sh` refuses `JOB` with `PORT_OFFSET=0`. Once installed, other scripts find the offset in the installed `.pod` unit, so `JOB=feature-x ./scripts/start.sh` is enough. A job instance runs next to the main one and never touches its pod, volume or env files. On first install it gets `api/.env.job-<slug>` with random secrets (git-ignored). Its pod has no `WantedBy=default.target`, so it does not start at boot.
 
 ### Names per instance
 
@@ -160,6 +160,7 @@ Builds the container images with labels.
 | Flag | Image | Source |
 |---|---|---|
 | `--api` | `localhost/bookmark-api<suffix>:latest` | `api/Containerfile`, target `runtime` (production deps only) |
+| `--api-e2e` | `localhost/bookmark-api-e2e<suffix>:latest` | Same as `--api`, separate tag for the throwaway e2e pod, so tests never replace the installed image |
 | `--test` | `localhost/bookmark-api-test<suffix>:latest` | `api/Containerfile`, target `test` (all deps + source) |
 | `--e2e` | `localhost/bookmark-e2e<suffix>:latest` | `e2e/Containerfile` (context: repo root, so `extension/` is included) |
 
@@ -365,7 +366,7 @@ JOB=feature-x ./scripts/test-e2e.sh --installed        # against an installed jo
 
 | Mode | Target |
 |---|---|
-| default | Throwaway pod `bookmark-e2e<suffix>`: MariaDB, the API image and a random `API_TOKEN`; removed afterwards (`--keep` keeps it) |
+| default | Throwaway pod `bookmark-e2e<suffix>`: MariaDB, the API (own tag `bookmark-api-e2e<suffix>`) and a random `API_TOKEN`; removed afterwards (`--keep` keeps it) |
 | `--installed` | The installed pod of this instance, with the `API_TOKEN` from its env file. The suite writes data, so the main instance is refused unless you pass `--allow-main` |
 
 The runner image (`e2e/Containerfile`) is the official Playwright image plus Bun and the extension. It joins the target pod and reaches the API at `http://localhost:11650`, the origin the extension's `host_permissions` allow. The extension tests run headed Chromium under `xvfb-run`. The HTML report is copied to `e2e/playwright-report/`.

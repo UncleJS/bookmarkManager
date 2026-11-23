@@ -84,11 +84,26 @@ mapfile -t layers < <(podman images -a --filter "label=${INSTANCE_LABEL}" --form
 (( ${#layers[@]} )) && podman rmi -f "${layers[@]}" >/dev/null 2>&1 || true
 
 # ---- 4. pulled base images, unless another container still uses them ---------
+# Other installed instances (stopped ones have no containers) still need the
+# images their units reference.
+units_using() { # <image> → other installed units that reference it
+  local u
+  for u in "${QUADLET_DEST}"/*.container; do
+    [[ -e "${u}" ]] || continue
+    printf '%s\n' "${INSTALLED_UNITS[@]}" | grep -qxF "${u}" && continue
+    if grep -qxF "Image=$1" "${u}"; then basename "${u}"; fi
+  done
+  return 0
+}
 SKIPPED_IMAGES=()
 for img in "${BASE_IMAGES[@]}"; do
   podman image exists "${img}" || continue
   users="$(podman ps -a --external --filter "ancestor=${img}" --format '{{.Names}}' | paste -sd, -)"
-  if [[ -n "${users}" ]]; then
+  unit_users="$(units_using "${img}" | paste -sd, -)"
+  if [[ -n "${unit_users}" ]]; then
+    SKIPPED_IMAGES+=("${img}")
+    warn "Kept base image ${img}: referenced by installed unit(s) ${unit_users}"
+  elif [[ -n "${users}" ]]; then
     SKIPPED_IMAGES+=("${img}")
     warn "Kept base image ${img}: still used by ${users}"
   elif podman rmi "${img}" >/dev/null 2>&1; then
@@ -141,34 +156,39 @@ fi
 LEFT=()
 add_left() { [[ -n "$2" ]] && LEFT+=("$1: $2"); return 0; }
 join() { paste -sd' ' -; }
+# Print the last arg if the command succeeds; always succeeds itself, so the
+# pipelines below don't trip set -e / pipefail when nothing is left.
+present() { if "$@" >/dev/null 2>&1; then echo "${@: -1}"; fi; return 0; }
 
-found="$( { label_containers; for c in "${CONTAINERS[@]}"; do podman container exists "${c}" && echo "${c}"; done; } | join)"
+found="$( { label_containers; for c in "${CONTAINERS[@]}"; do present podman container exists "${c}"; done; } | join)"
 add_left containers "${found}"
-found="$( { podman pod ps --filter "label=${INSTANCE_LABEL}" --format '{{.Name}}'; for p in "${PODS[@]}"; do podman pod exists "${p}" && echo "${p}"; done; } | sort -u | join)"
+found="$( { podman pod ps --filter "label=${INSTANCE_LABEL}" --format '{{.Name}}'; for p in "${PODS[@]}"; do present podman pod exists "${p}"; done; } | sort -u | join)"
 add_left pods "${found}"
-found="$( { podman images -a --filter "label=${INSTANCE_LABEL}" --format '{{.ID}}'; for i in "${BUILT_IMAGES[@]}"; do podman image exists "${i}" && echo "${i}"; done; } | sort -u | join)"
+found="$( { podman images -a --filter "label=${INSTANCE_LABEL}" --format '{{.ID}}'; for i in "${BUILT_IMAGES[@]}"; do present podman image exists "${i}"; done; } | sort -u | join)"
 add_left images "${found}"
-found="$(for i in "${BASE_IMAGES[@]}"; do podman image exists "${i}" && ! printf '%s\n' "${SKIPPED_IMAGES[@]}" | grep -qxF "${i}" && echo "${i}"; done | join)"
+found="$(for i in "${BASE_IMAGES[@]}"; do
+  if podman image exists "${i}" && ! printf '%s\n' "${SKIPPED_IMAGES[@]}" | grep -qxF "${i}"; then echo "${i}"; fi
+done | join)"
 add_left "base images" "${found}"
 found="$(podman network ls --filter "label=${INSTANCE_LABEL}" --format '{{.Name}}' | join)"
 add_left networks "${found}"
-found="$(for s in "${SECRETS[@]}"; do podman secret exists "${s}" && echo "${s}"; done | join)"
+found="$(for s in "${SECRETS[@]}"; do present podman secret exists "${s}"; done | join)"
 add_left secrets "${found}"
 [[ -e "${ENV_INSTALL_DIR}" ]] && add_left files "${ENV_INSTALL_DIR}"
 if (( PURGE )); then
-  found="$( { label_volumes; podman volume exists "${DB_VOLUME}" && echo "${DB_VOLUME}"; } | sort -u | join)"
+  found="$( { label_volumes; present podman volume exists "${DB_VOLUME}"; } | sort -u | join)"
   add_left volumes "${found}"
   if [[ -n "${JOB}" ]]; then
-    found="$(for f in "${ENV_FILE}" "${API_ENV_FILE}" "${DB_ENV_FILE}" "${PMA_ENV_FILE}"; do [[ -e "${f}" ]] && echo "${f}"; done | join)"
+    found="$(for f in "${ENV_FILE}" "${API_ENV_FILE}" "${DB_ENV_FILE}" "${PMA_ENV_FILE}"; do present test -e "${f}"; done | join)"
     add_left files "${found}"
   fi
 fi
 if (( REMOVE_QUADLETS )); then
-  found="$(for u in "${INSTALLED_UNITS[@]}"; do [[ -e "${u}" ]] && echo "${u}"; done | join)"
+  found="$(for u in "${INSTALLED_UNITS[@]}"; do present test -e "${u}"; done | join)"
   add_left units "${found}"
   found="$(for s in "${ALL_SERVICES[@]}"; do
     state="$(systemctl --user show -p LoadState --value "${s}" 2>/dev/null || true)"
-    [[ -n "${state}" && "${state}" != "not-found" ]] && echo "${s}(${state})"
+    if [[ -n "${state}" && "${state}" != "not-found" ]]; then echo "${s}(${state})"; fi
   done | join)"
   add_left "systemd units" "${found}"
 fi

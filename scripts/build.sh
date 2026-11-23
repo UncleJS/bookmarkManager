@@ -7,12 +7,13 @@ source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
 
 usage() {
   cat <<EOF
-Usage: [JOB=<slug>] [PORT_OFFSET=<n>] scripts/build.sh [--api] [--test] [--e2e] [--all]
+Usage: [JOB=<slug>] [PORT_OFFSET=<n>] scripts/build.sh [--api] [--api-e2e] [--test] [--e2e] [--all]
 
 Build container images with podman. Every image is labelled
 ${APP_LABEL} and bookmark-manager.instance=<instance>.
 
-  --api    API runtime image   ${API_IMAGE}   (default)
+  --api    API runtime image   ${API_IMAGE}   (default; used by the installed pod)
+  --api-e2e  same image, tagged ${API_E2E_IMAGE} for test-e2e.sh
   --test   API test image      ${API_TEST_IMAGE}
   --e2e    Playwright image    ${E2E_IMAGE}
   --all    all three
@@ -20,10 +21,11 @@ ${APP_LABEL} and bookmark-manager.instance=<instance>.
 EOF
 }
 
-BUILD_API=0; BUILD_TEST=0; BUILD_E2E=0
+BUILD_API=0; BUILD_API_E2E=0; BUILD_TEST=0; BUILD_E2E=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --api)  BUILD_API=1 ;;
+    --api-e2e) BUILD_API_E2E=1 ;;
     --test) BUILD_TEST=1 ;;
     --e2e)  BUILD_E2E=1 ;;
     --all)  BUILD_API=1; BUILD_TEST=1; BUILD_E2E=1 ;;
@@ -32,7 +34,7 @@ while [[ $# -gt 0 ]]; do
   esac
   shift
 done
-(( BUILD_API + BUILD_TEST + BUILD_E2E == 0 )) && BUILD_API=1
+(( BUILD_API + BUILD_API_E2E + BUILD_TEST + BUILD_E2E == 0 )) && BUILD_API=1
 
 command -v podman >/dev/null || { error "podman not found on PATH."; exit 1; }
 describe_instance
@@ -45,6 +47,14 @@ if (( BUILD_API )); then
     --build-arg BUN_IMAGE="${BUN_IMAGE}" --build-arg INSTANCE="${INSTANCE}" \
     --target runtime -f api/Containerfile -t "${API_IMAGE}" api
   success "Built ${API_IMAGE}"
+fi
+
+if (( BUILD_API_E2E )); then
+  info "Building ${API_E2E_IMAGE} (api/Containerfile, target runtime) ..."
+  podman build "${LABEL_ARGS[@]}" --label bookmark-manager.role=test \
+    --build-arg BUN_IMAGE="${BUN_IMAGE}" --build-arg INSTANCE="${INSTANCE}" \
+    --target runtime -f api/Containerfile -t "${API_E2E_IMAGE}" api
+  success "Built ${API_E2E_IMAGE}"
 fi
 
 if (( BUILD_TEST )); then

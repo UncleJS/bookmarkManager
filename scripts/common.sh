@@ -19,17 +19,33 @@ cd "${REPO_ROOT}"
 
 # ---- instance ----------------------------------------------------------------
 JOB="${JOB:-}"
-PORT_OFFSET="${PORT_OFFSET:-0}"
 if [[ -n "${JOB}" && ! "${JOB}" =~ ^[a-z0-9][a-z0-9-]*$ ]]; then
   echo "JOB must be lowercase letters, digits and dashes (got '${JOB}')." >&2
   exit 2
+fi
+SUFFIX="${JOB:+-${JOB}}"
+INSTANCE="bookmark${SUFFIX}"
+
+# PORT_OFFSET: from the environment; if unset, read back from the installed
+# pod unit of this instance (so later start/rebuild calls use the right port);
+# otherwise 0.
+PORT_OFFSET_SET=0
+if [[ -n "${PORT_OFFSET:-}" ]]; then
+  PORT_OFFSET_SET=1
+else
+  _pod_unit="${HOME}/.config/containers/systemd/bookmark${SUFFIX}.pod"
+  _host_port="$(sed -n 's/^PublishPort=127\.0\.0\.1:\([0-9]*\):11650$/\1/p' "${_pod_unit}" 2>/dev/null | head -n1 || true)"
+  PORT_OFFSET=$(( ${_host_port:-11650} - 11650 ))
 fi
 if [[ ! "${PORT_OFFSET}" =~ ^[0-9]+$ ]]; then
   echo "PORT_OFFSET must be a non-negative integer (got '${PORT_OFFSET}')." >&2
   exit 2
 fi
-SUFFIX="${JOB:+-${JOB}}"
-INSTANCE="bookmark${SUFFIX}"
+PORT_OFFSET=$((10#${PORT_OFFSET}))
+if (( 11651 + PORT_OFFSET > 65535 )); then
+  echo "PORT_OFFSET ${PORT_OFFSET} pushes the ports above 65535." >&2
+  exit 2
+fi
 
 # ---- labels ------------------------------------------------------------------
 APP_LABEL="app=bookmark-manager"
@@ -68,10 +84,11 @@ DB_CONTAINER="bookmark-db${SUFFIX}"
 PMA_CONTAINER="bookmark-pma${SUFFIX}"
 DB_VOLUME="bookmark-db-data${SUFFIX}"
 
-API_IMAGE="localhost/bookmark-api${SUFFIX}:latest"
+API_IMAGE="localhost/bookmark-api${SUFFIX}:latest"          # used by the installed unit
+API_E2E_IMAGE="localhost/bookmark-api-e2e${SUFFIX}:latest"  # API for the throwaway e2e pod
 API_TEST_IMAGE="localhost/bookmark-api-test${SUFFIX}:latest"
 E2E_IMAGE="localhost/bookmark-e2e${SUFFIX}:latest"
-BUILT_IMAGES=("${API_IMAGE}" "${API_TEST_IMAGE}" "${E2E_IMAGE}")
+BUILT_IMAGES=("${API_IMAGE}" "${API_E2E_IMAGE}" "${API_TEST_IMAGE}" "${E2E_IMAGE}")
 
 # Throwaway test pods (scripts/test-*.sh). Never the real pod.
 IT_POD="bookmark-it${SUFFIX}"

@@ -107,6 +107,11 @@ render_unit() {
 
 describe_instance
 
+if [[ -n "${JOB}" ]] && (( PORT_OFFSET == 0 )); then
+  error "JOB=${JOB} needs a non-zero PORT_OFFSET, or its ports clash with the main instance (11650/11651)."
+  exit 2
+fi
+
 # ---- 1. prerequisites --------------------------------------------------------
 command -v podman >/dev/null || { error "podman not found on PATH."; exit 1; }
 if [[ "$(podman info --format '{{.Host.Security.Rootless}}')" != "true" ]]; then
