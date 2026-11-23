@@ -55,6 +55,8 @@ APP_LABEL="app=bookmark-manager"
 INSTANCE_LABEL="bookmark-manager.instance=${INSTANCE}"
 
 # ---- ports (host side; container ports never change) -------------------------
+# Registered range (00_repoMan): 11650-11655. Prod 11650/11651, dev (JOB=dev PORT_OFFSET=2) 11652/11653.
+PORT_RANGE=11650-11655
 API_CONTAINER_PORT=11650
 PMA_CONTAINER_PORT=80
 API_HOST_PORT=$((11650 + PORT_OFFSET))

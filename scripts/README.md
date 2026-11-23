@@ -70,7 +70,7 @@ Every script uses `set -euo pipefail`, supports `-h`/`--help`, `cd`s to the repo
 | `restart.sh` | `[api\|db\|pma]` | `stop.sh` + `start.sh`, or restart one service |
 | `logs.sh` | `[api\|db\|pma\|all] [-f]` | Show journalctl logs |
 | `status.sh` | — | systemctl status and the instance's containers |
-| `dev.sh` | `[--down]` | Containerised dev instance (`JOB=dev`, port 11660) |
+| `dev.sh` | `[--down]` | Containerised dev instance (`JOB=dev`, port 11652) |
 | `backup.sh` | — | Dump the DB to `backups/bookmark_YYYY-MM-DD_HHMMSS.sql.gz` |
 | `verify-backup.sh` | `--source script\|api` / `--file <path>` | Validate and test-restore a backup |
 | `test-integration.sh` | `[--no-build] [--keep] [-- bun-test-args]` | Integration tests + backup check in a throwaway pod |
@@ -273,7 +273,7 @@ Shows `systemctl --user status` for the pod and the three container services, th
 
 ## dev.sh
 
-Installs a separate dev instance in containers (`JOB=dev`, `PORT_OFFSET=10`: API on `11660`), with its own DB, next to the main one. After code changes, run `JOB=dev PORT_OFFSET=10 ./scripts/rebuild.sh`.
+Installs a separate dev instance in containers (`JOB=dev`, `PORT_OFFSET=2`: API on `11652`), with its own DB, next to the main one. After code changes, run `JOB=dev PORT_OFFSET=2 ./scripts/rebuild.sh`.
 
 ```bash
 ./scripts/dev.sh          # install and start the dev instance

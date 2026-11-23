@@ -461,7 +461,7 @@ All scripts live in `scripts/`, work from any directory (they `cd` to the repo r
 | `restart.sh` | `[api\|db\|pma]` | `stop.sh` + `start.sh`, or restart one service |
 | `logs.sh` | `[api\|db\|pma\|all]` | Tail journalctl logs; defaults to `api` |
 | `status.sh` | — | Show `systemctl --user status` for all services |
-| `dev.sh` | `[--down]` | Install a separate dev instance in containers (`JOB=dev`, port 11660) |
+| `dev.sh` | `[--down]` | Install a separate dev instance in containers (`JOB=dev`, port 11652) |
 | `backup.sh` | — | Dump MariaDB to `backups/bookmark_YYYY-MM-DD_HHMMSS.sql.gz` |
 | `verify-backup.sh` | `--source script\|api` / `--file <path>` | Validate and test-restore a backup dump |
 | `test-integration.sh` | `[--no-build] [--keep]` | Bun integration suite + backup/restore check in a throwaway pod |
