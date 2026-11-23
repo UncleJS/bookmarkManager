@@ -15,6 +15,7 @@
  */
 import { send } from '../lib/api.js';
 import { h, debounce } from '../lib/dom.js';
+import { formatDateTime } from '../lib/datetime.js';
 
 /**
  * Quick DOM element selector helper
@@ -797,14 +798,12 @@ function renderDuplicateWarning() {
       item.appendChild(urlLine);
     }
 
-    if (duplicate.createdAt) {
-      const date = new Date(duplicate.createdAt);
-      if (!Number.isNaN(date.getTime())) {
-        const dateLine = document.createElement('span');
-        dateLine.className = 'duplicate-item-meta';
-        dateLine.textContent = `Saved ${date.toLocaleString()}`;
-        item.appendChild(dateLine);
-      }
+    const savedAt = formatDateTime(duplicate.createdAt);
+    if (savedAt) {
+      const dateLine = document.createElement('span');
+      dateLine.className = 'duplicate-item-meta';
+      dateLine.textContent = `Saved ${savedAt}`;
+      item.appendChild(dateLine);
     }
 
     list.appendChild(item);
