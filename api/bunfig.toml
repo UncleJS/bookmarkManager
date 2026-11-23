@@ -1,0 +1,6 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 UncleJS
+
+[test]
+# Global teardown: closes the shared app DB pool once, after every test file.
+preload = ["./src/tests/setup.ts"]

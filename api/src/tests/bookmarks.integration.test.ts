@@ -114,7 +114,7 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  await pool?.end();
+  // The shared app pool is closed once in setup.ts, after all test files.
   if (previousGlobalTimeZone !== undefined) {
     await adminConnection?.query("SET GLOBAL time_zone = ?", [previousGlobalTimeZone]);
   }
